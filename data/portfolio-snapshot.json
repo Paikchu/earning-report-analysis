@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-20T02:57:42.026Z",
+  "generatedAt": "2026-07-20T07:34:38.247Z",
   "account": {
     "currency": "USD",
     "netLiquidation": 64554.56,
@@ -9,28 +9,40 @@
   },
   "positions": [
     {
-      "positionKey": "OPT:856461437",
-      "symbol": "RKLB",
-      "contractDescription": "RKLB Oct16'26 70 PUT @AMEX",
-      "assetClass": "OPT",
-      "quantity": -1,
-      "averagePrice": 8.641916,
-      "marketPrice": 13.9062996,
-      "marketValue": -1390.62996,
-      "costBasis": -864.1916,
-      "unrealizedPnl": -526.43836
+      "positionKey": "STK:313130367",
+      "symbol": "AVGO",
+      "contractDescription": "AVGO",
+      "assetClass": "STK",
+      "quantity": 7.0061,
+      "averagePrice": 384.11674113,
+      "marketPrice": 374,
+      "marketValue": 2620.2814,
+      "costBasis": 2691.160300030893,
+      "unrealizedPnl": -70.8789
     },
     {
-      "positionKey": "OPT:730765112",
-      "symbol": "NVDA",
-      "contractDescription": "NVDA Jan15'27 180 PUT @AMEX",
-      "assetClass": "OPT",
-      "quantity": -1,
-      "averagePrice": 17.339127,
-      "marketPrice": 13.08030035,
-      "marketValue": -1308.030035,
-      "costBasis": -1733.9127,
-      "unrealizedPnl": 425.882665
+      "positionKey": "STK:604408720",
+      "symbol": "BOXX",
+      "contractDescription": "BOXX",
+      "assetClass": "STK",
+      "quantity": 180,
+      "averagePrice": 117.04128389,
+      "marketPrice": 117.48999785,
+      "marketValue": 21148.199613,
+      "costBasis": 21067.4311002,
+      "unrealizedPnl": 80.768513
+    },
+    {
+      "positionKey": "STK:870556708",
+      "symbol": "DRAM",
+      "contractDescription": "DRAM",
+      "assetClass": "STK",
+      "quantity": 70,
+      "averagePrice": 63.18814714,
+      "marketPrice": 53.06000135,
+      "marketValue": 3714.2000945,
+      "costBasis": 4423.1702998,
+      "unrealizedPnl": -708.9702055
     },
     {
       "positionKey": "OPT:845712739",
@@ -45,16 +57,16 @@
       "unrealizedPnl": -166.1109
     },
     {
-      "positionKey": "STK:604408720",
-      "symbol": "BOXX",
-      "contractDescription": "BOXX",
+      "positionKey": "STK:483492393",
+      "symbol": "MRVL",
+      "contractDescription": "MRVL",
       "assetClass": "STK",
-      "quantity": 180,
-      "averagePrice": 117.04128389,
-      "marketPrice": 117.5,
-      "marketValue": 21150,
-      "costBasis": 21067.4311002,
-      "unrealizedPnl": 82.5689
+      "quantity": 5,
+      "averagePrice": 267.67026,
+      "marketPrice": 190.1100006,
+      "marketValue": 950.550003,
+      "costBasis": 1338.3512999999998,
+      "unrealizedPnl": -387.801297
     },
     {
       "positionKey": "STK:272093",
@@ -63,118 +75,10 @@
       "assetClass": "STK",
       "quantity": 40.0455,
       "averagePrice": 429.8370129,
-      "marketPrice": 393.9700012,
-      "marketValue": 15776.72568305,
+      "marketPrice": 394.45999145,
+      "marketValue": 15796.34758761,
       "costBasis": 17213.03810008695,
-      "unrealizedPnl": -1436.31241695
-    },
-    {
-      "positionKey": "STK:4815747",
-      "symbol": "NVDA",
-      "contractDescription": "NVDA",
-      "assetClass": "STK",
-      "quantity": 35.0179,
-      "averagePrice": 203.64195169,
-      "marketPrice": 203.5099945,
-      "marketValue": 7126.4926364,
-      "costBasis": 7131.113500085251,
-      "unrealizedPnl": -4.6208636
-    },
-    {
-      "positionKey": "STK:76792991",
-      "symbol": "TSLA",
-      "contractDescription": "TSLA",
-      "assetClass": "STK",
-      "quantity": 15,
-      "averagePrice": 389.25858667,
-      "marketPrice": 381.94000245,
-      "marketValue": 5729.10003675,
-      "costBasis": 5838.87880005,
-      "unrealizedPnl": -109.77876325
-    },
-    {
-      "positionKey": "STK:272800",
-      "symbol": "ORCL",
-      "contractDescription": "ORCL",
-      "assetClass": "STK",
-      "quantity": 30,
-      "averagePrice": 142.82755333,
-      "marketPrice": 127.01000215,
-      "marketValue": 3810.3000645,
-      "costBasis": 4284.8265999,
-      "unrealizedPnl": -474.5265355
-    },
-    {
-      "positionKey": "STK:870556708",
-      "symbol": "DRAM",
-      "contractDescription": "DRAM",
-      "assetClass": "STK",
-      "quantity": 70,
-      "averagePrice": 63.18814714,
-      "marketPrice": 53.02000045,
-      "marketValue": 3711.4000315,
-      "costBasis": 4423.1702998,
-      "unrealizedPnl": -711.7702685
-    },
-    {
-      "positionKey": "STK:313130367",
-      "symbol": "AVGO",
-      "contractDescription": "AVGO",
-      "assetClass": "STK",
-      "quantity": 7.0061,
-      "averagePrice": 384.11674113,
-      "marketPrice": 375.89001465,
-      "marketValue": 2633.52303164,
-      "costBasis": 2691.160300030893,
-      "unrealizedPnl": -57.63726836
-    },
-    {
-      "positionKey": "STK:109911821",
-      "symbol": "NOW",
-      "contractDescription": "NOW",
-      "assetClass": "STK",
-      "quantity": 20,
-      "averagePrice": 107.699015,
-      "marketPrice": 102.94999695,
-      "marketValue": 2058.999939,
-      "costBasis": 2153.9803,
-      "unrealizedPnl": -94.980361
-    },
-    {
-      "positionKey": "STK:661513",
-      "symbol": "NOK",
-      "contractDescription": "NOK",
-      "assetClass": "STK",
-      "quantity": 200,
-      "averagePrice": 14.7011045,
-      "marketPrice": 10.1700001,
-      "marketValue": 2034.00002,
-      "costBasis": 2940.2209,
-      "unrealizedPnl": -906.22088
-    },
-    {
-      "positionKey": "STK:787273575",
-      "symbol": "RKLB",
-      "contractDescription": "RKLB",
-      "assetClass": "STK",
-      "quantity": 15,
-      "averagePrice": 81.52225333,
-      "marketPrice": 68.1800003,
-      "marketValue": 1022.7000045,
-      "costBasis": 1222.83379995,
-      "unrealizedPnl": -200.1337955
-    },
-    {
-      "positionKey": "STK:483492393",
-      "symbol": "MRVL",
-      "contractDescription": "MRVL",
-      "assetClass": "STK",
-      "quantity": 5,
-      "averagePrice": 267.67026,
-      "marketPrice": 190.44999695,
-      "marketValue": 952.24998475,
-      "costBasis": 1338.3512999999998,
-      "unrealizedPnl": -386.10131525
+      "unrealizedPnl": -1416.69051239
     },
     {
       "positionKey": "STK:272110",
@@ -183,10 +87,94 @@
       "assetClass": "STK",
       "quantity": 7,
       "averagePrice": 137.91928571,
-      "marketPrice": 95.80999755,
-      "marketValue": 670.66998285,
+      "marketPrice": 94.8899994,
+      "marketValue": 664.2299958,
       "costBasis": 965.43499997,
-      "unrealizedPnl": -294.76501715
+      "unrealizedPnl": -301.2050042
+    },
+    {
+      "positionKey": "STK:661513",
+      "symbol": "NOK",
+      "contractDescription": "NOK",
+      "assetClass": "STK",
+      "quantity": 200,
+      "averagePrice": 14.7011045,
+      "marketPrice": 10.1999998,
+      "marketValue": 2039.99996,
+      "costBasis": 2940.2209,
+      "unrealizedPnl": -900.22094
+    },
+    {
+      "positionKey": "STK:109911821",
+      "symbol": "NOW",
+      "contractDescription": "NOW",
+      "assetClass": "STK",
+      "quantity": 20,
+      "averagePrice": 107.699015,
+      "marketPrice": 102.9700012,
+      "marketValue": 2059.400024,
+      "costBasis": 2153.9803,
+      "unrealizedPnl": -94.580276
+    },
+    {
+      "positionKey": "STK:4815747",
+      "symbol": "NVDA",
+      "contractDescription": "NVDA",
+      "assetClass": "STK",
+      "quantity": 35.0179,
+      "averagePrice": 203.64195169,
+      "marketPrice": 203.6300049,
+      "marketValue": 7130.69514859,
+      "costBasis": 7131.113500085251,
+      "unrealizedPnl": -0.41835141
+    },
+    {
+      "positionKey": "OPT:730765112",
+      "symbol": "NVDA",
+      "contractDescription": "NVDA Jan15'27 180 PUT @AMEX",
+      "assetClass": "OPT",
+      "quantity": -1,
+      "averagePrice": 17.339127,
+      "marketPrice": 13.08030035,
+      "marketValue": -1308.030035,
+      "costBasis": -1733.9127,
+      "unrealizedPnl": 425.882665
+    },
+    {
+      "positionKey": "STK:272800",
+      "symbol": "ORCL",
+      "contractDescription": "ORCL",
+      "assetClass": "STK",
+      "quantity": 30,
+      "averagePrice": 142.82755333,
+      "marketPrice": 127.01999665,
+      "marketValue": 3810.5998995,
+      "costBasis": 4284.8265999,
+      "unrealizedPnl": -474.2267005
+    },
+    {
+      "positionKey": "STK:787273575",
+      "symbol": "RKLB",
+      "contractDescription": "RKLB",
+      "assetClass": "STK",
+      "quantity": 15,
+      "averagePrice": 81.52225333,
+      "marketPrice": 68.66000365,
+      "marketValue": 1029.90005475,
+      "costBasis": 1222.83379995,
+      "unrealizedPnl": -192.93374525
+    },
+    {
+      "positionKey": "OPT:856461437",
+      "symbol": "RKLB",
+      "contractDescription": "RKLB Oct16'26 70 PUT @AMEX",
+      "assetClass": "OPT",
+      "quantity": -1,
+      "averagePrice": 8.641916,
+      "marketPrice": 13.9062996,
+      "marketValue": -1390.62996,
+      "costBasis": -864.1916,
+      "unrealizedPnl": -526.43836
     },
     {
       "positionKey": "STK:890493863",
@@ -195,10 +183,22 @@
       "assetClass": "STK",
       "quantity": 5,
       "averagePrice": 148.72026,
-      "marketPrice": 125.3199997,
-      "marketValue": 626.5999985,
+      "marketPrice": 125.90000155,
+      "marketValue": 629.50000775,
       "costBasis": 743.6013,
-      "unrealizedPnl": -117.0013015
+      "unrealizedPnl": -114.10129225
+    },
+    {
+      "positionKey": "STK:76792991",
+      "symbol": "TSLA",
+      "contractDescription": "TSLA",
+      "assetClass": "STK",
+      "quantity": 15,
+      "averagePrice": 389.25858667,
+      "marketPrice": 381.7799988,
+      "marketValue": 5726.699982,
+      "costBasis": 5838.87880005,
+      "unrealizedPnl": -112.178818
     }
   ],
   "trades": [
@@ -288,9 +288,9 @@
       "price": 0.07,
       "commission": 0.5673,
       "netAmount": 7,
-      "realizedPnl": 18.3806,
+      "realizedPnl": 18.380604,
       "exchange": "SAPPHIRE",
-      "orderId": "1436811622"
+      "orderId": "5411792898"
     },
     {
       "tradeId": "0002920b.6a550e4e.01.01",
@@ -303,9 +303,9 @@
       "price": 0.12,
       "commission": 1.0333,
       "netAmount": 12,
-      "realizedPnl": 83.9131,
+      "realizedPnl": 83.913141,
       "exchange": "PHLX",
-      "orderId": "1436811635"
+      "orderId": "5411786640"
     },
     {
       "tradeId": "00011090.6a4f8dd0.01.01",
@@ -5050,9 +5050,8 @@
   ],
   "tradeSync": {
     "status": "current",
-    "queryPeriod": "YEAR_TO_DATE",
+    "queryPeriod": "DAYS_7",
     "lastSuccessfulTradeAt": "2026-07-16T15:30:39.000Z",
     "message": null
   }
 }
-
