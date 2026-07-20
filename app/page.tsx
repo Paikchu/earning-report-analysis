@@ -68,15 +68,6 @@ function PnlNumber({ value, precision = 2 }: { value: number; precision?: number
   return <span className={value < 0 ? "loss" : value > 0 ? "gain" : "muted"}>{prefix}{formatNumber(Math.abs(value), 2, precision)}</span>;
 }
 
-function SnapshotNotice() {
-  return (
-    <div className="snapshot-notice" role="status">
-      <span className="status-dot" aria-hidden="true" />
-      <span><strong>IBKR 需要重新连接</strong><small>当前展示 Google Sheets 快照</small></span>
-    </div>
-  );
-}
-
 export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("总览");
   const [tradeFilter, setTradeFilter] = useState<"全部" | "买入" | "卖出">("全部");
@@ -89,12 +80,6 @@ export default function Home() {
 
   return (
     <main className="page-shell">
-      <header className="masthead">
-        <button className="wordmark" type="button" onClick={() => switchTab("总览")}>MAX · 投资记录</button>
-        <span className="as-of">2026 年 7 月 20 日 · Google Sheets 快照</span>
-        <SnapshotNotice />
-      </header>
-
       <nav className="tabs" aria-label="投资组合导航">
         {(["总览", "持仓", "交易", "分析"] as Tab[]).map((tab) => (
           <button
@@ -113,19 +98,14 @@ export default function Home() {
         <>
           <section className="hero">
             <div className="hero-copy">
-              <p className="eyebrow">Portfolio / 01</p>
               <h1>投资组合</h1>
-              <div className="nav-label">当前净值 NAV</div>
+              <div className="nav-label">当前净值</div>
               <div className="nav-value">$67,119.06</div>
-              <p className="hero-note">更新日期 2026-07-20 · 基准货币 USD</p>
             </div>
 
             <div className="capital-landing">
               <div className="section-head">
-                <div>
-                  <p className="kicker">NAV RECONCILIATION</p>
-                  <h2>净值对照</h2>
-                </div>
+                <h2>净值对照</h2>
                 <span className="delta loss">−6.21%</span>
               </div>
               <div className="capital-chart" role="img" aria-label="净入金 71,563.39 美元，当前净值 67,119.06 美元，相差负 4,444.33 美元">
@@ -146,19 +126,18 @@ export default function Home() {
                 <span className="chart-label chart-start"><small>净入金</small>$71,563</span>
                 <span className="chart-label chart-end"><small>当前 NAV</small>$67,119</span>
               </div>
-              <p className="chart-caption">口径：当前 NAV − 净入金</p>
             </div>
           </section>
 
           <section className="metrics" aria-label="组合摘要">
-            <article className="metric"><span>净入金</span><strong>$71,563.39</strong><small>手动维护基准</small></article>
-            <article className="metric metric-loss"><span>总盈亏</span><strong>−$4,444.33</strong><small>NAV − 净入金</small></article>
-            <article className="metric"><span>现金</span><strong>$1,291.46</strong><small>非实时快照</small></article>
+            <article className="metric"><span>净入金</span><strong>$71,563.39</strong></article>
+            <article className="metric metric-loss"><span>总盈亏</span><strong>−$4,444.33</strong></article>
+            <article className="metric"><span>现金</span><strong>$1,291.46</strong></article>
           </section>
 
           <section className="lower-grid">
             <aside className="allocation-panel">
-              <div className="ruled-heading"><p className="kicker">CONCENTRATION</p><h2>仓位构成</h2></div>
+              <div className="ruled-heading"><h2>仓位构成</h2></div>
               <div className="allocation-wrap">
                 <div className="donut" role="img" aria-label="前四大持仓占组合 73.19%"><span>73.2%<small>前四大持仓</small></span></div>
                 <div className="legend">
@@ -174,7 +153,7 @@ export default function Home() {
 
             <section className="holdings-panel">
               <div className="ruled-heading heading-with-action">
-                <div><p className="kicker">CORE POSITIONS</p><h2>核心持仓</h2></div>
+                <h2>核心持仓</h2>
                 <button className="text-action" type="button" onClick={() => switchTab("持仓")}>查看全部 13 项</button>
               </div>
               <div className="table-wrap">
@@ -196,7 +175,7 @@ export default function Home() {
           </section>
 
           <section className="recent-strip">
-            <div className="ruled-heading"><p className="kicker">LEDGER</p><h2>最近动作</h2></div>
+            <div className="ruled-heading"><h2>最近动作</h2></div>
             <div className="trade-cards">
               {recentTrades.slice(0, 3).map((trade) => (
                 <article key={`${trade.time}-${trade.symbol}-${trade.size}`}>
@@ -214,9 +193,7 @@ export default function Home() {
       {activeTab === "持仓" && (
         <section className="detail-page">
           <div className="detail-intro">
-            <p className="eyebrow">Positions / 13</p>
             <h1>持仓账本</h1>
-            <p>数据日期 2026-07-20 · 基准货币 USD</p>
           </div>
           <div className="detail-stats"><span><small>正股市值</small><strong>$66,765.44</strong></span><span><small>前两大权重</small><strong>54.33%</strong></span><span><small>期权合约</small><strong>5</strong></span></div>
           <div className="table-wrap full-table">
@@ -227,7 +204,7 @@ export default function Home() {
           </div>
           <p className="formula-note">实际持仓成本 =（持仓成本 − 已实现盈亏）÷ 持仓数量</p>
           <div className="options-block">
-            <div className="ruled-heading"><p className="kicker">OPTIONS</p><h2>期权覆盖</h2></div>
+            <div className="ruled-heading"><h2>期权覆盖</h2></div>
             <div className="table-wrap full-table">
               <table className="options-table">
                 <thead><tr><th>合约</th><th>数量</th><th>持仓成本</th><th>期权市值</th><th>未实现盈亏</th></tr></thead>
@@ -241,9 +218,7 @@ export default function Home() {
       {activeTab === "交易" && (
         <section className="detail-page">
           <div className="detail-intro">
-            <p className="eyebrow">Transactions / 398</p>
             <h1>交易账本</h1>
-            <p>最近成交优先 · 不含换汇流水</p>
           </div>
           <div className="filter-row" aria-label="交易方向筛选">
             {(["全部", "买入", "卖出"] as const).map((filter) => <button key={filter} type="button" className={tradeFilter === filter ? "selected" : ""} onClick={() => setTradeFilter(filter)}>{filter}</button>)}
@@ -261,9 +236,7 @@ export default function Home() {
       {activeTab === "分析" && (
         <section className="detail-page analysis-page">
           <div className="detail-intro">
-            <p className="eyebrow">Analysis / Snapshot</p>
             <h1>持仓分析</h1>
-            <p>数据范围：当前持仓快照</p>
           </div>
           <div className="analysis-grid">
             <article className="analysis-lead"><span>最大未实现亏损</span><strong>MSFT</strong><Pnl value={-1442.32} /><p>组合权重 23.21%</p></article>
@@ -271,7 +244,7 @@ export default function Home() {
             <article><span>BOXX + 现金</span><strong>$22,439.66</strong><p>占 NAV 33.43%</p></article>
           </div>
           <div className="contribution-section">
-            <div className="ruled-heading"><p className="kicker">UNREALIZED P&L</p><h2>未实现盈亏贡献</h2></div>
+            <div className="ruled-heading"><h2>未实现盈亏贡献</h2></div>
             <div className="contribution-list">
               {holdings.slice().sort((a, b) => a.unrealized - b.unrealized).slice(0, 8).map((holding) => {
                 const size = Math.max(3, Math.abs(holding.unrealized) / 14.4232);

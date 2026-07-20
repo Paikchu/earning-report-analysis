@@ -25,8 +25,8 @@ test("server-renders the investment record", async () => {
   assert.match(html, /<title>MAX · 投资记录<\/title>/i);
   assert.match(html, /投资组合/);
   assert.match(html, /\$67,119\.06/);
-  assert.match(html, /IBKR 需要重新连接/);
-  assert.match(html, /Google Sheets 快照/);
+  assert.match(html, /Google Sheets/);
+  assert.doesNotMatch(html, /Portfolio \/ 01|NAV RECONCILIATION|CORE POSITIONS|Transactions \/ 398/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
 });
 
@@ -44,6 +44,7 @@ test("removes the disposable starter preview", async () => {
   assert.match(page, /\(holding\.cost - holding\.realized\) \/ holding\.quantity/);
   assert.equal(page.match(/averageCost:/g)?.length, 13);
   assert.equal(page.match(/marketValue:/g)?.length, 5);
+  assert.doesNotMatch(page, /<header|masthead|SnapshotNotice|className="(?:eyebrow|kicker)"/);
   assert.match(layout, /lang="zh-CN"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   await assert.rejects(access(new URL("app/_sites-preview/SkeletonPreview.tsx", projectRoot)));
