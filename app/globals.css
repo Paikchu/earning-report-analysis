@@ -90,6 +90,23 @@ a:focus-visible {
   background: var(--vermilion);
 }
 
+.snapshot-status {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 9px;
+  letter-spacing: .04em;
+}
+
+.snapshot-status strong {
+  color: var(--vermilion);
+  font-weight: 700;
+}
+
 .hero {
   min-height: 314px;
   padding: 26px 0 28px;
