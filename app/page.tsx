@@ -97,13 +97,42 @@ export default function Home() {
       {activeTab === "总览" && (
         <>
           <section className="hero">
-            <h1>投资组合</h1>
-            <div className="portfolio-summary" aria-label="组合摘要">
-              <article className="summary-item summary-nav"><span>当前净值</span><strong>$67,119.06</strong></article>
-              <article className="summary-item"><span>净入金</span><strong>$71,563.39</strong></article>
-              <article className="summary-item"><span>总盈亏</span><strong className="loss">−$4,444.33</strong></article>
-              <article className="summary-item"><span>现金</span><strong>$1,291.46</strong></article>
+            <div className="hero-copy">
+              <h1>投资组合</h1>
+              <div className="nav-label">当前净值</div>
+              <div className="nav-value">$67,119.06</div>
             </div>
+
+            <div className="capital-landing">
+              <div className="section-head">
+                <h2>净值对照</h2>
+                <span className="delta loss">−6.21%</span>
+              </div>
+              <div className="capital-chart" role="img" aria-label="净入金 71,563.39 美元，当前净值 67,119.06 美元，相差负 4,444.33 美元">
+                <div className="capital-guide guide-one" />
+                <div className="capital-guide guide-two" />
+                <svg viewBox="0 0 760 260" preserveAspectRatio="none" aria-hidden="true">
+                  <defs>
+                    <linearGradient id="capitalFade" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0" stopColor="#17283b" stopOpacity=".16" />
+                      <stop offset="1" stopColor="#17283b" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <path className="capital-area" d="M24 70 C190 74 260 84 375 112 C515 146 630 158 736 184 L736 236 L24 236 Z" />
+                  <path className="capital-line" d="M24 70 C190 74 260 84 375 112 C515 146 630 158 736 184" />
+                  <circle className="start-mark" cx="24" cy="70" r="5" />
+                  <circle className="end-mark" cx="736" cy="184" r="7" />
+                </svg>
+                <span className="chart-label chart-start"><small>净入金</small>$71,563</span>
+                <span className="chart-label chart-end"><small>当前 NAV</small>$67,119</span>
+              </div>
+            </div>
+          </section>
+
+          <section className="metrics" aria-label="组合摘要">
+            <article className="metric"><span>净入金</span><strong>$71,563.39</strong></article>
+            <article className="metric metric-loss"><span>总盈亏</span><strong>−$4,444.33</strong></article>
+            <article className="metric"><span>现金</span><strong>$1,291.46</strong></article>
           </section>
 
           <section className="lower-grid">
