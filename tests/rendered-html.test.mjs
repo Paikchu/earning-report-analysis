@@ -56,6 +56,13 @@ test("removes the disposable starter preview", async () => {
   await assert.rejects(access(new URL("app/_sites-preview/SkeletonPreview.tsx", projectRoot)));
 });
 
+test("keeps the compact portfolio summary without the reconciliation chart", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+  assert.match(page, /className="portfolio-summary"/);
+  assert.doesNotMatch(page, /净值对照|capital-chart|capital-landing|<svg/);
+});
+
 test("calculates actual holding cost from cost, realized P&L, and quantity", () => {
   const fixtures = [
     { symbol: "BOXX", cost: 21067.4311002, realized: 1.063786, quantity: 180, expected: 117.04 },

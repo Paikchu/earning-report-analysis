@@ -47,7 +47,6 @@ const recentTrades = snapshot.trades.map((trade) => ({
 }));
 const allocation = holdings.slice(0, 4).map((holding) => [holding.symbol, holding.weight] as const);
 const totalPnl = snapshot.account.netLiquidation - snapshot.account.netDeposits;
-const totalPnlPercent = (totalPnl / snapshot.account.netDeposits) * 100;
 const stockMarketValue = holdings.reduce((sum, holding) => sum + holding.value, 0);
 const topFourWeight = allocation.reduce((sum, [, weight]) => sum + weight, 0);
 const topTwoWeight = holdings.slice(0, 2).reduce((sum, holding) => sum + holding.weight, 0);
@@ -110,42 +109,13 @@ export default function Home() {
       {activeTab === "总览" && (
         <>
           <section className="hero">
-            <div className="hero-copy">
-              <h1>投资组合</h1>
-              <div className="nav-label">当前净值</div>
-              <div className="nav-value">{money(snapshot.account.netLiquidation)}</div>
+            <h1>投资组合</h1>
+            <div className="portfolio-summary" aria-label="组合摘要">
+              <article className="summary-item summary-nav"><span>当前净值</span><strong>{money(snapshot.account.netLiquidation)}</strong></article>
+              <article className="summary-item"><span>净入金</span><strong>{money(snapshot.account.netDeposits)}</strong></article>
+              <article className="summary-item"><span>总盈亏</span><strong className={totalPnl < 0 ? "loss" : "gain"}>{money(totalPnl, true)}</strong></article>
+              <article className="summary-item"><span>现金</span><strong>{money(snapshot.account.cashBalance)}</strong></article>
             </div>
-
-            <div className="capital-landing">
-              <div className="section-head">
-                <h2>净值对照</h2>
-                <span className={`delta ${totalPnl < 0 ? "loss" : "gain"}`}>{totalPnl < 0 ? "−" : "+"}{Math.abs(totalPnlPercent).toFixed(2)}%</span>
-              </div>
-              <div className="capital-chart" role="img" aria-label={`净入金 ${snapshot.account.netDeposits.toFixed(2)} 美元，当前净值 ${snapshot.account.netLiquidation.toFixed(2)} 美元，相差 ${totalPnl.toFixed(2)} 美元`}>
-                <div className="capital-guide guide-one" />
-                <div className="capital-guide guide-two" />
-                <svg viewBox="0 0 760 260" preserveAspectRatio="none" aria-hidden="true">
-                  <defs>
-                    <linearGradient id="capitalFade" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0" stopColor="#17283b" stopOpacity=".16" />
-                      <stop offset="1" stopColor="#17283b" stopOpacity="0" />
-                    </linearGradient>
-                  </defs>
-                  <path className="capital-area" d="M24 70 C190 74 260 84 375 112 C515 146 630 158 736 184 L736 236 L24 236 Z" />
-                  <path className="capital-line" d="M24 70 C190 74 260 84 375 112 C515 146 630 158 736 184" />
-                  <circle className="start-mark" cx="24" cy="70" r="5" />
-                  <circle className="end-mark" cx="736" cy="184" r="7" />
-                </svg>
-                <span className="chart-label chart-start"><small>净入金</small>${Math.round(snapshot.account.netDeposits).toLocaleString("en-US")}</span>
-                <span className="chart-label chart-end"><small>当前 NAV</small>${Math.round(snapshot.account.netLiquidation).toLocaleString("en-US")}</span>
-              </div>
-            </div>
-          </section>
-
-          <section className="metrics" aria-label="组合摘要">
-            <article className="metric"><span>净入金</span><strong>{money(snapshot.account.netDeposits)}</strong></article>
-            <article className={`metric ${totalPnl < 0 ? "metric-loss" : ""}`}><span>总盈亏</span><strong>{money(totalPnl, true)}</strong></article>
-            <article className="metric"><span>现金</span><strong>{money(snapshot.account.cashBalance)}</strong></article>
           </section>
 
           <section className="lower-grid">
