@@ -40,6 +40,9 @@ const usdBalance = raw.balances.balances?.find((balance) => balance.currency ===
 const positions = (raw.positions.positions ?? [])
   .filter((position) => position.asset_class === "STK" || position.asset_class === "OPT")
   .map(normalizeIbkrPosition);
+if (raw.tradeStatus === "current" && !Array.isArray(raw.trades?.trades)) {
+  throw new Error("A trades response is required when tradeStatus is current");
+}
 const tradeSync = raw.tradeStatus === "current"
   ? { status: "current" as const, queryPeriod: raw.queryPeriod, trades: (raw.trades?.trades ?? []).map(normalizeIbkrTrade) }
   : { status: "delayed" as const, queryPeriod: raw.queryPeriod, message: raw.tradeMessage ?? "IBKR trades unavailable" };

@@ -45,3 +45,25 @@ test("the snapshot CLI normalizes IBKR responses and updates the versioned file"
   assert.equal(result.positions[0].positionKey, "STK:661513");
   assert.equal(result.trades[0].realizedPnl, 83.91);
 });
+
+test("the snapshot CLI rejects a current trade status without a trades response", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "portfolio-snapshot-missing-trades-"));
+  const previousPath = join(directory, "previous.json");
+  const inputPath = join(directory, "input.json");
+  const outputPath = join(directory, "output.json");
+  const previous = JSON.parse(await readFile(new URL("../data/portfolio-snapshot.json", import.meta.url), "utf8"));
+  const input = {
+    generatedAt: "2026-07-20T00:00:00.000Z",
+    summary: { net_liquidation: 68_000 },
+    balances: { balances: [{ currency: "USD", cash_balance: 1_500 }] },
+    positions: { positions: [{ asset_class: "STK", contract_id: 661513, contract_description: "NOK", position: 200, average_price: 14.7, market_price: 10.2, market_value: 2_040, unrealized_pnl: -900 }] },
+    tradeStatus: "current",
+    queryPeriod: "DAYS_7",
+  };
+  await Promise.all([writeFile(previousPath, JSON.stringify(previous)), writeFile(inputPath, JSON.stringify(input))]);
+
+  await assert.rejects(
+    execFileAsync(process.execPath, ["--experimental-strip-types", "scripts/update-portfolio-snapshot.ts", "--previous", previousPath, "--input", inputPath, "--output", outputPath], { cwd: new URL("../", import.meta.url) }),
+    /trades response is required/i,
+  );
+});

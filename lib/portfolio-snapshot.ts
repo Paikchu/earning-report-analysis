@@ -179,8 +179,24 @@ export function buildPortfolioSnapshot(previous: PortfolioSnapshotV1, input: Sna
   if (!Number.isFinite(input.account.netLiquidation) || input.account.netLiquidation <= 0) {
     throw new Error("Net liquidation must be a positive number");
   }
+  if (!Number.isFinite(input.account.cashBalance)) {
+    throw new Error("Cash balance must be a finite number");
+  }
   if (previous.positions.length > 0 && input.positions.length === 0) {
     throw new Error("Positions cannot become empty during an automated sync");
+  }
+  const positionsAreValid = input.positions.every((position) =>
+    position.quantity !== 0 && [
+      position.quantity,
+      position.averagePrice,
+      position.marketPrice,
+      position.marketValue,
+      position.costBasis,
+      position.unrealizedPnl,
+    ].every(Number.isFinite),
+  );
+  if (!positionsAreValid) {
+    throw new Error("Position values must be finite and quantities must be non-zero");
   }
 
   const currentTradeSync = input.tradeSync.status === "current";

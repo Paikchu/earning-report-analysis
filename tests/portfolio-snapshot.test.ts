@@ -177,4 +177,18 @@ test("rejects an invalid account snapshot before publication", () => {
     positions: [],
     tradeSync: { status: "current", queryPeriod: "DAYS_7", trades: [] },
   }), /positions/i);
+
+  assert.throws(() => buildPortfolioSnapshot(previous, {
+    generatedAt: "2026-07-20T23:30:00.000Z",
+    account: { netLiquidation: 68_000, cashBalance: Number.NaN },
+    positions: previous.positions,
+    tradeSync: { status: "current", queryPeriod: "DAYS_7", trades: [] },
+  }), /cash balance/i);
+
+  assert.throws(() => buildPortfolioSnapshot(previous, {
+    generatedAt: "2026-07-20T23:30:00.000Z",
+    account: { netLiquidation: 68_000, cashBalance: 1_500 },
+    positions: [{ ...previous.positions[0], quantity: 0 }],
+    tradeSync: { status: "current", queryPeriod: "DAYS_7", trades: [] },
+  }), /position values/i);
 });
