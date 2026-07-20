@@ -39,7 +39,26 @@ test("removes the disposable starter preview", async () => {
 
   assert.match(page, /MAX · 投资记录/);
   assert.match(page, /type Tab = "总览" \| "持仓" \| "交易" \| "分析"/);
+  assert.match(page, /实际持仓成本/);
+  assert.match(page, /平均持仓成本/);
+  assert.match(page, /\(holding\.cost - holding\.realized\) \/ holding\.quantity/);
+  assert.equal(page.match(/averageCost:/g)?.length, 13);
+  assert.equal(page.match(/marketValue:/g)?.length, 5);
   assert.match(layout, /lang="zh-CN"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   await assert.rejects(access(new URL("app/_sites-preview/SkeletonPreview.tsx", projectRoot)));
+});
+
+test("calculates actual holding cost from cost, realized P&L, and quantity", () => {
+  const fixtures = [
+    { symbol: "BOXX", cost: 21067.4311002, realized: 1.063786, quantity: 180, expected: 117.04 },
+    { symbol: "TSLA", cost: 5838.87880005, realized: -44.802037, quantity: 15, expected: 392.25 },
+    { symbol: "ORCL", cost: 3903.89579991, realized: 264.609827, quantity: 27, expected: 134.79 },
+    { symbol: "RKLB", cost: 1222.83379995, realized: 725.296967, quantity: 15, expected: 33.17 },
+  ];
+
+  for (const fixture of fixtures) {
+    const actual = (fixture.cost - fixture.realized) / fixture.quantity;
+    assert.equal(Number(actual.toFixed(2)), fixture.expected, fixture.symbol);
+  }
 });

@@ -641,46 +641,45 @@ td {
   padding-bottom: 16px;
 }
 
+.complete-holdings-table {
+  min-width: 1320px;
+}
+
+.complete-holdings-table th:first-child,
+.complete-holdings-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 150px;
+  background: var(--paper);
+}
+
+.complete-holdings-table th:first-child {
+  z-index: 2;
+}
+
+.formula-note {
+  margin: 12px 0 0;
+  color: var(--ink-soft);
+  font-size: 10px;
+}
+
 .options-block {
   margin-top: 58px;
 }
 
-.options-block > p,
 .data-footnote {
   margin: 16px 0 0;
   color: var(--ink-soft);
   font-size: 10px;
 }
 
-.contract-list {
-  margin-top: 20px;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  border-top: 1px solid var(--line);
+.options-table {
+  min-width: 760px;
 }
 
-.contract-list span {
-  padding: 16px 0;
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  border-bottom: 1px solid var(--line);
-  font: 500 15px/1.2 var(--serif);
-}
-
-.contract-list span:nth-child(odd) {
-  padding-right: 28px;
-  border-right: 1px solid var(--line);
-}
-
-.contract-list span:nth-child(even) {
-  padding-left: 28px;
-}
-
-.contract-list b {
-  color: var(--ink-soft);
-  font: 500 9px/1.2 var(--sans);
-  white-space: nowrap;
+.option-contract {
+  font: 600 15px/1 var(--serif);
 }
 
 .filter-row {
@@ -872,10 +871,6 @@ footer {
   .detail-stats { grid-template-columns: 1fr; }
   .detail-stats span,
   .detail-stats span:not(:first-child) { min-height: auto; padding: 20px 0; border-right: 0; border-bottom: 1px solid var(--line); }
-  .contract-list { grid-template-columns: 1fr; }
-  .contract-list span,
-  .contract-list span:nth-child(odd),
-  .contract-list span:nth-child(even) { padding: 15px 0; border-right: 0; }
   .analysis-note { grid-template-columns: 1fr; gap: 10px; }
   .contribution-row { grid-template-columns: 48px 1fr 82px; gap: 10px; }
   footer { align-items: flex-start; flex-direction: column; justify-content: center; gap: 6px; }

@@ -5,27 +5,27 @@ import { useState } from "react";
 type Tab = "总览" | "持仓" | "交易" | "分析";
 
 const holdings = [
-  { symbol: "BOXX", name: "Alpha Architect 1–3 Month Box ETF", weight: 31.12, quantity: 180, price: 117.49, value: 21148.2, cost: 21067.43, unrealized: 80.77, realized: 1.06 },
-  { symbol: "MSFT", name: "Microsoft", weight: 23.21, quantity: 40.0455, price: 393.82, value: 15770.72, cost: 17213.04, unrealized: -1442.32, realized: 0 },
-  { symbol: "NVDA", name: "NVIDIA", weight: 10.45, quantity: 35.0179, price: 202.81, value: 7101.98, cost: 7131.11, unrealized: -29.13, realized: 0.2 },
-  { symbol: "TSLA", name: "Tesla", weight: 8.41, quantity: 15, price: 380.84, value: 5712.6, cost: 5838.88, unrealized: -126.28, realized: -44.8 },
-  { symbol: "DRAM", name: "L&G Cyber Security UCITS ETF", weight: 5.43, quantity: 70, price: 52.72, value: 3690.4, cost: 4423.17, unrealized: -732.77, realized: 0 },
-  { symbol: "ORCL", name: "Oracle", weight: 5.02, quantity: 27, price: 126.41, value: 3413.07, cost: 3903.9, unrealized: -490.83, realized: 264.61 },
-  { symbol: "AVGO", name: "Broadcom", weight: 3.82, quantity: 7.0061, price: 370.83, value: 2598.07, cost: 2691.16, unrealized: -93.09, realized: 42.61 },
-  { symbol: "NOW", name: "ServiceNow", weight: 3.04, quantity: 20, price: 103.24, value: 2064.8, cost: 2153.98, unrealized: -89.18, realized: 0 },
-  { symbol: "NOK", name: "Nokia", weight: 2.98, quantity: 200, price: 10.12, value: 2024, cost: 2940.22, unrealized: -916.22, realized: 102.29 },
-  { symbol: "RKLB", name: "Rocket Lab", weight: 1.49, quantity: 15, price: 67.62, value: 1014.3, cost: 1222.83, unrealized: -208.53, realized: 725.3 },
-  { symbol: "MRVL", name: "Marvell Technology", weight: 1.39, quantity: 5, price: 188.68, value: 943.4, cost: 1338.35, unrealized: -394.95, realized: 0 },
-  { symbol: "MSTR", name: "Strategy", weight: 0.98, quantity: 7, price: 94.85, value: 663.95, cost: 965.44, unrealized: -301.49, realized: 0 },
-  { symbol: "SPCX", name: "Space Innovation ETF", weight: 0.91, quantity: 5, price: 123.99, value: 619.95, cost: 743.6, unrealized: -123.65, realized: 44.83 },
+  { symbol: "BOXX", name: "Alpha Architect 1–3 Month Box ETF", averageCost: 117.04128389, quantity: 180, weight: 31.11873600867634, unrealized: 80.76889979999862, realized: 1.063786, price: 117.49, value: 21148.2, cost: 21067.4311002 },
+  { symbol: "MSFT", name: "Microsoft", averageCost: 429.8370129, quantity: 40.0455, weight: 23.205986103567028, unrealized: -1442.3192900869499, realized: 0, price: 393.82, value: 15770.718809999998, cost: 17213.03810008695 },
+  { symbol: "TSLA", name: "Tesla", averageCost: 389.25858667, quantity: 15, weight: 8.405863918591863, unrealized: -126.27880005000037, realized: -44.802037, price: 380.84, value: 5712.599999999999, cost: 5838.87880005 },
+  { symbol: "NVDA", name: "NVIDIA", averageCost: 203.64195169, quantity: 35.0179, weight: 10.450281823672995, unrealized: -29.133201085251383, realized: 0.195499, price: 202.81, value: 7101.980299, cost: 7131.113500085251 },
+  { symbol: "BATS:DRAM", name: "L&G Cyber Security UCITS ETF", averageCost: 63.18814714, quantity: 70, weight: 5.430276967610442, unrealized: -732.7702998, realized: 0, price: 52.72, value: 3690.4, cost: 4423.1702998 },
+  { symbol: "ORCL", name: "Oracle", averageCost: 144.58873333, quantity: 27, weight: 5.022196891893066, unrealized: -490.82579991, realized: 264.609827, price: 126.41, value: 3413.0699999999997, cost: 3903.89579991 },
+  { symbol: "AVGO", name: "Broadcom", averageCost: 384.11674113, quantity: 7.0061, weight: 3.822959810291851, unrealized: -93.08823703089297, realized: 42.609106, price: 370.83, value: 2598.072063, cost: 2691.160300030893 },
+  { symbol: "NOK", name: "Nokia", averageCost: 14.7011045, quantity: 200, weight: 2.978235579461179, unrealized: -916.2209, realized: 102.2937, price: 10.12, value: 2023.9999999999998, cost: 2940.2209 },
+  { symbol: "NOW", name: "ServiceNow", averageCost: 107.699015, quantity: 20, weight: 3.0382711583356925, unrealized: -89.18030000000016, realized: 0, price: 103.24, value: 2064.7999999999997, cost: 2153.9803 },
+  { symbol: "RKLB", name: "Rocket Lab", averageCost: 81.52225333, quantity: 15, weight: 1.4925021483436137, unrealized: -208.5337999499999, realized: 725.296967, price: 67.62, value: 1014.3000000000001, cost: 1222.83379995 },
+  { symbol: "MRVL", name: "Marvell Technology", averageCost: 267.67026, quantity: 5, weight: 1.3881756154464806, unrealized: -394.9512999999999, realized: 0, price: 188.68, value: 943.4000000000001, cost: 1338.3512999999998 },
+  { symbol: "SPCX", name: "Space Innovation ETF", averageCost: 148.72026, quantity: 5, weight: 0.9122317922366393, unrealized: -123.6513, realized: 44.825092, price: 123.99, value: 619.9499999999999, cost: 743.6013 },
+  { symbol: "MSTR", name: "Strategy", averageCost: 137.91929432, quantity: 7, weight: 0.9769760439640562, unrealized: -301.48506024000005, realized: 0, price: 94.85, value: 663.9499999999999, cost: 965.43506024 },
 ];
 
 const optionContracts = [
-  "INTC Nov 20 ’26 70 Put",
-  "NOK Jul 24 ’26 16 Call",
-  "NOK Jul 31 ’26 16 Call",
-  "NVDA Jan 15 ’27 180 Put",
-  "RKLB Oct 16 ’26 70 Put",
+  { contract: "INTC Nov 20 ’26 70 Put", quantity: -1, cost: -492.87, marketValue: 56.08, unrealized: 72.2 },
+  { contract: "NOK Jul 24 ’26 16 Call", quantity: -1, cost: -11.47, marketValue: 14.48, unrealized: 9.23 },
+  { contract: "NOK Jul 31 ’26 16 Call", quantity: -1, cost: -18.15, marketValue: 78.8, unrealized: 72.25 },
+  { contract: "NVDA Jan 15 ’27 180 Put", quantity: -1, cost: -1083.65, marketValue: 650.26, unrealized: 427.97 },
+  { contract: "RKLB Oct 16 ’26 70 Put", quantity: -1, cost: -977.65, marketValue: -113.46, unrealized: -2.69 },
 ];
 
 const recentTrades = [
@@ -53,8 +53,19 @@ const money = (value: number, sign = false) => {
   return `${prefix}$${Math.abs(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
+const formatNumber = (value: number, minimumFractionDigits = 0, maximumFractionDigits = 6) =>
+  value.toLocaleString("en-US", { minimumFractionDigits, maximumFractionDigits });
+
+const actualHoldingCost = (holding: (typeof holdings)[number]) =>
+  (holding.cost - holding.realized) / holding.quantity;
+
 function Pnl({ value }: { value: number }) {
   return <span className={value < 0 ? "loss" : value > 0 ? "gain" : "muted"}>{money(value, true)}</span>;
+}
+
+function PnlNumber({ value, precision = 2 }: { value: number; precision?: number }) {
+  const prefix = value < 0 ? "−" : value > 0 ? "+" : "";
+  return <span className={value < 0 ? "loss" : value > 0 ? "gain" : "muted"}>{prefix}{formatNumber(Math.abs(value), 2, precision)}</span>;
 }
 
 function SnapshotNotice() {
@@ -205,19 +216,24 @@ export default function Home() {
           <div className="detail-intro">
             <p className="eyebrow">Positions / 13</p>
             <h1>持仓账本</h1>
-            <p>数据日期 2026-07-20 · 正股按市值排序</p>
+            <p>数据日期 2026-07-20 · 基准货币 USD</p>
           </div>
           <div className="detail-stats"><span><small>正股市值</small><strong>$66,765.44</strong></span><span><small>前两大权重</small><strong>54.33%</strong></span><span><small>期权合约</small><strong>5</strong></span></div>
           <div className="table-wrap full-table">
-            <table>
-              <thead><tr><th>标的</th><th>数量</th><th>现价</th><th>市值</th><th>成本</th><th>权重</th><th>未实现</th><th>已实现</th></tr></thead>
-              <tbody>{holdings.map((holding) => <tr key={holding.symbol}><td><strong className="symbol">{holding.symbol}</strong><small className="company">{holding.name}</small></td><td>{holding.quantity}</td><td>{money(holding.price)}</td><td>{money(holding.value)}</td><td>{money(holding.cost)}</td><td>{holding.weight.toFixed(2)}%</td><td><Pnl value={holding.unrealized} /></td><td><Pnl value={holding.realized} /></td></tr>)}</tbody>
+            <table className="complete-holdings-table">
+              <thead><tr><th>Ticker</th><th>实际持仓成本</th><th>平均持仓成本</th><th>持仓数量</th><th>持仓占比</th><th>未实现盈亏</th><th>已实现盈亏</th><th>当前价格</th><th>持仓市值</th><th>持仓成本</th></tr></thead>
+              <tbody>{holdings.map((holding) => <tr key={holding.symbol}><td><strong className="symbol">{holding.symbol}</strong><small className="company">{holding.name}</small></td><td>{formatNumber(actualHoldingCost(holding), 2, 2)}</td><td>{formatNumber(holding.averageCost, 2, 2)}</td><td>{formatNumber(holding.quantity, 0, 4)}</td><td>{formatNumber(holding.weight, 2, 2)}%</td><td><PnlNumber value={holding.unrealized} /></td><td><PnlNumber value={holding.realized} precision={6} /></td><td>{formatNumber(holding.price, 2, 2)}</td><td>{formatNumber(holding.value, 2, 2)}</td><td>{formatNumber(holding.cost, 2, 6)}</td></tr>)}</tbody>
             </table>
           </div>
+          <p className="formula-note">实际持仓成本 =（持仓成本 − 已实现盈亏）÷ 持仓数量</p>
           <div className="options-block">
             <div className="ruled-heading"><p className="kicker">OPTIONS</p><h2>期权覆盖</h2></div>
-            <p>仅显示表格中可确认的合约名称与方向。</p>
-            <div className="contract-list">{optionContracts.map((contract) => <span key={contract}>{contract}<b>空头 1</b></span>)}</div>
+            <div className="table-wrap full-table">
+              <table className="options-table">
+                <thead><tr><th>合约</th><th>数量</th><th>持仓成本</th><th>期权市值</th><th>未实现盈亏</th></tr></thead>
+                <tbody>{optionContracts.map((option) => <tr key={option.contract}><td><strong className="option-contract">{option.contract}</strong></td><td>{formatNumber(option.quantity)}</td><td>{formatNumber(option.cost, 2, 2)}</td><td>{formatNumber(option.marketValue, 2, 2)}</td><td><PnlNumber value={option.unrealized} /></td></tr>)}</tbody>
+              </table>
+            </div>
           </div>
         </section>
       )}
