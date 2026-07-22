@@ -64,7 +64,7 @@ test("removes the disposable starter preview", async () => {
   await assert.rejects(access(new URL("app/_sites-preview/SkeletonPreview.tsx", projectRoot)));
 });
 
-test("uses a simplified forty-sixty holdings layout", async () => {
+test("uses the approved ledger-dominant hierarchy without horizontal scrolling", async () => {
   const [page, css] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
@@ -72,7 +72,16 @@ test("uses a simplified forty-sixty holdings layout", async () => {
 
   assert.doesNotMatch(page, /snapshot-status|ruled-heading|subtabs|formula-note|<footer/);
   assert.doesNotMatch(page, /点击展开合约|可收起|表内滚动/);
-  assert.match(css, /grid-template-columns: minmax\(320px, 2fr\) minmax\(0, 3fr\);/);
+  assert.doesNotMatch(page, /个 Ticker|个正股|份期权/);
+  assert.equal(page.match(/className="section-divider"/g)?.length, 2);
+  assert.match(css, /grid-template-columns: minmax\(240px, 28fr\) minmax\(0, 72fr\);/);
+  assert.match(css, /\.lower-grid \{[\s\S]*?border-top: 1px solid var\(--ink\);/);
+  assert.match(css, /\.section-divider \{[\s\S]*?border-top: 1px dashed var\(--paper-deep\);/);
+  assert.doesNotMatch(css, /min-width:\s*900px/);
+  assert.match(css, /\.position-scroll \{[\s\S]*?overflow-x: visible;/);
+  assert.match(css, /h1 \{[\s\S]*?font: 600 clamp\(36px, 3\.2vw, 44px\)\/.9 var\(--serif\);/);
+  assert.match(css, /h2 \{[\s\S]*?font: 600 22px\/1\.1 var\(--serif\);/);
+  assert.match(css, /\.summary-nav strong \{[\s\S]*?font-size: clamp\(26px, 2vw, 30px\);[\s\S]*?font-weight: 600;/);
   assert.doesNotMatch(css, /overscroll-behavior:\s*contain/);
   assert.match(css, /\.position-scroll \{[\s\S]*?overscroll-behavior: auto;/);
   assert.match(css, /\.table-wrap \{[\s\S]*?overscroll-behavior: auto;/);

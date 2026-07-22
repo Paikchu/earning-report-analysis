@@ -115,7 +115,6 @@ export default function Home() {
         <section className="hero" aria-labelledby="portfolio-title">
               <div className="portfolio-heading">
                 <h1 id="portfolio-title">投资组合</h1>
-                <span>{positionGroups.length} 个 Ticker · {holdings.length} 个正股 · {optionContracts.length} 份期权</span>
               </div>
               <div className="portfolio-summary" aria-label="组合摘要">
                 <article className="summary-item summary-nav"><span>当前净值</span><strong>{money(snapshot.account.netLiquidation)}</strong></article>
@@ -128,6 +127,7 @@ export default function Home() {
         <section className="lower-grid">
               <aside className="allocation-panel">
                 <h2>仓位构成</h2>
+                <div className="section-divider" aria-hidden="true" />
                 <div className="allocation-wrap">
                   <div className="donut" style={{ background: donutBackground }} role="img" aria-label={`前四大持仓占组合 ${topFourWeight.toFixed(2)}%`}><span>{topFourWeight.toFixed(1)}%<small>前四大持仓</small></span></div>
                   <div className="legend">
@@ -145,13 +145,13 @@ export default function Home() {
                 <div className="ledger-heading">
                   <h2 id="ledger-title">投资账本</h2>
                 </div>
+                <div className="section-divider" aria-hidden="true" />
 
                   <div className="ledger-content">
                     <div className="ledger-meta">
                       <span>持仓净市值 <strong>{money(netPositionsValue)}</strong></span>
                       <span>正股 <strong>{money(stockMarketValue)}</strong></span>
                       <span>期权 <strong>{money(optionMarketValue)}</strong></span>
-                      <span>{positionGroups.length} 个 Ticker</span>
                     </div>
                     <div className="position-scroll" aria-label="按 Ticker 分类的持仓">
                       <div className="position-columns" aria-hidden="true">

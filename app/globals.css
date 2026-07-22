@@ -58,14 +58,14 @@ p { margin-top: 0; }
 
 h1 {
   margin-bottom: 0;
-  font: 500 clamp(30px, 2.5vw, 40px)/.96 var(--serif);
-  letter-spacing: -.05em;
+  font: 600 clamp(36px, 3.2vw, 44px)/.9 var(--serif);
+  letter-spacing: -.04em;
   text-wrap: balance;
 }
 
 h2 {
   margin-bottom: 0;
-  font: 600 17px/1.15 var(--serif);
+  font: 600 22px/1.1 var(--serif);
 }
 
 .loss { color: var(--vermilion); }
@@ -84,12 +84,7 @@ h2 {
   padding: 8px 28px 8px 0;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-}
-
-.portfolio-heading span {
-  color: var(--ink-soft);
-  font-size: 9px;
+  justify-content: center;
 }
 
 .portfolio-summary {
@@ -111,44 +106,61 @@ h2 {
 .summary-item span {
   display: block;
   color: var(--ink-soft);
-  font-size: 9px;
-  letter-spacing: .04em;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .05em;
 }
 
 .summary-item strong {
   display: block;
   overflow: hidden;
-  font: 500 clamp(17px, 1.45vw, 23px)/1.05 var(--serif);
+  font: 550 clamp(19px, 1.6vw, 22px)/1.1 var(--serif);
   font-variant-numeric: tabular-nums;
   letter-spacing: -.02em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.summary-nav strong { font-size: clamp(20px, 1.75vw, 27px); }
-
-.lower-grid {
-  padding: 26px 0 56px;
-  display: grid;
-  grid-template-columns: minmax(320px, 2fr) minmax(0, 3fr);
-  gap: clamp(32px, 4vw, 64px);
+.summary-nav strong {
+  font-size: clamp(26px, 2vw, 30px);
+  font-weight: 600;
 }
 
-.allocation-panel { min-width: 0; }
+.lower-grid {
+  padding: 0 0 56px;
+  display: grid;
+  grid-template-columns: minmax(240px, 28fr) minmax(0, 72fr);
+  gap: clamp(32px, 3.5vw, 54px);
+  border-top: 1px solid var(--ink);
+}
+
+.allocation-panel,
+.ledger-panel {
+  min-width: 0;
+  padding-top: 24px;
+}
+
 .allocation-panel h2,
-.ledger-heading h2 { font-size: 20px; }
+.ledger-heading h2 { font-size: inherit; }
+
+.section-divider {
+  width: 100%;
+  height: 0;
+  margin: 8px 0 18px;
+  border-top: 1px dashed var(--paper-deep);
+}
 
 .allocation-wrap {
-  margin-top: 22px;
+  margin-top: 0;
   display: flex;
   align-items: center;
-  gap: clamp(22px, 3vw, 46px);
+  gap: clamp(18px, 2vw, 30px);
 }
 
 .donut {
   position: relative;
-  width: clamp(132px, 12vw, 176px);
-  height: clamp(132px, 12vw, 176px);
+  width: clamp(128px, 10vw, 150px);
+  height: clamp(128px, 10vw, 150px);
   flex: 0 0 auto;
   display: grid;
   place-items: center;
@@ -170,7 +182,7 @@ h2 {
   display: grid;
   gap: 2px;
   text-align: center;
-  font: 600 clamp(17px, 1.5vw, 22px)/1 var(--serif);
+  font: 600 22px/1 var(--serif);
   font-variant-numeric: tabular-nums;
 }
 
@@ -220,17 +232,14 @@ h2 {
 }
 
 .concentration-note strong {
-  font: 500 28px/1 var(--serif);
+  font: 600 28px/1 var(--serif);
   font-variant-numeric: tabular-nums;
 }
 
 .concentration-note span { color: var(--ink-soft); font-size: 10px; }
 
-.ledger-panel { min-width: 0; }
-
 .ledger-heading {
-  min-height: 32px;
-  padding: 0 0 14px;
+  min-height: 24px;
   display: flex;
   align-items: center;
 }
@@ -244,29 +253,34 @@ h2 {
   gap: 22px;
   color: var(--ink-soft);
   font-size: 9px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
-.ledger-meta strong { color: var(--ink); font-weight: 650; }
-.ledger-meta span:last-child { margin-left: auto; }
+.ledger-meta strong {
+  margin-left: 3px;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+}
 
 .position-scroll {
   width: 100%;
-  overflow-x: auto;
+  overflow-x: visible;
   overscroll-behavior: auto;
   scrollbar-gutter: auto;
-  touch-action: pan-x pan-y;
+  touch-action: pan-y;
 }
 
 .position-columns,
-.position-list { min-width: 900px; }
+.position-list { min-width: 0; }
 
 .position-columns,
 .position-row summary {
   display: grid;
-  grid-template-columns: minmax(120px, 1.15fr) minmax(72px, .65fr) .9fr .62fr .9fr .9fr .82fr .9fr 18px;
+  grid-template-columns: minmax(112px, 1.2fr) minmax(54px, .6fr) minmax(72px, 1fr) minmax(56px, .7fr) repeat(4, minmax(72px, 1fr)) 18px;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
 }
 
 .position-columns {
@@ -291,6 +305,7 @@ h2 {
   padding: 4px 6px;
   cursor: pointer;
   font-size: 10px;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
   list-style: none;
 }
@@ -298,6 +313,7 @@ h2 {
 .position-row summary::-webkit-details-marker { display: none; }
 
 .position-row summary > span:not(:first-child) { text-align: right; }
+.position-row summary > span { min-width: 0; }
 
 .position-row summary:hover { background: rgb(230 220 203 / 42%); }
 
@@ -339,14 +355,14 @@ h2 {
 
 .symbol {
   flex: 0 0 auto;
-  font: 600 12px/1 var(--serif);
+  font: 600 13px/1 var(--serif);
 }
 
 .company {
   min-width: 0;
   overflow: hidden;
   color: var(--ink-soft);
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -378,7 +394,8 @@ h2 {
 }
 
 .instrument-table {
-  min-width: 900px;
+  min-width: 0;
+  table-layout: fixed;
   background: transparent;
 }
 
@@ -386,7 +403,13 @@ h2 {
 .instrument-table td { padding-top: 7px; padding-bottom: 7px; }
 
 .instrument-table th:nth-child(2),
-.instrument-table td:nth-child(2) { min-width: 230px; text-align: left; }
+.instrument-table td:nth-child(2) {
+  width: 24%;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+}
 
 .empty-state {
   margin: 0;
@@ -398,10 +421,10 @@ h2 {
 
 .table-wrap {
   width: 100%;
-  overflow-x: auto;
+  overflow-x: visible;
   overscroll-behavior: auto;
   scrollbar-gutter: auto;
-  touch-action: pan-x pan-y;
+  touch-action: pan-y;
 }
 
 table {
@@ -433,7 +456,7 @@ td { font-size: 9px; }
 
 @media (max-width: 1120px) {
   .hero { grid-template-columns: 180px minmax(650px, 1fr); overflow-x: auto; }
-  .lower-grid { gap: 32px; }
+  .lower-grid { grid-template-columns: 1fr; gap: 32px; }
 }
 
 @media (max-width: 820px) {
@@ -442,7 +465,7 @@ td { font-size: 9px; }
   .portfolio-heading { min-height: 66px; padding-right: 0; }
   .portfolio-summary { grid-template-columns: repeat(2, 1fr); }
   .summary-item { min-height: 68px; }
-  .lower-grid { grid-template-columns: 1fr; gap: 38px; }
+  .lower-grid { gap: 38px; }
   .allocation-wrap { max-width: 480px; }
 }
 
@@ -454,9 +477,9 @@ td { font-size: 9px; }
   .summary-item strong,
   .summary-nav strong { font-size: 18px; }
   .ledger-heading { align-items: center; }
-  .ledger-heading h2 { font-size: 16px; }
+  .allocation-panel h2,
+  .ledger-heading h2 { font-size: 18px; }
   .ledger-meta { flex-wrap: wrap; gap: 4px 14px; padding: 7px 0; }
-  .ledger-meta span:last-child { width: 100%; margin-left: 0; }
   .position-columns { display: none; }
   .position-scroll {
     overflow: visible;
