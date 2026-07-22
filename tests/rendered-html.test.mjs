@@ -26,8 +26,8 @@ test("server-renders the investment record", async () => {
   assert.match(html, /<title>MAX · 投资记录<\/title>/i);
   assert.match(html, /投资组合/);
   assert.match(html, new RegExp(`\\$${snapshot.account.netLiquidation.toLocaleString("en-US", { minimumFractionDigits: 2 })}`.replace(".", "\\.")));
-  assert.match(html, /数据更新/);
-  assert.match(html, /IBKR/);
+  assert.doesNotMatch(html, /IBKR 数据更新|数据源：IBKR|实际持仓成本\s*=|AI 生成|AI 分析|由 AI/i);
+  assert.doesNotMatch(html, />交易(?:<|\s)/);
   assert.doesNotMatch(html, /Google Sheets/);
   assert.doesNotMatch(html, /Portfolio \/ 01|NAV RECONCILIATION|CORE POSITIONS|Transactions \/ 398/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
@@ -40,14 +40,17 @@ test("removes the disposable starter preview", async () => {
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
 
-  assert.match(page, /MAX · 投资记录/);
-  assert.match(page, /type LedgerTab = "持仓" \| "交易"/);
+  assert.match(page, /投资组合/);
+  assert.doesNotMatch(page, /LedgerTab|TradeFilter|recentTrades|filteredTrades|switchLedger|updateUrl/);
+  assert.doesNotMatch(page, /trade-disclosure|trade-toolbar|交易明细|role="tablist"/);
+  assert.match(page, /snapshot\.trades\.reduce/);
+  assert.match(page, /realizedBySymbolAndType/);
+  assert.match(page, /companyNames/);
   assert.doesNotMatch(page, /PageTab|activePage|switchPage|持仓分析|className="tabs"/);
-  assert.match(page, /实际持仓成本/);
+  assert.match(page, /actualHoldingCost/);
   assert.match(page, /平均成本/);
   assert.match(page, /\(holding\.cost - holding\.realized\) \/ holding\.quantity/);
   assert.match(page, /className="position-row"/);
-  assert.match(page, /className="trade-disclosure" open/);
   assert.match(page, /portfolio-snapshot\.json/);
   assert.doesNotMatch(page, /const holdings = \[/);
   assert.doesNotMatch(page, /const optionContracts = \[/);
@@ -55,8 +58,24 @@ test("removes the disposable starter preview", async () => {
   assert.doesNotMatch(page, /holding\.weight \/ 31\.12/);
   assert.doesNotMatch(page, /<header|masthead|SnapshotNotice|className="(?:eyebrow|kicker)"/);
   assert.match(layout, /lang="zh-CN"/);
+  assert.match(layout, /个人投资组合与持仓记录/);
+  assert.doesNotMatch(layout, /个人持仓、交易与盈亏记录/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   await assert.rejects(access(new URL("app/_sites-preview/SkeletonPreview.tsx", projectRoot)));
+});
+
+test("uses a simplified forty-sixty holdings layout", async () => {
+  const [page, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.doesNotMatch(page, /snapshot-status|ruled-heading|subtabs|formula-note|<footer/);
+  assert.doesNotMatch(page, /点击展开合约|可收起|表内滚动/);
+  assert.match(css, /grid-template-columns: minmax\(320px, 2fr\) minmax\(0, 3fr\);/);
+  assert.doesNotMatch(css, /overscroll-behavior:\s*contain/);
+  assert.match(css, /\.position-scroll \{[\s\S]*?overscroll-behavior: auto;/);
+  assert.match(css, /\.table-wrap \{[\s\S]*?overscroll-behavior: auto;/);
 });
 
 test("keeps the compact portfolio summary without the reconciliation chart", async () => {
@@ -96,6 +115,8 @@ test("uses page-scrolling cards for mobile position details", async () => {
   assert.match(css, /\.instrument-table thead \{ display: none; \}/);
   assert.match(css, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
   assert.match(css, /\.disclosure-mark \{\s*position: absolute;/);
+  assert.match(css, /\.position-identity \{ grid-column: 1 \/ -1; \}/);
+  assert.match(css, /\.position-kinds \{ grid-column: 1 \/ -1;/);
 });
 
 test("calculates actual holding cost from cost, realized P&L, and quantity", () => {
