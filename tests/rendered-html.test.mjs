@@ -94,6 +94,34 @@ test("keeps the compact portfolio summary without the reconciliation chart", asy
   assert.doesNotMatch(page, /净值对照|capital-chart|capital-landing|analysis-page|<svg/);
 });
 
+test("renders the stock-only investment theme heatmap", async () => {
+  const response = await render();
+  const html = await response.text();
+
+  assert.match(html, /持仓主题热力图/);
+  assert.match(html, /含期权负债，正股权重可超过 100%/);
+  assert.match(html, /aria-label="持仓主题热力图"/);
+  assert.match(html, /AI \/ 企业软件/);
+  assert.match(html, /太空与通信/);
+  assert.match(html, /NVDA[^]*?10\.87%/);
+  assert.match(html, /RKLB[^]*?1\.68%/);
+});
+
+test("keeps the heatmap responsive and keyboard reachable", async () => {
+  const [page, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /PortfolioHeatmap/);
+  assert.match(css, /\.heatmap-plot \{[^]*?overflow: hidden;/);
+  assert.match(css, /\.heatmap-domain-tiles \{[^]*?inset: 0;/);
+  assert.match(css, /\.heatmap-domain-compact \.heatmap-domain-heading \{ display: none; \}/);
+  assert.match(css, /\.heatmap-domain-compact \.heatmap-tile strong \{[^]*?transform: rotate\(90deg\);/);
+  assert.match(css, /\.heatmap-tile:focus-visible/);
+  assert.match(css, /@media \(max-width: 620px\)[^]*?\.heatmap-plot/);
+});
+
 test("groups stock and option positions by ticker", async () => {
   const snapshot = JSON.parse(await readFile(new URL("../data/portfolio-snapshot.json", import.meta.url), "utf8"));
   const response = await render();

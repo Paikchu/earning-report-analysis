@@ -1,7 +1,10 @@
 import snapshotData from "@/data/portfolio-snapshot.json";
+import { PortfolioHeatmap } from "@/app/portfolio-heatmap";
+import { buildHeatmapHoldings } from "@/lib/portfolio-heatmap";
 import { canonicalUnderlying, type PortfolioSnapshotV1 } from "@/lib/portfolio-snapshot";
 
 const snapshot = snapshotData as PortfolioSnapshotV1;
+const heatmapHoldings = buildHeatmapHoldings(snapshot);
 const snapshotYear = new Date(snapshot.generatedAt).getUTCFullYear();
 const realizedBySymbolAndType = snapshot.trades.reduce<Record<string, { stock: number; options: number }>>((totals, trade) => {
   if (new Date(trade.tradeTime).getUTCFullYear() !== snapshotYear) return totals;
@@ -139,6 +142,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="concentration-note"><strong>{topTwoWeight.toFixed(2)}%</strong><span>{positionGroups[0]?.symbol} 与 {positionGroups[1]?.symbol} 合计净权重</span></div>
+                <PortfolioHeatmap holdings={heatmapHoldings} />
               </aside>
 
               <section className="ledger-panel" aria-labelledby="ledger-title">
