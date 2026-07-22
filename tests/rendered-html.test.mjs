@@ -41,10 +41,14 @@ test("removes the disposable starter preview", async () => {
   ]);
 
   assert.match(page, /MAX · 投资记录/);
-  assert.match(page, /type Tab = "总览" \| "持仓" \| "交易" \| "分析"/);
+  assert.match(page, /type PageTab = "总览" \| "分析"/);
+  assert.match(page, /type LedgerTab = "持仓" \| "交易"/);
+  assert.doesNotMatch(page, /activePage === "持仓"|activePage === "交易"/);
   assert.match(page, /实际持仓成本/);
   assert.match(page, /平均持仓成本/);
   assert.match(page, /\(holding\.cost - holding\.realized\) \/ holding\.quantity/);
+  assert.match(page, /className="position-row"/);
+  assert.match(page, /className="trade-disclosure" open/);
   assert.match(page, /portfolio-snapshot\.json/);
   assert.doesNotMatch(page, /const holdings = \[/);
   assert.doesNotMatch(page, /const optionContracts = \[/);
