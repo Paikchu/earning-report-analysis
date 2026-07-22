@@ -244,7 +244,7 @@ export default function Home() {
                       <span>期权 <strong>{money(optionMarketValue)}</strong></span>
                       <span>{positionGroups.length} 个 Ticker · 点击展开合约</span>
                     </div>
-                    <div className="position-scroll" role="region" aria-label="按 Ticker 分类的持仓，可横向滚动" tabIndex={0}>
+                    <div className="position-scroll" aria-label="按 Ticker 分类的持仓">
                       <div className="position-columns" aria-hidden="true">
                         <span>标的</span><span>构成</span><span>净市值</span><span>净权重</span><span>持仓成本</span><span>未实现盈亏</span><span>年内已实现</span><span>年内净盈亏</span><span />
                       </div>
@@ -265,12 +265,12 @@ export default function Home() {
                               <span data-label="年内净盈亏"><Pnl value={group.netPnl} /></span>
                               <span className="disclosure-mark" aria-hidden="true" />
                             </summary>
-                            <div className="position-detail table-wrap" role="region" aria-label={`${group.symbol} 持仓明细，可横向滚动`} tabIndex={0}>
+                            <div className="position-detail table-wrap" aria-label={`${group.symbol} 持仓明细`}>
                               <table className="instrument-table" aria-label={`${group.symbol} 正股与期权明细`}>
                                 <thead><tr><th>类型</th><th>资产 / 合约</th><th>数量</th><th>现价</th><th>平均成本</th><th>实际成本</th><th>持仓成本</th><th>市值</th><th>权重</th><th>未实现盈亏</th></tr></thead>
                                 <tbody>
-                                  {group.stock && <tr><td><span className="asset-pill stock-pill">正股</span></td><td><strong>{group.stock.name}</strong></td><td>{formatNumber(group.stock.quantity, 0, 4)}</td><td>{money(group.stock.price)}</td><td>{money(group.stock.averageCost)}</td><td>{money(actualHoldingCost(group.stock))}</td><td>{money(group.stock.cost)}</td><td>{money(group.stock.value)}</td><td>{formatNumber(group.stock.weight, 2, 2)}%</td><td><Pnl value={group.stock.unrealized} /></td></tr>}
-                                  {group.options.map((option) => <tr key={option.contract}><td><span className="asset-pill option-pill">期权</span></td><td><strong className="option-contract">{option.contract}</strong></td><td>{formatNumber(option.quantity, 0, 4)}</td><td>{money(option.price)}</td><td>{money(option.averageCost)}</td><td className="muted">—</td><td>{money(option.cost)}</td><td>{money(option.marketValue)}</td><td>{formatNumber(option.weight, 2, 2)}%</td><td><Pnl value={option.unrealized} /></td></tr>)}
+                                  {group.stock && <tr><td className="instrument-type" data-label="类型"><span className="asset-pill stock-pill">正股</span></td><td className="instrument-name" data-label="资产 / 合约"><strong>{group.stock.name}</strong></td><td data-label="数量">{formatNumber(group.stock.quantity, 0, 4)}</td><td data-label="现价">{money(group.stock.price)}</td><td data-label="平均成本">{money(group.stock.averageCost)}</td><td data-label="实际成本">{money(actualHoldingCost(group.stock))}</td><td data-label="持仓成本">{money(group.stock.cost)}</td><td data-label="市值">{money(group.stock.value)}</td><td data-label="权重">{formatNumber(group.stock.weight, 2, 2)}%</td><td data-label="未实现盈亏"><Pnl value={group.stock.unrealized} /></td></tr>}
+                                  {group.options.map((option) => <tr key={option.contract}><td className="instrument-type" data-label="类型"><span className="asset-pill option-pill">期权</span></td><td className="instrument-name" data-label="资产 / 合约"><strong className="option-contract">{option.contract}</strong></td><td data-label="数量">{formatNumber(option.quantity, 0, 4)}</td><td data-label="现价">{money(option.price)}</td><td data-label="平均成本">{money(option.averageCost)}</td><td className="muted" data-label="实际成本">—</td><td data-label="持仓成本">{money(option.cost)}</td><td data-label="市值">{money(option.marketValue)}</td><td data-label="权重">{formatNumber(option.weight, 2, 2)}%</td><td data-label="未实现盈亏"><Pnl value={option.unrealized} /></td></tr>)}
                                 </tbody>
                               </table>
                             </div>

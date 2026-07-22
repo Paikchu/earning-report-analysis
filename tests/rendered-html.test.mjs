@@ -83,6 +83,21 @@ test("groups stock and option positions by ticker", async () => {
   assert.doesNotMatch(html, /期权覆盖/);
 });
 
+test("uses page-scrolling cards for mobile position details", async () => {
+  const [page, css] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /data-label="平均成本"/);
+  assert.match(page, /data-label="未实现盈亏"/);
+  assert.doesNotMatch(page, /持仓，可横向滚动|持仓明细，可横向滚动/);
+  assert.match(css, /\.position-detail\.table-wrap \{\s*overflow: visible;\s*overscroll-behavior: auto;/);
+  assert.match(css, /\.instrument-table thead \{ display: none; \}/);
+  assert.match(css, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
+  assert.match(css, /\.disclosure-mark \{\s*position: absolute;/);
+});
+
 test("calculates actual holding cost from cost, realized P&L, and quantity", () => {
   const fixtures = [
     { symbol: "BOXX", cost: 21067.4311002, realized: 1.063786, quantity: 180, expected: 117.04 },

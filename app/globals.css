@@ -646,25 +646,92 @@ footer {
   .ledger-meta { flex-wrap: wrap; gap: 4px 14px; padding: 7px 0; }
   .ledger-meta span:last-child { width: 100%; margin-left: 0; }
   .position-columns { display: none; }
-  .position-scroll { overflow: visible; }
+  .position-scroll {
+    overflow: visible;
+    overscroll-behavior: auto;
+    scrollbar-gutter: auto;
+    touch-action: pan-y;
+  }
   .position-list { min-width: 0; }
+  .position-row { contain-intrinsic-size: 220px; }
   .position-row summary {
-    min-height: 176px;
-    padding: 9px 4px;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) 18px;
-    gap: 8px 12px;
+    position: relative;
+    min-height: auto;
+    padding: 12px 28px 12px 4px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 12px;
+    font-size: 12px;
+    touch-action: pan-y;
   }
   .position-row summary > span:not(:first-child) { text-align: left; }
+  .position-row summary > span[data-label] {
+    min-width: 0;
+    font-weight: 600;
+  }
   .position-identity { grid-column: 1 / -2; }
+  .position-identity .symbol { font-size: 18px; }
+  .position-identity .company {
+    max-width: min(58vw, 260px);
+    font-size: 9px;
+  }
   .position-kinds { grid-column: 1 / -2; justify-content: flex-start; }
   .position-row summary > span[data-label]::before {
     content: attr(data-label);
     display: block;
-    margin-bottom: 2px;
+    margin-bottom: 3px;
     color: var(--ink-soft);
-    font-size: 8px;
+    font-size: 9px;
+    font-weight: 400;
   }
-  .disclosure-mark { grid-column: 3; grid-row: 1; }
+  .disclosure-mark {
+    position: absolute;
+    top: 14px;
+    right: 4px;
+  }
+  .position-detail.table-wrap {
+    overflow: visible;
+    overscroll-behavior: auto;
+    scrollbar-gutter: auto;
+    touch-action: pan-y;
+  }
+  .instrument-table {
+    min-width: 0;
+    display: block;
+  }
+  .instrument-table thead { display: none; }
+  .instrument-table tbody { display: block; }
+  .instrument-table tr {
+    padding: 12px 4px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .instrument-table tr:last-child { border-bottom: 0; }
+  .instrument-table td,
+  .instrument-table td:nth-child(2) {
+    min-width: 0;
+    padding: 0;
+    border-bottom: 0;
+    text-align: left;
+    white-space: normal;
+    font-size: 12px;
+  }
+  .instrument-table td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 3px;
+    color: var(--ink-soft);
+    font: 500 9px/1.2 var(--sans);
+  }
+  .instrument-type,
+  .instrument-name { grid-column: 1 / -1; }
+  .instrument-name strong {
+    display: block;
+    font-size: 13px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
   .trade-toolbar { align-items: flex-start; flex-direction: column; gap: 0; padding-bottom: 7px; }
   .filter-row button { min-height: 44px; }
   .trade-disclosure > summary { min-height: 46px; }
