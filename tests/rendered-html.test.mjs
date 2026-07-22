@@ -45,7 +45,7 @@ test("removes the disposable starter preview", async () => {
   assert.match(page, /type LedgerTab = "持仓" \| "交易"/);
   assert.doesNotMatch(page, /activePage === "持仓"|activePage === "交易"/);
   assert.match(page, /实际持仓成本/);
-  assert.match(page, /平均持仓成本/);
+  assert.match(page, /平均成本/);
   assert.match(page, /\(holding\.cost - holding\.realized\) \/ holding\.quantity/);
   assert.match(page, /className="position-row"/);
   assert.match(page, /className="trade-disclosure" open/);
@@ -65,6 +65,23 @@ test("keeps the compact portfolio summary without the reconciliation chart", asy
 
   assert.match(page, /className="portfolio-summary"/);
   assert.doesNotMatch(page, /净值对照|capital-chart|capital-landing|<svg/);
+});
+
+test("groups stock and option positions by ticker", async () => {
+  const snapshot = JSON.parse(await readFile(new URL("../data/portfolio-snapshot.json", import.meta.url), "utf8"));
+  const response = await render();
+  const html = await response.text();
+  const expectedTickerCount = new Set(snapshot.positions.map((position) => position.symbol)).size;
+  const renderedTickerCount = html.match(/class="position-row"/g)?.length ?? 0;
+
+  assert.equal(renderedTickerCount, expectedTickerCount);
+  assert.match(html, /INTC/);
+  assert.match(html, /正股/);
+  assert.match(html, /期权/);
+  assert.match(html, /净市值/);
+  assert.match(html, /年内已实现/);
+  assert.match(html, /年内净盈亏/);
+  assert.doesNotMatch(html, /期权覆盖/);
 });
 
 test("calculates actual holding cost from cost, realized P&L, and quantity", () => {

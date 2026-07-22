@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import snapshotData from "@/data/portfolio-snapshot.json";
-import { realizedPnlByUnderlying, type PortfolioSnapshotV1 } from "@/lib/portfolio-snapshot";
+import { canonicalUnderlying, type PortfolioSnapshotV1 } from "@/lib/portfolio-snapshot";
 
 type PageTab = "总览" | "分析";
 type LedgerTab = "持仓" | "交易";
@@ -10,7 +10,15 @@ type TradeFilter = "全部" | "买入" | "卖出";
 
 const snapshot = snapshotData as PortfolioSnapshotV1;
 const snapshotYear = new Date(snapshot.generatedAt).getUTCFullYear();
-const realizedBySymbol = realizedPnlByUnderlying(snapshot.trades, snapshotYear);
+const realizedBySymbolAndType = snapshot.trades.reduce<Record<string, { stock: number; options: number }>>((totals, trade) => {
+  if (new Date(trade.tradeTime).getUTCFullYear() !== snapshotYear) return totals;
+  if (trade.securityType !== "STK" && trade.securityType !== "OPT") return totals;
+  const symbol = canonicalUnderlying(trade.symbol);
+  totals[symbol] ??= { stock: 0, options: 0 };
+  if (trade.securityType === "STK") totals[symbol].stock += trade.realizedPnl;
+  else totals[symbol].options += trade.realizedPnl;
+  return totals;
+}, {});
 const companyNames = snapshot.trades.reduce<Record<string, string>>((names, trade) => {
   names[trade.symbol] ??= trade.contractDescription;
   return names;
@@ -24,7 +32,7 @@ const holdings = snapshot.positions
     quantity: position.quantity,
     weight: (position.marketValue / snapshot.account.netLiquidation) * 100,
     unrealized: position.unrealizedPnl,
-    realized: realizedBySymbol[position.symbol] ?? 0,
+    realized: realizedBySymbolAndType[position.symbol]?.stock ?? 0,
     price: position.marketPrice,
     value: position.marketValue,
     cost: position.costBasis,
@@ -33,12 +41,44 @@ const holdings = snapshot.positions
 const optionContracts = snapshot.positions
   .filter((position) => position.assetClass === "OPT")
   .map((position) => ({
+    symbol: position.symbol,
     contract: position.contractDescription,
     quantity: position.quantity,
+    averageCost: position.averagePrice,
+    price: position.marketPrice,
     cost: position.costBasis,
     marketValue: position.marketValue,
+    weight: (position.marketValue / snapshot.account.netLiquidation) * 100,
     unrealized: position.unrealizedPnl,
   }));
+const positionGroups = [...new Set([...holdings.map((holding) => holding.symbol), ...optionContracts.map((option) => option.symbol)])]
+  .map((symbol) => {
+    const stock = holdings.find((holding) => holding.symbol === symbol);
+    const options = optionContracts.filter((option) => option.symbol === symbol);
+    const optionValue = options.reduce((sum, option) => sum + option.marketValue, 0);
+    const optionCost = options.reduce((sum, option) => sum + option.cost, 0);
+    const optionUnrealized = options.reduce((sum, option) => sum + option.unrealized, 0);
+    const value = (stock?.value ?? 0) + optionValue;
+    const cost = (stock?.cost ?? 0) + optionCost;
+    const unrealized = (stock?.unrealized ?? 0) + optionUnrealized;
+    const realizedBreakdown = realizedBySymbolAndType[symbol] ?? { stock: 0, options: 0 };
+    const realized = realizedBreakdown.stock + realizedBreakdown.options;
+
+    return {
+      symbol,
+      name: stock?.name ?? companyNames[symbol] ?? symbol,
+      stock,
+      options,
+      value,
+      cost,
+      unrealized,
+      realized,
+      netPnl: unrealized + realized,
+      weight: (value / snapshot.account.netLiquidation) * 100,
+      grossValue: Math.abs(stock?.value ?? 0) + options.reduce((sum, option) => sum + Math.abs(option.marketValue), 0),
+    };
+  })
+  .sort((left, right) => right.grossValue - left.grossValue);
 const recentTrades = snapshot.trades.map((trade) => ({
   id: trade.tradeId,
   time: trade.tradeTime,
@@ -49,17 +89,19 @@ const recentTrades = snapshot.trades.map((trade) => ({
   price: trade.price,
   pnl: trade.realizedPnl,
 }));
-const allocation = holdings.slice(0, 4).map((holding) => [holding.symbol, holding.weight] as const);
+const allocation = positionGroups.filter((group) => group.weight > 0).slice(0, 4).map((group) => [group.symbol, group.weight] as const);
 const totalPnl = snapshot.account.netLiquidation - snapshot.account.netDeposits;
 const stockMarketValue = holdings.reduce((sum, holding) => sum + holding.value, 0);
+const optionMarketValue = optionContracts.reduce((sum, option) => sum + option.marketValue, 0);
+const netPositionsValue = stockMarketValue + optionMarketValue;
 const topFourWeight = allocation.reduce((sum, [, weight]) => sum + weight, 0);
-const topTwoWeight = holdings.slice(0, 2).reduce((sum, holding) => sum + holding.weight, 0);
+const topTwoWeight = positionGroups.filter((group) => group.weight > 0).slice(0, 2).reduce((sum, group) => sum + group.weight, 0);
 const allocationStops = allocation
   .map(([, weight]) => weight)
   .reduce<number[]>((stops, weight) => [...stops, (stops.at(-1) ?? 0) + weight], []);
 const donutBackground = `conic-gradient(var(--ink) 0 ${allocationStops[0] ?? 0}%, #718196 ${allocationStops[0] ?? 0}% ${allocationStops[1] ?? 0}%, var(--vermilion) ${allocationStops[1] ?? 0}% ${allocationStops[2] ?? 0}%, #b47d64 ${allocationStops[2] ?? 0}% ${allocationStops[3] ?? 0}%, var(--paper-deep) ${allocationStops[3] ?? 0}% 100%)`;
-const largestLoss = holdings.slice().sort((left, right) => left.unrealized - right.unrealized)[0];
-const largestRealized = holdings.slice().sort((left, right) => right.realized - left.realized)[0];
+const largestLoss = positionGroups.slice().sort((left, right) => left.unrealized - right.unrealized)[0];
+const largestRealized = positionGroups.slice().sort((left, right) => right.realized - left.realized)[0];
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -169,7 +211,7 @@ export default function Home() {
             <section className="hero" aria-labelledby="portfolio-title">
               <div className="portfolio-heading">
                 <h1 id="portfolio-title">投资组合</h1>
-                <span>{holdings.length} 个正股 · {optionContracts.length} 份期权</span>
+                <span>{positionGroups.length} 个 Ticker · {holdings.length} 个正股 · {optionContracts.length} 份期权</span>
               </div>
               <div className="portfolio-summary" aria-label="组合摘要">
                 <article className="summary-item summary-nav"><span>当前净值</span><strong>{money(snapshot.account.netLiquidation)}</strong></article>
@@ -192,7 +234,7 @@ export default function Home() {
                     ))}
                   </div>
                 </div>
-                <div className="concentration-note"><strong>{topTwoWeight.toFixed(2)}%</strong><span>{holdings[0]?.symbol} 与 {holdings[1]?.symbol} 合计权重</span></div>
+                <div className="concentration-note"><strong>{topTwoWeight.toFixed(2)}%</strong><span>{positionGroups[0]?.symbol} 与 {positionGroups[1]?.symbol} 合计净权重</span></div>
               </aside>
 
               <section className="ledger-panel" aria-labelledby="ledger-title">
@@ -219,7 +261,7 @@ export default function Home() {
                         }}
                       >
                         {tab}
-                        <span>{tab === "持仓" ? holdings.length + optionContracts.length : recentTrades.length}</span>
+                        <span>{tab === "持仓" ? positionGroups.length : recentTrades.length}</span>
                       </button>
                     ))}
                   </div>
@@ -228,45 +270,47 @@ export default function Home() {
                 {activeLedger === "持仓" && (
                   <div className="ledger-content" id="ledger-panel-持仓" role="tabpanel" aria-labelledby="ledger-tab-持仓">
                     <div className="ledger-meta">
-                      <span>正股市值 <strong>{money(stockMarketValue)}</strong></span>
-                      <span>前两大权重 <strong>{topTwoWeight.toFixed(2)}%</strong></span>
-                      <span>点击标的展开成本明细</span>
+                      <span>持仓净市值 <strong>{money(netPositionsValue)}</strong></span>
+                      <span>正股 <strong>{money(stockMarketValue)}</strong></span>
+                      <span>期权 <strong>{money(optionMarketValue)}</strong></span>
+                      <span>{positionGroups.length} 个 Ticker · 点击展开合约</span>
                     </div>
-                    <div className="position-columns" aria-hidden="true">
-                      <span>标的</span><span>数量</span><span>现价</span><span>市值</span><span>权重</span><span>未实现盈亏</span><span />
-                    </div>
-                    <div className="position-list">
-                      {holdings.map((holding) => (
-                        <details className="position-row" key={holding.symbol}>
-                          <summary>
-                            <span className="position-identity"><strong className="symbol">{holding.symbol}</strong><small className="company">{holding.name}</small></span>
-                            <span data-label="数量">{formatNumber(holding.quantity, 0, 4)}</span>
-                            <span data-label="现价">{money(holding.price)}</span>
-                            <span data-label="市值">{money(holding.value)}</span>
-                            <span data-label="权重">{formatNumber(holding.weight, 2, 2)}%</span>
-                            <span data-label="未实现盈亏"><Pnl value={holding.unrealized} /></span>
-                            <span className="disclosure-mark" aria-hidden="true" />
-                          </summary>
-                          <div className="position-detail">
-                            <span><small>实际持仓成本</small><strong>{money(actualHoldingCost(holding))}</strong></span>
-                            <span><small>平均持仓成本</small><strong>{money(holding.averageCost)}</strong></span>
-                            <span><small>持仓成本</small><strong>{money(holding.cost)}</strong></span>
-                            <span><small>已实现盈亏</small><strong><Pnl value={holding.realized} currency={false} /></strong></span>
-                          </div>
-                        </details>
-                      ))}
-                      {holdings.length === 0 && <p className="empty-state">当前快照没有正股持仓。</p>}
+                    <div className="position-scroll" role="region" aria-label="按 Ticker 分类的持仓，可横向滚动" tabIndex={0}>
+                      <div className="position-columns" aria-hidden="true">
+                        <span>标的</span><span>构成</span><span>净市值</span><span>净权重</span><span>持仓成本</span><span>未实现盈亏</span><span>年内已实现</span><span>年内净盈亏</span><span />
+                      </div>
+                      <div className="position-list">
+                        {positionGroups.map((group) => (
+                          <details className="position-row" key={group.symbol}>
+                            <summary>
+                              <span className="position-identity"><strong className="symbol">{group.symbol}</strong><small className="company">{group.name}</small></span>
+                              <span className="position-kinds" data-label="构成">
+                                {group.stock && <i className="asset-pill stock-pill">正股</i>}
+                                {group.options.length > 0 && <i className="asset-pill option-pill">{group.options.length} 期权</i>}
+                              </span>
+                              <span data-label="净市值">{money(group.value)}</span>
+                              <span data-label="净权重">{formatNumber(group.weight, 2, 2)}%</span>
+                              <span data-label="持仓成本">{money(group.cost)}</span>
+                              <span data-label="未实现盈亏"><Pnl value={group.unrealized} /></span>
+                              <span data-label="年内已实现"><Pnl value={group.realized} /></span>
+                              <span data-label="年内净盈亏"><Pnl value={group.netPnl} /></span>
+                              <span className="disclosure-mark" aria-hidden="true" />
+                            </summary>
+                            <div className="position-detail table-wrap" role="region" aria-label={`${group.symbol} 持仓明细，可横向滚动`} tabIndex={0}>
+                              <table className="instrument-table" aria-label={`${group.symbol} 正股与期权明细`}>
+                                <thead><tr><th>类型</th><th>资产 / 合约</th><th>数量</th><th>现价</th><th>平均成本</th><th>实际成本</th><th>持仓成本</th><th>市值</th><th>权重</th><th>未实现盈亏</th></tr></thead>
+                                <tbody>
+                                  {group.stock && <tr><td><span className="asset-pill stock-pill">正股</span></td><td><strong>{group.stock.name}</strong></td><td>{formatNumber(group.stock.quantity, 0, 4)}</td><td>{money(group.stock.price)}</td><td>{money(group.stock.averageCost)}</td><td>{money(actualHoldingCost(group.stock))}</td><td>{money(group.stock.cost)}</td><td>{money(group.stock.value)}</td><td>{formatNumber(group.stock.weight, 2, 2)}%</td><td><Pnl value={group.stock.unrealized} /></td></tr>}
+                                  {group.options.map((option) => <tr key={option.contract}><td><span className="asset-pill option-pill">期权</span></td><td><strong className="option-contract">{option.contract}</strong></td><td>{formatNumber(option.quantity, 0, 4)}</td><td>{money(option.price)}</td><td>{money(option.averageCost)}</td><td className="muted">—</td><td>{money(option.cost)}</td><td>{money(option.marketValue)}</td><td>{formatNumber(option.weight, 2, 2)}%</td><td><Pnl value={option.unrealized} /></td></tr>)}
+                                </tbody>
+                              </table>
+                            </div>
+                          </details>
+                        ))}
+                        {positionGroups.length === 0 && <p className="empty-state">当前快照没有持仓。</p>}
+                      </div>
                     </div>
                     <p className="formula-note">实际持仓成本 =（持仓成本 − 已实现盈亏）÷ 持仓数量</p>
-                    <details className="options-disclosure">
-                      <summary><span>期权覆盖</span><strong>{optionContracts.length} 份合约</strong><i aria-hidden="true" /></summary>
-                      <div className="table-wrap" role="region" aria-label="期权持仓，可横向滚动" tabIndex={0}>
-                        <table className="options-table" aria-label="期权持仓">
-                          <thead><tr><th>合约</th><th>数量</th><th>持仓成本</th><th>期权市值</th><th>未实现盈亏</th></tr></thead>
-                          <tbody>{optionContracts.map((option) => <tr key={option.contract}><td><strong className="option-contract">{option.contract}</strong></td><td>{formatNumber(option.quantity)}</td><td>{money(option.cost)}</td><td>{money(option.marketValue)}</td><td><Pnl value={option.unrealized} /></td></tr>)}{optionContracts.length === 0 && <tr><td className="empty-cell" colSpan={5}>当前快照没有期权持仓。</td></tr>}</tbody>
-                        </table>
-                      </div>
-                    </details>
                   </div>
                 )}
 
