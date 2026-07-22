@@ -1,85 +1,16 @@
 import snapshotData from "@/data/portfolio-snapshot.json";
 import { PortfolioHeatmap } from "@/app/portfolio-heatmap";
 import { buildHeatmapHoldings } from "@/lib/portfolio-heatmap";
-import { canonicalUnderlying, type PortfolioSnapshotV1 } from "@/lib/portfolio-snapshot";
+import { buildPortfolioViewModel } from "@/lib/portfolio-view-model";
+import type { PortfolioSnapshotV1 } from "@/lib/portfolio-snapshot";
+import Link from "next/link";
+import { AddPlanDialog } from "./AddPlanDialog";
 
 const snapshot = snapshotData as PortfolioSnapshotV1;
 const heatmapHoldings = buildHeatmapHoldings(snapshot);
-const snapshotYear = new Date(snapshot.generatedAt).getUTCFullYear();
-const realizedBySymbolAndType = snapshot.trades.reduce<Record<string, { stock: number; options: number }>>((totals, trade) => {
-  if (new Date(trade.tradeTime).getUTCFullYear() !== snapshotYear) return totals;
-  if (trade.securityType !== "STK" && trade.securityType !== "OPT") return totals;
-  const symbol = canonicalUnderlying(trade.symbol);
-  totals[symbol] ??= { stock: 0, options: 0 };
-  if (trade.securityType === "STK") totals[symbol].stock += trade.realizedPnl;
-  else totals[symbol].options += trade.realizedPnl;
-  return totals;
-}, {});
-const companyNames = snapshot.trades.reduce<Record<string, string>>((names, trade) => {
-  names[trade.symbol] ??= trade.contractDescription;
-  return names;
-}, {});
-const holdings = snapshot.positions
-  .filter((position) => position.assetClass === "STK")
-  .map((position) => ({
-    symbol: position.symbol,
-    name: companyNames[position.symbol] ?? position.contractDescription,
-    averageCost: position.averagePrice,
-    quantity: position.quantity,
-    weight: (position.marketValue / snapshot.account.netLiquidation) * 100,
-    unrealized: position.unrealizedPnl,
-    realized: realizedBySymbolAndType[position.symbol]?.stock ?? 0,
-    price: position.marketPrice,
-    value: position.marketValue,
-    cost: position.costBasis,
-  }))
-  .sort((left, right) => right.value - left.value);
-const optionContracts = snapshot.positions
-  .filter((position) => position.assetClass === "OPT")
-  .map((position) => ({
-    symbol: position.symbol,
-    contract: position.contractDescription,
-    quantity: position.quantity,
-    averageCost: position.averagePrice,
-    price: position.marketPrice,
-    cost: position.costBasis,
-    marketValue: position.marketValue,
-    weight: (position.marketValue / snapshot.account.netLiquidation) * 100,
-    unrealized: position.unrealizedPnl,
-  }));
-const positionGroups = [...new Set([...holdings.map((holding) => holding.symbol), ...optionContracts.map((option) => option.symbol)])]
-  .map((symbol) => {
-    const stock = holdings.find((holding) => holding.symbol === symbol);
-    const options = optionContracts.filter((option) => option.symbol === symbol);
-    const optionValue = options.reduce((sum, option) => sum + option.marketValue, 0);
-    const optionCost = options.reduce((sum, option) => sum + option.cost, 0);
-    const optionUnrealized = options.reduce((sum, option) => sum + option.unrealized, 0);
-    const value = (stock?.value ?? 0) + optionValue;
-    const cost = (stock?.cost ?? 0) + optionCost;
-    const unrealized = (stock?.unrealized ?? 0) + optionUnrealized;
-    const realizedBreakdown = realizedBySymbolAndType[symbol] ?? { stock: 0, options: 0 };
-    const realized = realizedBreakdown.stock + realizedBreakdown.options;
-
-    return {
-      symbol,
-      name: stock?.name ?? companyNames[symbol] ?? symbol,
-      stock,
-      options,
-      value,
-      cost,
-      unrealized,
-      realized,
-      netPnl: unrealized + realized,
-      weight: (value / snapshot.account.netLiquidation) * 100,
-      grossValue: Math.abs(stock?.value ?? 0) + options.reduce((sum, option) => sum + Math.abs(option.marketValue), 0),
-    };
-  })
-  .sort((left, right) => right.grossValue - left.grossValue);
+const { positionGroups, stockMarketValue, optionMarketValue, netPositionsValue } = buildPortfolioViewModel(snapshot);
 const allocation = positionGroups.filter((group) => group.weight > 0).slice(0, 4).map((group) => [group.symbol, group.weight] as const);
 const totalPnl = snapshot.account.netLiquidation - snapshot.account.netDeposits;
-const stockMarketValue = holdings.reduce((sum, holding) => sum + holding.value, 0);
-const optionMarketValue = optionContracts.reduce((sum, option) => sum + option.marketValue, 0);
-const netPositionsValue = stockMarketValue + optionMarketValue;
 const topFourWeight = allocation.reduce((sum, [, weight]) => sum + weight, 0);
 const topTwoWeight = positionGroups.filter((group) => group.weight > 0).slice(0, 2).reduce((sum, group) => sum + group.weight, 0);
 const allocationStops = allocation
@@ -99,9 +30,6 @@ const money = (value: number, sign = false) => {
 
 const formatNumber = (value: number, minimumFractionDigits = 0, maximumFractionDigits = 6) =>
   new Intl.NumberFormat("en-US", { minimumFractionDigits, maximumFractionDigits }).format(value);
-
-const actualHoldingCost = (holding: (typeof holdings)[number]) =>
-  (holding.cost - holding.realized) / holding.quantity;
 
 function Pnl({ value, currency = true }: { value: number; currency?: boolean }) {
   const className = value < 0 ? "loss" : value > 0 ? "gain" : "muted";
@@ -148,6 +76,7 @@ export default function Home() {
               <section className="ledger-panel" aria-labelledby="ledger-title">
                 <div className="ledger-heading">
                   <h2 id="ledger-title">投资账本</h2>
+                  <AddPlanDialog />
                 </div>
                 <div className="section-divider" aria-hidden="true" />
 
@@ -163,8 +92,7 @@ export default function Home() {
                       </div>
                       <div className="position-list">
                         {positionGroups.map((group) => (
-                          <details className="position-row" key={group.symbol}>
-                            <summary>
+                          <Link className="position-row" href={`/positions/${encodeURIComponent(group.symbol)}`} key={group.symbol}>
                               <span className="position-identity"><strong className="symbol">{group.symbol}</strong><small className="company">{group.name}</small></span>
                               <span className="position-kinds" data-label="构成">
                                 {group.stock && <i className="asset-pill stock-pill">正股</i>}
@@ -176,18 +104,8 @@ export default function Home() {
                               <span data-label="未实现盈亏"><Pnl value={group.unrealized} /></span>
                               <span data-label="年内已实现"><Pnl value={group.realized} /></span>
                               <span data-label="年内净盈亏"><Pnl value={group.netPnl} /></span>
-                              <span className="disclosure-mark" aria-hidden="true" />
-                            </summary>
-                            <div className="position-detail table-wrap" aria-label={`${group.symbol} 持仓明细`}>
-                              <table className="instrument-table" aria-label={`${group.symbol} 正股与期权明细`}>
-                                <thead><tr><th>类型</th><th>资产 / 合约</th><th>数量</th><th>现价</th><th>平均成本</th><th>实际成本</th><th>持仓成本</th><th>市值</th><th>权重</th><th>未实现盈亏</th></tr></thead>
-                                <tbody>
-                                  {group.stock && <tr><td className="instrument-type" data-label="类型"><span className="asset-pill stock-pill">正股</span></td><td className="instrument-name" data-label="资产 / 合约"><strong>{group.stock.name}</strong></td><td data-label="数量">{formatNumber(group.stock.quantity, 0, 4)}</td><td data-label="现价">{money(group.stock.price)}</td><td data-label="平均成本">{money(group.stock.averageCost)}</td><td data-label="实际成本">{money(actualHoldingCost(group.stock))}</td><td data-label="持仓成本">{money(group.stock.cost)}</td><td data-label="市值">{money(group.stock.value)}</td><td data-label="权重">{formatNumber(group.stock.weight, 2, 2)}%</td><td data-label="未实现盈亏"><Pnl value={group.stock.unrealized} /></td></tr>}
-                                  {group.options.map((option) => <tr key={option.contract}><td className="instrument-type" data-label="类型"><span className="asset-pill option-pill">期权</span></td><td className="instrument-name" data-label="资产 / 合约"><strong className="option-contract">{option.contract}</strong></td><td data-label="数量">{formatNumber(option.quantity, 0, 4)}</td><td data-label="现价">{money(option.price)}</td><td data-label="平均成本">{money(option.averageCost)}</td><td className="muted" data-label="实际成本">—</td><td data-label="持仓成本">{money(option.cost)}</td><td data-label="市值">{money(option.marketValue)}</td><td data-label="权重">{formatNumber(option.weight, 2, 2)}%</td><td data-label="未实现盈亏"><Pnl value={option.unrealized} /></td></tr>)}
-                                </tbody>
-                              </table>
-                            </div>
-                          </details>
+                              <span className="row-arrow" aria-hidden="true">→</span>
+                          </Link>
                         ))}
                         {positionGroups.length === 0 && <p className="empty-state">当前快照没有持仓。</p>}
                       </div>

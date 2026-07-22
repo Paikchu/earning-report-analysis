@@ -34,22 +34,20 @@ test("server-renders the investment record", async () => {
 });
 
 test("removes the disposable starter preview", async () => {
-  const [page, layout, packageJson] = await Promise.all([
+  const [page, layout, packageJson, viewModel] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(new URL("../lib/portfolio-view-model.ts", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /投资组合/);
   assert.doesNotMatch(page, /LedgerTab|TradeFilter|recentTrades|filteredTrades|switchLedger|updateUrl/);
   assert.doesNotMatch(page, /trade-disclosure|trade-toolbar|交易明细|role="tablist"/);
-  assert.match(page, /snapshot\.trades\.reduce/);
-  assert.match(page, /realizedBySymbolAndType/);
-  assert.match(page, /companyNames/);
+  assert.match(page, /buildPortfolioViewModel/);
   assert.doesNotMatch(page, /PageTab|activePage|switchPage|持仓分析|className="tabs"/);
-  assert.match(page, /actualHoldingCost/);
-  assert.match(page, /平均成本/);
-  assert.match(page, /\(holding\.cost - holding\.realized\) \/ holding\.quantity/);
+  assert.match(viewModel, /actualCost/);
+  assert.match(viewModel, /\(position\.costBasis - realized\) \/ position\.quantity/);
   assert.match(page, /className="position-row"/);
   assert.match(page, /portfolio-snapshot\.json/);
   assert.doesNotMatch(page, /const holdings = \[/);
@@ -130,6 +128,8 @@ test("groups stock and option positions by ticker", async () => {
   const renderedTickerCount = html.match(/class="position-row"/g)?.length ?? 0;
 
   assert.equal(renderedTickerCount, expectedTickerCount);
+  assert.match(html, /href="\/positions\/INTC"/);
+  assert.doesNotMatch(html, /<details class="position-row"/);
   assert.match(html, /INTC/);
   assert.match(html, /正股/);
   assert.match(html, /期权/);
@@ -140,18 +140,18 @@ test("groups stock and option positions by ticker", async () => {
 });
 
 test("uses page-scrolling cards for mobile position details", async () => {
-  const [page, css] = await Promise.all([
-    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+  const [detailPage, css] = await Promise.all([
+    readFile(new URL("../app/positions/[ticker]/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(page, /data-label="平均成本"/);
-  assert.match(page, /data-label="未实现盈亏"/);
-  assert.doesNotMatch(page, /持仓，可横向滚动|持仓明细，可横向滚动/);
+  assert.match(detailPage, /data-label="平均成本"/);
+  assert.match(detailPage, /data-label="未实现盈亏"/);
+  assert.doesNotMatch(detailPage, /持仓，可横向滚动|持仓明细，可横向滚动/);
   assert.match(css, /\.position-detail\.table-wrap \{\s*overflow: visible;\s*overscroll-behavior: auto;/);
   assert.match(css, /\.instrument-table thead \{ display: none; \}/);
   assert.match(css, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
-  assert.match(css, /\.disclosure-mark \{\s*position: absolute;/);
+  assert.match(css, /\.row-arrow \{\s*position: absolute;/);
   assert.match(css, /\.position-identity \{ grid-column: 1 \/ -1; \}/);
   assert.match(css, /\.position-kinds \{ grid-column: 1 \/ -1;/);
 });
