@@ -4,7 +4,6 @@ import { useSyncExternalStore } from "react";
 import snapshotData from "@/data/portfolio-snapshot.json";
 import { canonicalUnderlying, type PortfolioSnapshotV1 } from "@/lib/portfolio-snapshot";
 
-type PageTab = "总览" | "分析";
 type LedgerTab = "持仓" | "交易";
 type TradeFilter = "全部" | "买入" | "卖出";
 
@@ -100,9 +99,6 @@ const allocationStops = allocation
   .map(([, weight]) => weight)
   .reduce<number[]>((stops, weight) => [...stops, (stops.at(-1) ?? 0) + weight], []);
 const donutBackground = `conic-gradient(var(--ink) 0 ${allocationStops[0] ?? 0}%, #718196 ${allocationStops[0] ?? 0}% ${allocationStops[1] ?? 0}%, var(--vermilion) ${allocationStops[1] ?? 0}% ${allocationStops[2] ?? 0}%, #b47d64 ${allocationStops[2] ?? 0}% ${allocationStops[3] ?? 0}%, var(--paper-deep) ${allocationStops[3] ?? 0}% 100%)`;
-const largestLoss = positionGroups.slice().sort((left, right) => left.unrealized - right.unrealized)[0];
-const largestRealized = positionGroups.slice().sort((left, right) => right.realized - left.realized)[0];
-
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -139,17 +135,12 @@ function Pnl({ value, currency = true }: { value: number; currency?: boolean }) 
   return <span className={className}>{content}</span>;
 }
 
-function updateUrl(page: PageTab, ledger: LedgerTab, tradeFilter: TradeFilter) {
+function updateUrl(ledger: LedgerTab, tradeFilter: TradeFilter) {
   const url = new URL(window.location.href);
-  url.searchParams.set("page", page === "分析" ? "analysis" : "overview");
-  if (page === "总览") {
-    url.searchParams.set("ledger", ledger === "交易" ? "trades" : "positions");
-    if (ledger === "交易" && tradeFilter !== "全部") url.searchParams.set("side", tradeFilter === "买入" ? "buy" : "sell");
-    else url.searchParams.delete("side");
-  } else {
-    url.searchParams.delete("ledger");
-    url.searchParams.delete("side");
-  }
+  url.searchParams.delete("page");
+  url.searchParams.set("ledger", ledger === "交易" ? "trades" : "positions");
+  if (ledger === "交易" && tradeFilter !== "全部") url.searchParams.set("side", tradeFilter === "买入" ? "buy" : "sell");
+  else url.searchParams.delete("side");
   window.history.replaceState({}, "", url);
   window.dispatchEvent(new Event("portfolio-navigation"));
 }
@@ -169,46 +160,24 @@ const getServerLocationSnapshot = () => "";
 export default function Home() {
   const locationSearch = useSyncExternalStore(subscribeToLocation, getLocationSnapshot, getServerLocationSnapshot);
   const locationParams = new URLSearchParams(locationSearch);
-  const activePage: PageTab = locationParams.get("page") === "analysis" ? "分析" : "总览";
   const activeLedger: LedgerTab = locationParams.get("ledger") === "trades" ? "交易" : "持仓";
   const tradeFilter: TradeFilter = locationParams.get("side") === "buy" ? "买入" : locationParams.get("side") === "sell" ? "卖出" : "全部";
   const filteredTrades = tradeFilter === "全部" ? recentTrades : recentTrades.filter((trade) => trade.side === tradeFilter);
 
-  const switchPage = (page: PageTab) => {
-    updateUrl(page, activeLedger, tradeFilter);
-    window.scrollTo({ top: 0 });
-  };
-
   const switchLedger = (ledger: LedgerTab) => {
-    updateUrl("总览", ledger, tradeFilter);
+    updateUrl(ledger, tradeFilter);
   };
 
   return (
     <>
       <a className="skip-link" href="#main-content">跳到主要内容</a>
       <main className="page-shell" id="main-content">
-        <nav className="tabs" aria-label="投资组合导航">
-          {(["总览", "分析"] as PageTab[]).map((tab) => (
-            <button
-              key={tab}
-              className={`tab ${activePage === tab ? "active" : ""}`}
-              type="button"
-              aria-current={activePage === tab ? "page" : undefined}
-              onClick={() => switchPage(tab)}
-            >
-              {tab}
-            </button>
-          ))}
-        </nav>
-
         <div className={`snapshot-status ${snapshot.tradeSync.status === "delayed" ? "snapshot-delayed" : ""}`} role="status" aria-live="polite">
           <span>IBKR 数据更新 {formatUtc(snapshot.generatedAt)} UTC</span>
           {snapshot.tradeSync.status === "delayed" && <strong>交易数据延迟</strong>}
         </div>
 
-        {activePage === "总览" && (
-          <>
-            <section className="hero" aria-labelledby="portfolio-title">
+        <section className="hero" aria-labelledby="portfolio-title">
               <div className="portfolio-heading">
                 <h1 id="portfolio-title">投资组合</h1>
                 <span>{positionGroups.length} 个 Ticker · {holdings.length} 个正股 · {optionContracts.length} 份期权</span>
@@ -219,9 +188,9 @@ export default function Home() {
                 <article className="summary-item"><span>总盈亏</span><strong className={totalPnl < 0 ? "loss" : "gain"}>{money(totalPnl, true)}</strong></article>
                 <article className="summary-item"><span>现金</span><strong>{money(snapshot.account.cashBalance)}</strong></article>
               </div>
-            </section>
+        </section>
 
-            <section className="lower-grid">
+        <section className="lower-grid">
               <aside className="allocation-panel">
                 <div className="ruled-heading"><h2>仓位构成</h2></div>
                 <div className="allocation-wrap">
@@ -319,7 +288,7 @@ export default function Home() {
                     <div className="trade-toolbar">
                       <div className="filter-row" aria-label="交易方向筛选">
                         {(["全部", "买入", "卖出"] as TradeFilter[]).map((filter) => (
-                          <button key={filter} type="button" aria-pressed={tradeFilter === filter} className={tradeFilter === filter ? "selected" : ""} onClick={() => updateUrl("总览", "交易", filter)}>{filter}</button>
+                          <button key={filter} type="button" aria-pressed={tradeFilter === filter} className={tradeFilter === filter ? "selected" : ""} onClick={() => updateUrl("交易", filter)}>{filter}</button>
                         ))}
                       </div>
                       <span>{filteredTrades.length} 笔 · UTC</span>
@@ -335,31 +304,8 @@ export default function Home() {
                     </details>
                   </div>
                 )}
-              </section>
-            </section>
-          </>
-        )}
-
-        {activePage === "分析" && (
-          <section className="detail-page analysis-page">
-            <div className="detail-intro"><h1>持仓分析</h1></div>
-            <div className="analysis-grid">
-              <article className="analysis-lead"><span>最大未实现亏损</span><strong>{largestLoss.symbol}</strong><Pnl value={largestLoss.unrealized} /><p>组合权重 {largestLoss.weight.toFixed(2)}%</p></article>
-              <article><span>最大已实现收益</span><strong>{largestRealized.symbol}</strong><Pnl value={largestRealized.realized} /><p>当前权重 {largestRealized.weight.toFixed(2)}%</p></article>
-              <article><span>{holdings[0]?.symbol} + 现金</span><strong>{money((holdings[0]?.value ?? 0) + snapshot.account.cashBalance)}</strong><p>占 NAV {(((holdings[0]?.value ?? 0) + snapshot.account.cashBalance) / snapshot.account.netLiquidation * 100).toFixed(2)}%</p></article>
-            </div>
-            <div className="contribution-section">
-              <div className="ruled-heading"><h2>未实现盈亏贡献</h2></div>
-              <div className="contribution-list">
-                {holdings.slice().sort((a, b) => a.unrealized - b.unrealized).slice(0, 8).map((holding) => {
-                  const size = Math.max(3, Math.abs(holding.unrealized) / 14.4232);
-                  return <div className="contribution-row" key={holding.symbol}><strong>{holding.symbol}</strong><div className="contribution-track"><i className={holding.unrealized < 0 ? "negative" : "positive"} style={{ width: `${Math.min(100, size)}%` }} /></div><Pnl value={holding.unrealized} /></div>;
-                })}
-              </div>
-            </div>
-            <div className="analysis-note"><strong>待补充数据</strong><p>每日 NAV · 现金流 · 基准序列</p></div>
           </section>
-        )}
+        </section>
 
         <footer><span>MAX · 投资记录</span><span>数据源：IBKR · 更新于 {formatUtc(snapshot.generatedAt)} UTC</span></footer>
       </main>

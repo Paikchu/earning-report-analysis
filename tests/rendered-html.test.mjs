@@ -41,9 +41,8 @@ test("removes the disposable starter preview", async () => {
   ]);
 
   assert.match(page, /MAX · 投资记录/);
-  assert.match(page, /type PageTab = "总览" \| "分析"/);
   assert.match(page, /type LedgerTab = "持仓" \| "交易"/);
-  assert.doesNotMatch(page, /activePage === "持仓"|activePage === "交易"/);
+  assert.doesNotMatch(page, /PageTab|activePage|switchPage|持仓分析|className="tabs"/);
   assert.match(page, /实际持仓成本/);
   assert.match(page, /平均成本/);
   assert.match(page, /\(holding\.cost - holding\.realized\) \/ holding\.quantity/);
@@ -64,7 +63,7 @@ test("keeps the compact portfolio summary without the reconciliation chart", asy
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
 
   assert.match(page, /className="portfolio-summary"/);
-  assert.doesNotMatch(page, /净值对照|capital-chart|capital-landing|<svg/);
+  assert.doesNotMatch(page, /净值对照|capital-chart|capital-landing|analysis-page|<svg/);
 });
 
 test("groups stock and option positions by ticker", async () => {
