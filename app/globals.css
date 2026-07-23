@@ -229,19 +229,6 @@ h2 {
 .legend-3 { color: var(--vermilion); }
 .legend-4 { color: #b47d64; }
 
-.concentration-note {
-  margin-top: 26px;
-  display: grid;
-  gap: 5px;
-}
-
-.concentration-note strong {
-  font: 600 28px/1 var(--serif);
-  font-variant-numeric: tabular-nums;
-}
-
-.concentration-note span { color: var(--ink-soft); font-size: 10px; }
-
 .heatmap-section { margin-top: 26px; }
 
 .heatmap-divider { margin-bottom: 14px; }

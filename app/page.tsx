@@ -12,7 +12,6 @@ const { positionGroups, stockMarketValue, optionMarketValue, netPositionsValue }
 const allocation = positionGroups.filter((group) => group.weight > 0).slice(0, 4).map((group) => [group.symbol, group.weight] as const);
 const totalPnl = snapshot.account.netLiquidation - snapshot.account.netDeposits;
 const topFourWeight = allocation.reduce((sum, [, weight]) => sum + weight, 0);
-const topTwoWeight = positionGroups.filter((group) => group.weight > 0).slice(0, 2).reduce((sum, group) => sum + group.weight, 0);
 const allocationStops = allocation
   .map(([, weight]) => weight)
   .reduce<number[]>((stops, weight) => [...stops, (stops.at(-1) ?? 0) + weight], []);
@@ -69,7 +68,6 @@ export default function Home() {
                     ))}
                   </div>
                 </div>
-                <div className="concentration-note"><strong>{topTwoWeight.toFixed(2)}%</strong><span>{positionGroups[0]?.symbol} 与 {positionGroups[1]?.symbol} 合计净权重</span></div>
                 <PortfolioHeatmap holdings={heatmapHoldings} />
               </aside>
 
