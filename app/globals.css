@@ -857,6 +857,9 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .stock-pill,
 .option-pill { color: var(--ink-soft); background: #e4ddd1; }
 
+.position-kinds > .asset-pill,
+.position-kinds > .breakdown-trigger { flex: 0 0 auto; }
+
 .breakdown-trigger {
   min-height: 20px;
   padding: 0 5px;
@@ -866,6 +869,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
   background: transparent;
   font: 600 8px/1 var(--sans);
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .position-breakdown {

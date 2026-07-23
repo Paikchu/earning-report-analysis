@@ -200,7 +200,10 @@ test("uses semantic color tokens, stable holding marks, and a filled plan button
 });
 
 test("renders sortable ledger headers and short-option breakdowns", async () => {
-  const dashboard = await readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8");
+  const [dashboard, css] = await Promise.all([
+    readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
 
   assert.match(dashboard, /setSortKey/);
   assert.match(dashboard, /sortDirection/);
@@ -208,6 +211,8 @@ test("renders sortable ledger headers and short-option breakdowns", async () => 
   assert.match(dashboard, /持仓拆分/);
   assert.match(dashboard, /option\.marketValue/);
   assert.match(dashboard, /href=\{`\/positions\//);
+  assert.match(css, /\.position-kinds > \.asset-pill,\s*\.position-kinds > \.breakdown-trigger \{[^]*?flex: 0 0 auto;/);
+  assert.match(css, /\.breakdown-trigger \{[^]*?white-space: nowrap;/);
 });
 
 test("uses page-scrolling cards for mobile position details", async () => {
