@@ -33,6 +33,7 @@ function AllocationRing({
 }) {
   const [showOther, setShowOther] = useState(false);
   const allocation = useMemo(() => buildAllocation(groups), [groups]);
+  const otherActive = Boolean(activeSymbol && allocation.other.some((group) => group.symbol === activeSymbol));
   const segments = useMemo(() => {
     let offset = 0;
     return [
@@ -55,7 +56,7 @@ function AllocationRing({
               className="ring-segment"
               cx="50"
               cy="50"
-              data-dimmed={Boolean(activeSymbol && segment.symbol !== activeSymbol)}
+              data-active={segment.symbol === activeSymbol || (segment.symbol === "OTHER" && otherActive)}
               key={segment.symbol}
               onFocus={() => segment.symbol !== "OTHER" && onActiveSymbolChange(segment.symbol)}
               onMouseEnter={() => {
@@ -82,7 +83,7 @@ function AllocationRing({
         {allocation.leading.map((group) => (
           <button
             className="legend-row"
-            data-dimmed={Boolean(activeSymbol && activeSymbol !== group.symbol)}
+            data-active={activeSymbol === group.symbol}
             key={group.symbol}
             onFocus={() => onActiveSymbolChange(group.symbol)}
             onMouseEnter={() => onActiveSymbolChange(group.symbol)}
@@ -95,6 +96,7 @@ function AllocationRing({
         ))}
         <button
           className="legend-row legend-other"
+          data-active={otherActive}
           onBlur={() => setShowOther(false)}
           onClick={() => setShowOther((current) => !current)}
           onFocus={() => setShowOther(true)}
@@ -186,7 +188,6 @@ function PositionLedger({
             <div
               className="position-row"
               data-active={activeSymbol === group.symbol}
-              data-dimmed={Boolean(activeSymbol && activeSymbol !== group.symbol)}
               key={group.symbol}
               onFocus={() => onActiveSymbolChange(group.symbol)}
               onMouseEnter={() => onActiveSymbolChange(group.symbol)}

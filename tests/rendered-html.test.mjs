@@ -189,7 +189,11 @@ test("uses semantic color tokens, stable holding marks, and a filled plan button
   assert.match(css, /\.add-plan-button[^]*?background: var\(--ink\);/);
   assert.match(dashboard, /holdingColor/);
   assert.match(dashboard, /otherWeight/);
-  assert.match(dashboard, /data-dimmed/);
+  assert.match(dashboard, /data-active=\{segment\.symbol === activeSymbol/);
+  assert.match(dashboard, /data-active=\{activeSymbol === group\.symbol\}/);
+  assert.doesNotMatch(dashboard, /data-dimmed/);
+  assert.doesNotMatch(heatmap, /data-dimmed/);
+  assert.doesNotMatch(css, /\[data-dimmed="true"\]/);
   assert.match(heatmap, /--holding-color/);
   assert.match(heatmap, /signedPercent\(holding\.unrealizedRate\)/);
   assert.doesNotMatch(css, /\.option-pill \{[^]*?color: #8b3b2b;/);

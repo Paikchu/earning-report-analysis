@@ -154,7 +154,6 @@ export function PortfolioHeatmap({
                       type="button"
                       className={`heatmap-tile${compact ? " heatmap-tile-compact" : ""}`}
                       data-active={activeSymbol === holding.symbol}
-                      data-dimmed={Boolean(activeSymbol && activeSymbol !== holding.symbol)}
                       data-direction={direction}
                       aria-pressed={holding.symbol === selected?.symbol}
                       aria-describedby={holding.symbol === selected?.symbol ? "heatmap-popover" : undefined}
