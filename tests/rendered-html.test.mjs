@@ -156,6 +156,14 @@ test("uses page-scrolling cards for mobile position details", async () => {
   assert.match(css, /\.position-kinds \{ grid-column: 1 \/ -1;/);
 });
 
+test("centers the add-plan dialog and hides its scrollbar", async () => {
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(css, /\.plan-dialog \{[^]*?position: fixed;[^]*?inset: 50% auto auto 50%;[^]*?transform: translate\(-50%, -50%\);/);
+  assert.match(css, /\.dialog-card \{[^]*?overflow-y: auto;[^]*?scrollbar-width: none;/);
+  assert.match(css, /\.dialog-card::-webkit-scrollbar \{ display: none; \}/);
+});
+
 test("calculates actual holding cost from cost, realized P&L, and quantity", () => {
   const fixtures = [
     { symbol: "BOXX", cost: 21067.4311002, realized: 1.063786, quantity: 180, expected: 117.04 },
