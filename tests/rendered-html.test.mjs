@@ -173,7 +173,9 @@ test("groups stock and option positions by ticker", async () => {
   assert.match(html, /净市值/);
   assert.match(html, /年内已实现/);
   assert.match(html, /年内净盈亏/);
-  assert.match(html, /持仓拆分/);
+  assert.match(html, /NVDA 正股与期权持仓/);
+  assert.match(html, /NVDA Jan15&#x27;27 180 PUT @AMEX/);
+  assert.doesNotMatch(html, /持仓拆分|>拆分</);
   assert.doesNotMatch(html, /期权覆盖/);
 });
 
@@ -199,20 +201,37 @@ test("uses semantic color tokens, stable holding marks, and a filled plan button
   assert.doesNotMatch(css, /\.option-pill \{[^]*?color: #8b3b2b;/);
 });
 
-test("renders sortable ledger headers and short-option breakdowns", async () => {
+test("renders stock and option submenus directly below mixed holding rows", async () => {
+  const snapshot = JSON.parse(await readFile(new URL("../data/portfolio-snapshot.json", import.meta.url), "utf8"));
   const [dashboard, css] = await Promise.all([
     readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
+  const response = await render();
+  const html = await response.text();
+  const assetClassesBySymbol = new Map();
+  for (const position of snapshot.positions) {
+    const assetClasses = assetClassesBySymbol.get(position.symbol) ?? new Set();
+    assetClasses.add(position.assetClass);
+    assetClassesBySymbol.set(position.symbol, assetClasses);
+  }
+  const expectedSubmenuCount = [...assetClassesBySymbol.values()]
+    .filter((assetClasses) => assetClasses.has("STK") && assetClasses.has("OPT"))
+    .length;
+  const renderedSubmenuCount = html.match(/class="position-submenu"/g)?.length ?? 0;
 
   assert.match(dashboard, /setSortKey/);
   assert.match(dashboard, /sortDirection/);
-  assert.match(dashboard, /position-breakdown/);
-  assert.match(dashboard, /持仓拆分/);
+  assert.equal(renderedSubmenuCount, expectedSubmenuCount);
+  assert.match(dashboard, /group\.stock && group\.options\.length > 0/);
+  assert.match(dashboard, /className="position-submenu"/);
+  assert.match(dashboard, /className="position-submenu-row"/);
+  assert.match(dashboard, /option\.contract/);
   assert.match(dashboard, /option\.marketValue/);
   assert.match(dashboard, /href=\{`\/positions\//);
-  assert.match(css, /\.position-kinds > \.asset-pill,\s*\.position-kinds > \.breakdown-trigger \{[^]*?flex: 0 0 auto;/);
-  assert.match(css, /\.breakdown-trigger \{[^]*?white-space: nowrap;/);
+  assert.doesNotMatch(dashboard, /breakdownSymbol|breakdown-trigger|position-breakdown|持仓拆分/);
+  assert.match(css, /\.position-submenu \{[^]*?display: grid;/);
+  assert.match(css, /\.position-submenu-row \{[^]*?grid-template-columns:/);
 });
 
 test("uses page-scrolling cards for mobile position details", async () => {

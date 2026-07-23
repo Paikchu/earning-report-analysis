@@ -5,13 +5,12 @@ import { useMemo, useState, type CSSProperties } from "react";
 
 import {
   buildAllocation,
-  hasShortOption,
   holdingColor,
   sortPositionGroups,
   type PositionSortKey,
   type SortDirection,
 } from "@/lib/portfolio-dashboard";
-import { money, percent } from "@/lib/portfolio-format";
+import { money, number, percent } from "@/lib/portfolio-format";
 import type { HeatmapHolding } from "@/lib/portfolio-heatmap";
 import type { PositionGroupView } from "@/lib/portfolio-view-model";
 import { AddPlanDialog } from "./AddPlanDialog";
@@ -142,7 +141,6 @@ function PositionLedger({
 }) {
   const [sortKey, setSortKey] = useState<PositionSortKey>("weight");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [breakdownSymbol, setBreakdownSymbol] = useState<string | null>(null);
   const sortedGroups = useMemo(() => sortPositionGroups(groups, sortKey, sortDirection), [groups, sortDirection, sortKey]);
 
   const updateSort = (key: PositionSortKey) => {
@@ -181,18 +179,18 @@ function PositionLedger({
         ) : <span key={`${column.label}-${index}`}>{column.label}</span>)}
       </div>
       <div className="position-list">
-        {sortedGroups.map((group) => {
-          const shortOption = hasShortOption(group);
-          const showBreakdown = breakdownSymbol === group.symbol;
-          return (
+        {sortedGroups.map((group) => (
+          <div
+            className="position-group"
+            key={group.symbol}
+            style={{ "--holding-color": holdingColor(group.symbol) } as CSSProperties}
+          >
             <div
               className="position-row"
               data-active={activeSymbol === group.symbol}
-              key={group.symbol}
               onFocus={() => onActiveSymbolChange(group.symbol)}
               onMouseEnter={() => onActiveSymbolChange(group.symbol)}
               onMouseLeave={() => onActiveSymbolChange(null)}
-              style={{ "--holding-color": holdingColor(group.symbol) } as CSSProperties}
             >
               <Link className="position-row-link" href={`/positions/${encodeURIComponent(group.symbol)}`} aria-label={`查看 ${group.symbol} 持仓详情`} />
               <span className="position-identity">
@@ -203,29 +201,6 @@ function PositionLedger({
               <span className="position-kinds" data-label="构成">
                 {group.stock && <i className="asset-pill stock-pill">正股</i>}
                 {group.options.length > 0 && <i className="asset-pill option-pill">{group.options.length} 期权</i>}
-                {shortOption && (
-                  <button
-                    aria-label={`查看 ${group.symbol} 持仓拆分`}
-                    className="breakdown-trigger"
-                    onBlur={() => setBreakdownSymbol(null)}
-                    onClick={() => setBreakdownSymbol((current) => current === group.symbol ? null : group.symbol)}
-                    onFocus={() => setBreakdownSymbol(group.symbol)}
-                    onMouseEnter={() => setBreakdownSymbol(group.symbol)}
-                    type="button"
-                  >
-                    拆分
-                  </button>
-                )}
-                {showBreakdown && (
-                  <div className="position-breakdown" role="tooltip" onMouseLeave={() => setBreakdownSymbol(null)}>
-                    <strong>{group.symbol} 市值构成</strong>
-                    {group.stock && <span><b>正股</b><i>{money(group.stock.value)}</i></span>}
-                    {group.options.map((option) => (
-                      <span key={option.contract}><b>{option.contract}</b><i>{money(option.marketValue)}</i></span>
-                    ))}
-                    <span className="breakdown-total"><b>净市值</b><i>{money(group.value)}</i></span>
-                  </div>
-                )}
               </span>
               <span data-label="净市值">{money(group.value)}</span>
               <span data-label="净权重">{percent(group.weight)}</span>
@@ -235,8 +210,26 @@ function PositionLedger({
               <span data-label="年内净盈亏"><Pnl value={group.netPnl} /></span>
               <span className="row-arrow" aria-hidden="true">→</span>
             </div>
-          );
-        })}
+            {group.stock && group.options.length > 0 && (
+              <div className="position-submenu" aria-label={`${group.symbol} 正股与期权持仓`}>
+                <div className="position-submenu-row">
+                  <span className="submenu-type">正股</span>
+                  <strong>{group.stock.name}</strong>
+                  <span className="submenu-quantity">{number(group.stock.quantity, 0, 4)} 股</span>
+                  <i className="submenu-value">{money(group.stock.value)}</i>
+                </div>
+                {group.options.map((option) => (
+                  <div className="position-submenu-row" key={option.contract}>
+                    <span className="submenu-type">期权</span>
+                    <strong>{option.contract}</strong>
+                    <span className="submenu-quantity">{number(option.quantity, 0, 4)} 张</span>
+                    <i className="submenu-value">{money(option.marketValue)}</i>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
         {sortedGroups.length === 0 && <p className="empty-state">当前快照没有持仓。</p>}
       </div>
     </div>
