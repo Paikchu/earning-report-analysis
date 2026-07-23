@@ -45,6 +45,31 @@ export type TreemapRectangle<T extends TreemapInput> = T & {
   height: number;
 };
 
+export interface HeatmapBounds {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export function calculatePopoverPosition(
+  plot: HeatmapBounds,
+  tile: HeatmapBounds,
+  popoverWidth = 236,
+  popoverHeight = 132,
+  edge = 8,
+) {
+  const width = Math.min(popoverWidth, plot.width - edge * 2);
+  let left = tile.left - plot.left + tile.width;
+  if (left + width > plot.width - edge) left = tile.left - plot.left - width;
+  left = Math.min(Math.max(edge, left), plot.width - width - edge);
+  const top = Math.min(
+    Math.max(edge, tile.top - plot.top),
+    plot.height - popoverHeight - edge,
+  );
+  return { left, top };
+}
+
 export function buildHeatmapHoldings(snapshot: PortfolioSnapshotV1): HeatmapHolding[] {
   const companyNames = snapshot.trades.reduce<Record<string, string>>((names, trade) => {
     if (trade.securityType === "STK") {

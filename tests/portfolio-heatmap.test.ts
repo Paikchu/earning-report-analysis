@@ -158,3 +158,28 @@ test("uses the rendered aspect ratio when laying out narrow screens", async () =
   assert.ok(Math.min(digitalAssets.width, digitalAssets.height) >= 24);
   assert.equal(Number(rectangles.reduce((sum, rectangle) => sum + rectangle.width * rectangle.height, 0).toFixed(2)), 112_480);
 });
+
+test("keeps the floating detail window inside the plot after resize", async () => {
+  const heatmapModule = await import("../lib/portfolio-heatmap.ts");
+  const calculatePosition = (heatmapModule as typeof heatmapModule & {
+    calculatePopoverPosition?: (
+      plot: { left: number; top: number; width: number; height: number },
+      tile: { left: number; top: number; width: number; height: number },
+    ) => { left: number; top: number };
+  }).calculatePopoverPosition;
+
+  assert.equal(typeof calculatePosition, "function");
+  const position = calculatePosition!(
+    { left: 0, top: 0, width: 296, height: 380 },
+    { left: 270, top: 340, width: 24, height: 38 },
+  );
+
+  assert.ok(position.left >= 8 && position.left + 236 <= 288);
+  assert.ok(position.top >= 8 && position.top + 132 <= 372);
+
+  const adjacent = calculatePosition!(
+    { left: 0, top: 0, width: 800, height: 470 },
+    { left: 50, top: 80, width: 60, height: 100 },
+  );
+  assert.equal(adjacent.left, 110);
+});

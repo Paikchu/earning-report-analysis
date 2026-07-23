@@ -329,11 +329,12 @@ h2 {
 
 .heatmap-domain-tiles {
   position: absolute;
-  inset: 0;
+  inset: 22px 0 0;
   overflow: hidden;
 }
 
 .heatmap-domain-compact .heatmap-domain-heading { display: none; }
+.heatmap-domain-compact .heatmap-domain-tiles { inset: 0; }
 
 .heatmap-tile {
   position: absolute;
@@ -398,12 +399,19 @@ h2 {
 
 .heatmap-domain-compact .heatmap-tile span { display: none; }
 
-.heatmap-detail {
-  min-height: 108px;
-  padding: 10px 2px 0;
+.heatmap-popover {
+  position: absolute;
+  z-index: 4;
+  width: min(236px, calc(100% - 16px));
+  padding: 12px;
+  color: var(--ink);
+  border: 1px solid rgb(23 40 59 / 62%);
+  background: rgb(243 236 223 / 97%);
+  box-shadow: 0 10px 28px rgb(23 40 59 / 18%);
+  pointer-events: auto;
 }
 
-.heatmap-detail-heading {
+.heatmap-popover-heading {
   min-width: 0;
   display: flex;
   align-items: baseline;
@@ -411,7 +419,7 @@ h2 {
   gap: 8px;
 }
 
-.heatmap-detail-heading span {
+.heatmap-popover-heading span {
   min-width: 0;
   overflow: hidden;
   color: var(--ink-soft);
@@ -420,35 +428,35 @@ h2 {
   white-space: nowrap;
 }
 
-.heatmap-detail-heading strong {
+.heatmap-popover-heading strong {
   margin-right: 6px;
   color: var(--ink);
   font: 600 15px/1 var(--serif);
 }
 
-.heatmap-detail-heading b {
+.heatmap-popover-heading b {
   flex: 0 0 auto;
   color: var(--ink-soft);
   font-size: 8px;
   font-weight: 600;
 }
 
-.heatmap-detail dl {
+.heatmap-popover dl {
   margin: 10px 0 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px 12px;
 }
 
-.heatmap-detail dl div { min-width: 0; }
+.heatmap-popover dl div { min-width: 0; }
 
-.heatmap-detail dt {
+.heatmap-popover dt {
   margin-bottom: 2px;
   color: var(--ink-soft);
   font-size: 8px;
 }
 
-.heatmap-detail dd {
+.heatmap-popover dd {
   margin: 0;
   overflow: hidden;
   font: 600 11px/1.2 var(--serif);
@@ -942,6 +950,7 @@ td { font-size: 9px; }
   .ledger-meta { flex-wrap: wrap; gap: 4px 14px; padding: 7px 0; }
   .heatmap-plot { height: 380px; }
   .heatmap-domain-heading { height: 20px; }
+  .heatmap-domain-tiles { inset-block-start: 20px; }
   .position-columns { display: none; }
   .position-scroll {
     overflow: visible;

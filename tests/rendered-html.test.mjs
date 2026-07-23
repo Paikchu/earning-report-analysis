@@ -105,19 +105,45 @@ test("renders the stock-only investment theme heatmap", async () => {
   assert.match(html, /RKLB[^]*?1\.68%/);
 });
 
+test("keeps domain headers outside the holding tile area", async () => {
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(css, /\.heatmap-domain-tiles \{[^]*?inset: 22px 0 0;/);
+  assert.match(css, /\.heatmap-domain-compact \.heatmap-domain-tiles \{ inset: 0; \}/);
+});
+
+test("uses an in-plot floating window for holding details", async () => {
+  const [component, css] = await Promise.all([
+    readFile(new URL("../app/portfolio-heatmap.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(component, /className="heatmap-popover"/);
+  assert.match(component, /role="tooltip"/);
+  assert.doesNotMatch(component, /className="heatmap-detail"/);
+  assert.match(component, /onMouseEnter=\{cancelPopoverClose\}/);
+  assert.match(component, /onMouseLeave=\{schedulePopoverClose\}/);
+  assert.match(component, /positionPopover[^]*?\[plotSize, popover\?\.symbol, positionPopover\]/);
+  assert.match(css, /\.heatmap-popover \{[^]*?position: absolute;/);
+  assert.match(css, /\.heatmap-popover \{[^]*?z-index: 4;/);
+  assert.match(css, /\.heatmap-popover \{[^]*?pointer-events: auto;/);
+});
+
 test("keeps the heatmap responsive and keyboard reachable", async () => {
-  const [page, css] = await Promise.all([
+  const [page, component, css] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/portfolio-heatmap.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /PortfolioHeatmap/);
   assert.match(css, /\.heatmap-plot \{[^]*?overflow: hidden;/);
-  assert.match(css, /\.heatmap-domain-tiles \{[^]*?inset: 0;/);
   assert.match(css, /\.heatmap-domain-compact \.heatmap-domain-heading \{ display: none; \}/);
   assert.match(css, /\.heatmap-domain-compact \.heatmap-tile strong \{[^]*?transform: rotate\(90deg\);/);
   assert.match(css, /\.heatmap-tile:focus-visible/);
-  assert.match(css, /@media \(max-width: 620px\)[^]*?\.heatmap-plot/);
+  assert.match(component, /onFocus=/);
+  assert.match(component, /onBlur=/);
+  assert.match(css, /@media \(max-width: 620px\)[^]*?\.heatmap-domain-tiles \{ inset-block-start: 20px; \}/);
 });
 
 test("groups stock and option positions by ticker", async () => {

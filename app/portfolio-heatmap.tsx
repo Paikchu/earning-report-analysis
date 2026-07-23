@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import {
+  calculatePopoverPosition,
   groupHeatmapHoldings,
   layoutTreemap,
   type HeatmapHolding,
@@ -19,6 +20,7 @@ const money = (value: number) => currencyFormatter.format(value);
 const signedPercent = (value: number) => `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(value).toFixed(2)}%`;
 
 type HeatStyle = CSSProperties & { "--heat-strength": string };
+type PopoverState = { symbol: string; left: number; top: number };
 
 function heatStyle(rate: number): HeatStyle {
   return { "--heat-strength": `${Math.min(Math.abs(rate), 25) / 25 * 62}%` };
@@ -26,15 +28,42 @@ function heatStyle(rate: number): HeatStyle {
 
 export function PortfolioHeatmap({ holdings }: { holdings: HeatmapHolding[] }) {
   const plotRef = useRef<HTMLDivElement>(null);
+  const activeTileRef = useRef<HTMLButtonElement>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [plotSize, setPlotSize] = useState({ width: 360, height: 470 });
   const groups = useMemo(() => groupHeatmapHoldings(holdings), [holdings]);
   const groupRectangles = useMemo(() => layoutTreemap(groups.map((group) => ({
     id: group.domain,
     weight: group.portfolioWeight,
   })), plotSize.width, plotSize.height), [groups, plotSize]);
-  const [selectedSymbol, setSelectedSymbol] = useState(holdings[0]?.symbol ?? "");
-  const selected = holdings.find((holding) => holding.symbol === selectedSymbol) ?? holdings[0];
+  const [popover, setPopover] = useState<PopoverState | null>(null);
+  const selected = holdings.find((holding) => holding.symbol === popover?.symbol);
   const totalWeight = holdings.reduce((sum, holding) => sum + holding.portfolioWeight, 0);
+
+  const positionPopover = useCallback((symbol: string, tile: HTMLButtonElement) => {
+    const plot = plotRef.current;
+    if (!plot) return;
+    const plotBounds = plot.getBoundingClientRect();
+    const tileBounds = tile.getBoundingClientRect();
+    const position = calculatePopoverPosition(plotBounds, tileBounds);
+    activeTileRef.current = tile;
+    setPopover({ symbol, ...position });
+  }, []);
+
+  const cancelPopoverClose = useCallback(() => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = null;
+  }, []);
+
+  const schedulePopoverClose = useCallback(() => {
+    cancelPopoverClose();
+    closeTimerRef.current = setTimeout(() => setPopover(null), 80);
+  }, [cancelPopoverClose]);
+
+  const showPopover = (holding: HeatmapHolding, tile: HTMLButtonElement) => {
+    cancelPopoverClose();
+    positionPopover(holding.symbol, tile);
+  };
 
   useEffect(() => {
     const plot = plotRef.current;
@@ -49,7 +78,13 @@ export function PortfolioHeatmap({ holdings }: { holdings: HeatmapHolding[] }) {
     return () => observer.disconnect();
   }, []);
 
-  if (!selected) return null;
+  useEffect(() => {
+    if (popover?.symbol && activeTileRef.current) positionPopover(popover.symbol, activeTileRef.current);
+  }, [plotSize, popover?.symbol, positionPopover]);
+
+  useEffect(() => () => cancelPopoverClose(), [cancelPopoverClose]);
+
+  if (holdings.length === 0) return null;
 
   return (
     <section className="heatmap-section" aria-labelledby="heatmap-title">
@@ -72,7 +107,7 @@ export function PortfolioHeatmap({ holdings }: { holdings: HeatmapHolding[] }) {
             id: holding.symbol,
             weight: holding.portfolioWeight,
           })), groupRect.width, groupRect.height);
-          const compactDomain = groupRect.width < 78 || groupRect.height < 46;
+          const compactDomain = groupRect.width < 78 || groupRect.height < 64;
 
           return (
             <section
@@ -102,12 +137,21 @@ export function PortfolioHeatmap({ holdings }: { holdings: HeatmapHolding[] }) {
                       type="button"
                       className={`heatmap-tile${compact ? " heatmap-tile-compact" : ""}`}
                       data-direction={direction}
-                      aria-pressed={holding.symbol === selected.symbol}
+                      aria-pressed={holding.symbol === selected?.symbol}
+                      aria-describedby={holding.symbol === selected?.symbol ? "heatmap-popover" : undefined}
                       aria-label={`${holding.symbol}，${holding.domain}，组合权重 ${holding.portfolioWeight.toFixed(2)}%，未实现盈亏率 ${signedPercent(holding.unrealizedRate)}`}
                       key={holding.symbol}
-                      onClick={() => setSelectedSymbol(holding.symbol)}
-                      onFocus={() => setSelectedSymbol(holding.symbol)}
-                      onMouseEnter={() => setSelectedSymbol(holding.symbol)}
+                      onBlur={schedulePopoverClose}
+                      onClick={(event) => showPopover(holding, event.currentTarget)}
+                      onFocus={(event) => showPopover(holding, event.currentTarget)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                          setPopover(null);
+                          event.currentTarget.blur();
+                        }
+                      }}
+                      onMouseEnter={(event) => showPopover(holding, event.currentTarget)}
+                      onMouseLeave={schedulePopoverClose}
                       style={{
                         ...heatStyle(holding.unrealizedRate),
                         left: `${holdingRect.x / groupRect.width * 100}%`,
@@ -125,18 +169,28 @@ export function PortfolioHeatmap({ holdings }: { holdings: HeatmapHolding[] }) {
             </section>
           );
         })}
-      </div>
-      <div className="heatmap-detail" aria-live="polite">
-        <div className="heatmap-detail-heading">
-          <span><strong>{selected.symbol}</strong>{selected.company}</span>
-          <b>{selected.domain}</b>
-        </div>
-        <dl>
-          <div><dt>市值</dt><dd>{money(selected.marketValue)}</dd></div>
-          <div><dt>组合权重</dt><dd>{selected.portfolioWeight.toFixed(2)}%</dd></div>
-          <div><dt>持仓成本</dt><dd>{money(selected.costBasis)}</dd></div>
-          <div><dt>未实现盈亏率</dt><dd className={selected.unrealizedRate < 0 ? "loss" : selected.unrealizedRate > 0 ? "gain" : "muted"}>{signedPercent(selected.unrealizedRate)}</dd></div>
-        </dl>
+        {selected && popover && (
+          <div
+            className="heatmap-popover"
+            id="heatmap-popover"
+            role="tooltip"
+            aria-live="polite"
+            onMouseEnter={cancelPopoverClose}
+            onMouseLeave={schedulePopoverClose}
+            style={{ left: popover.left, top: popover.top }}
+          >
+            <div className="heatmap-popover-heading">
+              <span><strong>{selected.symbol}</strong>{selected.company}</span>
+              <b>{selected.domain}</b>
+            </div>
+            <dl>
+              <div><dt>市值</dt><dd>{money(selected.marketValue)}</dd></div>
+              <div><dt>组合权重</dt><dd>{selected.portfolioWeight.toFixed(2)}%</dd></div>
+              <div><dt>持仓成本</dt><dd>{money(selected.costBasis)}</dd></div>
+              <div><dt>未实现盈亏率</dt><dd className={selected.unrealizedRate < 0 ? "loss" : selected.unrealizedRate > 0 ? "gain" : "muted"}>{signedPercent(selected.unrealizedRate)}</dd></div>
+            </dl>
+          </div>
+        )}
       </div>
     </section>
   );
