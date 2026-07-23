@@ -46,11 +46,11 @@ test("removes the disposable starter preview", async () => {
   assert.doesNotMatch(page, /LedgerTab|TradeFilter|recentTrades|filteredTrades|switchLedger|updateUrl/);
   assert.doesNotMatch(page, /trade-disclosure|trade-toolbar|交易明细|role="tablist"/);
   assert.match(page, /buildPortfolioViewModel/);
-  assert.match(page, /portfolio-history\.json/);
+  assert.doesNotMatch(page, /portfolio-history\.json/);
   assert.match(page, /PortfolioDashboard/);
   assert.match(dashboard, /activeSymbol/);
   assert.match(dashboard, /sortPositionGroups/);
-  assert.match(dashboard, /filterPortfolioHistory/);
+  assert.doesNotMatch(dashboard, /filterPortfolioHistory|PortfolioHistoryPoint|PortfolioHistoryRange/);
   assert.doesNotMatch(page, /PageTab|activePage|switchPage|持仓分析|className="tabs"/);
   assert.match(viewModel, /actualCost/);
   assert.match(viewModel, /\(position\.costBasis - realized\) \/ position\.quantity/);
@@ -90,7 +90,7 @@ test("uses the approved ledger-dominant hierarchy without horizontal scrolling",
   assert.match(css, /\.table-wrap \{[\s\S]*?overscroll-behavior: auto;/);
 });
 
-test("renders the portfolio history chart and compact supporting metrics", async () => {
+test("removes the portfolio history chart while keeping supporting metrics", async () => {
   const [response, dashboard] = await Promise.all([
     render(),
     readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
@@ -100,13 +100,8 @@ test("renders the portfolio history chart and compact supporting metrics", async
   assert.match(html, /当前净值/);
   assert.match(html, /净入金/);
   assert.match(html, /现金/);
-  assert.match(html, /1M/);
-  assert.match(html, /3M/);
-  assert.match(html, /YTD/);
-  assert.match(html, /ALL/);
-  assert.match(dashboard, /className="portfolio-chart"/);
-  assert.match(dashboard, /strokeDasharray="6 6"/);
-  assert.match(dashboard, /历史净值正在积累/);
+  assert.doesNotMatch(html, /净值走势|aria-label="净值周期"/);
+  assert.doesNotMatch(dashboard, /PortfolioChart|className="portfolio-chart"|range-switch|历史净值正在积累/);
 });
 
 test("renders the stock-only investment theme heatmap", async () => {

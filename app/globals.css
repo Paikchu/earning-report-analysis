@@ -151,107 +151,6 @@ h2 {
   letter-spacing: -.02em;
 }
 
-.history-section { padding: 18px 0 24px; border-top: 1px solid var(--ink); }
-
-.history-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-}
-
-.history-heading h2 { font-size: 17px; }
-
-.chart-key {
-  margin-top: 7px;
-  display: flex;
-  gap: 16px;
-  color: var(--ink-soft);
-  font-size: 8px;
-}
-
-.chart-key span { display: inline-flex; align-items: center; gap: 6px; }
-.chart-key i { width: 20px; height: 0; border-top: 2px solid var(--ink); }
-.chart-key .deposit-key { border-top: 1px dashed #76899a; }
-
-.range-switch { display: flex; align-items: center; gap: 2px; }
-
-.range-switch button {
-  min-width: 40px;
-  height: 26px;
-  padding: 0 8px;
-  color: var(--ink-soft);
-  border: 0;
-  background: transparent;
-  font: 650 9px/1 var(--sans);
-  cursor: pointer;
-}
-
-.range-switch button:hover,
-.range-switch button.is-active { color: var(--paper); background: var(--ink); }
-
-.portfolio-chart {
-  position: relative;
-  height: clamp(180px, 18vw, 240px);
-}
-
-.portfolio-chart svg { width: 100%; height: calc(100% - 18px); overflow: visible; }
-.chart-grid { stroke: var(--paper-deep); stroke-width: 1; }
-.nav-line { stroke: var(--ink); stroke-width: 2.2; }
-.deposit-line { stroke: #75899a; stroke-width: 1.4; }
-
-.chart-point {
-  fill: var(--paper);
-  stroke: var(--ink);
-  stroke-width: 2;
-  cursor: pointer;
-}
-
-.chart-point:hover,
-.chart-point:focus-visible { fill: var(--ink); outline: none; }
-
-.chart-dates {
-  display: flex;
-  justify-content: space-between;
-  color: var(--ink-soft);
-  font-size: 8px;
-  font-variant-numeric: tabular-nums lining-nums;
-}
-
-.chart-tooltip {
-  position: absolute;
-  z-index: 5;
-  min-width: 180px;
-  padding: 10px 12px;
-  display: grid;
-  gap: 5px;
-  color: var(--ink);
-  border: 1px solid var(--ink);
-  background: var(--paper);
-  box-shadow: 0 10px 24px rgb(23 40 59 / 14%);
-  font-size: 9px;
-  font-variant-numeric: tabular-nums lining-nums;
-  pointer-events: none;
-  transform: translate(-50%, calc(-100% - 12px));
-}
-
-.chart-tooltip > strong { font: 600 12px/1 var(--serif); }
-.chart-tooltip span { display: flex; justify-content: space-between; gap: 16px; }
-.chart-tooltip b { font-weight: 650; }
-
-.history-empty {
-  min-height: 180px;
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: 6px;
-  color: var(--ink-soft);
-  border-bottom: 1px solid var(--paper-deep);
-  font-size: 9px;
-}
-
-.history-empty strong { color: var(--ink); font: 600 16px/1 var(--serif); }
-
 .lower-grid {
   padding: 0 0 56px;
   display: grid;
@@ -1214,13 +1113,6 @@ td { font-size: 9px; }
   .summary-nav-value { font-size: 42px; }
   .summary-support { gap: 28px; }
   .summary-support strong { font-size: 17px; }
-  .history-section { padding-top: 15px; }
-  .history-heading { align-items: flex-end; }
-  .history-heading h2 { font-size: 16px; }
-  .chart-key { gap: 10px; }
-  .range-switch button { min-width: 34px; padding: 0 5px; }
-  .portfolio-chart { height: 190px; }
-  .chart-tooltip { min-width: 160px; transform: translate(-50%, calc(-100% - 8px)); }
   .ledger-heading { align-items: center; }
   .add-plan-button { min-height: 32px; padding: 0 9px; font-size: 9px; }
   .allocation-panel h2,

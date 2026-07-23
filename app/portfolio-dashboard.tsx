@@ -11,133 +11,15 @@ import {
   type PositionSortKey,
   type SortDirection,
 } from "@/lib/portfolio-dashboard";
-import {
-  filterPortfolioHistory,
-  type PortfolioHistoryPoint,
-  type PortfolioHistoryRange,
-} from "@/lib/portfolio-history";
 import { money, percent } from "@/lib/portfolio-format";
 import type { HeatmapHolding } from "@/lib/portfolio-heatmap";
 import type { PositionGroupView } from "@/lib/portfolio-view-model";
 import { AddPlanDialog } from "./AddPlanDialog";
 import { PortfolioHeatmap } from "./portfolio-heatmap";
 
-const shortDate = (date: string) => new Intl.DateTimeFormat("zh-CN", {
-  month: "numeric",
-  day: "numeric",
-  timeZone: "UTC",
-}).format(new Date(`${date}T00:00:00.000Z`));
-
 function Pnl({ value }: { value: number }) {
   const className = value < 0 ? "loss" : value > 0 ? "gain" : "muted";
   return <span className={className}>{money(value, true)}</span>;
-}
-
-function PortfolioChart({
-  history,
-  range,
-  onRangeChange,
-}: {
-  history: PortfolioHistoryPoint[];
-  range: PortfolioHistoryRange;
-  onRangeChange: (range: PortfolioHistoryRange) => void;
-}) {
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const points = useMemo(() => filterPortfolioHistory(history, range), [history, range]);
-  const chart = useMemo(() => {
-    if (points.length < 2) return null;
-    const width = 1_000;
-    const height = 220;
-    const top = 16;
-    const bottom = 30;
-    const values = points.flatMap((point) => [point.netLiquidation, point.netDeposits]);
-    const valueMin = Math.min(...values);
-    const valueMax = Math.max(...values);
-    const padding = Math.max((valueMax - valueMin) * .12, 500);
-    const min = valueMin - padding;
-    const max = valueMax + padding;
-    const y = (value: number) => top + (max - value) / (max - min) * (height - top - bottom);
-    const positioned = points.map((point, index) => ({
-      ...point,
-      x: index / (points.length - 1) * width,
-      navY: y(point.netLiquidation),
-      depositY: y(point.netDeposits),
-    }));
-    return {
-      width,
-      height,
-      points: positioned,
-      navPath: positioned.map((point) => `${point.x},${point.navY}`).join(" "),
-      depositPath: positioned.map((point) => `${point.x},${point.depositY}`).join(" "),
-    };
-  }, [points]);
-  const hovered = chart && hoveredIndex !== null ? chart.points[hoveredIndex] : null;
-
-  return (
-    <section className="history-section" aria-labelledby="history-title">
-      <div className="history-heading">
-        <div>
-          <h2 id="history-title">净值走势</h2>
-          <div className="chart-key">
-            <span><i className="nav-key" />组合净值</span>
-            <span><i className="deposit-key" />净入金</span>
-          </div>
-        </div>
-        <div className="range-switch" aria-label="净值周期">
-          {(["1M", "3M", "YTD", "ALL"] as const).map((item) => (
-            <button
-              className={range === item ? "is-active" : ""}
-              key={item}
-              onClick={() => onRangeChange(item)}
-              type="button"
-            >
-              {item}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="section-divider" aria-hidden="true" />
-      {chart ? (
-        <div className="portfolio-chart" onMouseLeave={() => setHoveredIndex(null)}>
-          <svg viewBox={`0 0 ${chart.width} ${chart.height}`} preserveAspectRatio="none" role="img" aria-label={`${range} 组合净值与净入金走势`}>
-            {[.25, .5, .75].map((ratio) => (
-              <line className="chart-grid" x1="0" x2={chart.width} y1={ratio * 190} y2={ratio * 190} key={ratio} />
-            ))}
-            <polyline className="deposit-line" fill="none" points={chart.depositPath} strokeDasharray="6 6" vectorEffect="non-scaling-stroke" />
-            <polyline className="nav-line" fill="none" points={chart.navPath} vectorEffect="non-scaling-stroke" />
-            {chart.points.map((point, index) => (
-              <circle
-                className="chart-point"
-                cx={point.x}
-                cy={point.navY}
-                key={point.date}
-                onClick={() => setHoveredIndex(index)}
-                onFocus={() => setHoveredIndex(index)}
-                onMouseEnter={() => setHoveredIndex(index)}
-                r="5"
-                tabIndex={0}
-                vectorEffect="non-scaling-stroke"
-              />
-            ))}
-          </svg>
-          <div className="chart-dates"><span>{shortDate(points[0].date)}</span><span>{shortDate(points.at(-1)!.date)}</span></div>
-          {hovered && (
-            <div className="chart-tooltip" style={{ left: `${hovered.x / chart.width * 100}%`, top: `${hovered.navY / chart.height * 100}%` }}>
-              <strong>{hovered.date}</strong>
-              <span>净值 <b>{money(hovered.netLiquidation)}</b></span>
-              <span>净入金 <b>{money(hovered.netDeposits)}</b></span>
-              <span>差额 <b className={hovered.netLiquidation - hovered.netDeposits < 0 ? "loss" : "gain"}>{money(hovered.netLiquidation - hovered.netDeposits, true)}</b></span>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="history-empty">
-          <strong>历史净值正在积累</strong>
-          <span>完成第二次每日快照后开始绘制曲线。</span>
-        </div>
-      )}
-    </section>
-  );
 }
 
 function AllocationRing({
@@ -361,14 +243,12 @@ function PositionLedger({
 }
 
 export function PortfolioDashboard({
-  history,
   heatmapHoldings,
   positionGroups,
   stockMarketValue,
   optionMarketValue,
   netPositionsValue,
 }: {
-  history: PortfolioHistoryPoint[];
   heatmapHoldings: HeatmapHolding[];
   positionGroups: PositionGroupView[];
   stockMarketValue: number;
@@ -376,35 +256,31 @@ export function PortfolioDashboard({
   netPositionsValue: number;
 }) {
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
-  const [range, setRange] = useState<PortfolioHistoryRange>("ALL");
 
   return (
-    <>
-      <PortfolioChart history={history} range={range} onRangeChange={setRange} />
-      <section className="lower-grid">
-        <aside className="allocation-panel">
-          <h2>仓位构成</h2>
-          <div className="section-divider" aria-hidden="true" />
-          <AllocationRing groups={positionGroups} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
-          <PortfolioHeatmap holdings={heatmapHoldings} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
-        </aside>
+    <section className="lower-grid">
+      <aside className="allocation-panel">
+        <h2>仓位构成</h2>
+        <div className="section-divider" aria-hidden="true" />
+        <AllocationRing groups={positionGroups} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
+        <PortfolioHeatmap holdings={heatmapHoldings} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
+      </aside>
 
-        <section className="ledger-panel" aria-labelledby="ledger-title">
-          <div className="ledger-heading">
-            <h2 id="ledger-title">投资账本</h2>
-            <AddPlanDialog />
+      <section className="ledger-panel" aria-labelledby="ledger-title">
+        <div className="ledger-heading">
+          <h2 id="ledger-title">投资账本</h2>
+          <AddPlanDialog />
+        </div>
+        <div className="section-divider" aria-hidden="true" />
+        <div className="ledger-content">
+          <div className="ledger-meta">
+            <span>持仓净市值 <strong>{money(netPositionsValue)}</strong></span>
+            <span>正股 <strong>{money(stockMarketValue)}</strong></span>
+            <span>期权 <strong>{money(optionMarketValue)}</strong></span>
           </div>
-          <div className="section-divider" aria-hidden="true" />
-          <div className="ledger-content">
-            <div className="ledger-meta">
-              <span>持仓净市值 <strong>{money(netPositionsValue)}</strong></span>
-              <span>正股 <strong>{money(stockMarketValue)}</strong></span>
-              <span>期权 <strong>{money(optionMarketValue)}</strong></span>
-            </div>
-            <PositionLedger groups={positionGroups} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
-          </div>
-        </section>
+          <PositionLedger groups={positionGroups} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
+        </div>
       </section>
-    </>
+    </section>
   );
 }

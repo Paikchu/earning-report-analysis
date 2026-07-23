@@ -1,14 +1,11 @@
-import historyData from "@/data/portfolio-history.json";
 import snapshotData from "@/data/portfolio-snapshot.json";
 import { money, percent } from "@/lib/portfolio-format";
 import { buildHeatmapHoldings } from "@/lib/portfolio-heatmap";
-import type { PortfolioHistoryPoint } from "@/lib/portfolio-history";
 import type { PortfolioSnapshotV1 } from "@/lib/portfolio-snapshot";
 import { buildPortfolioViewModel } from "@/lib/portfolio-view-model";
 import { PortfolioDashboard } from "./portfolio-dashboard";
 
 const snapshot = snapshotData as PortfolioSnapshotV1;
-const history = historyData as PortfolioHistoryPoint[];
 const heatmapHoldings = buildHeatmapHoldings(snapshot);
 const portfolio = buildPortfolioViewModel(snapshot);
 const totalPnl = snapshot.account.netLiquidation - snapshot.account.netDeposits;
@@ -35,7 +32,6 @@ export default function Home() {
         </section>
 
         <PortfolioDashboard
-          history={history}
           heatmapHoldings={heatmapHoldings}
           positionGroups={portfolio.positionGroups}
           stockMarketValue={portfolio.stockMarketValue}
