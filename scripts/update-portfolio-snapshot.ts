@@ -2,6 +2,10 @@ import { readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import {
+  upsertPortfolioHistory,
+  type PortfolioHistoryPoint,
+} from "../lib/portfolio-history.ts";
+import {
   buildPortfolioSnapshot,
   normalizeIbkrPosition,
   normalizeIbkrTrade,
@@ -30,11 +34,19 @@ const argument = (name: string, fallback?: string) => {
 const previousPath = argument("--previous", "data/portfolio-snapshot.json")!;
 const inputPath = argument("--input");
 const outputPath = argument("--output", "data/portfolio-snapshot.json")!;
+const historyPath = argument("--history", "data/portfolio-history.json")!;
+const historyOutputPath = argument("--history-output", historyPath)!;
 if (!inputPath) throw new Error("--input is required");
 
-const [previous, raw] = await Promise.all([
+const [previous, raw, previousHistory] = await Promise.all([
   readFile(previousPath, "utf8").then((value) => JSON.parse(value) as PortfolioSnapshotV1),
   readFile(inputPath, "utf8").then((value) => JSON.parse(value) as RawSyncInput),
+  readFile(historyPath, "utf8")
+    .then((value) => JSON.parse(value) as PortfolioHistoryPoint[])
+    .catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    }),
 ]);
 const usdBalance = raw.balances.balances?.find((balance) => balance.currency === "USD");
 const positions = (raw.positions.positions ?? [])
@@ -55,7 +67,19 @@ const snapshot = buildPortfolioSnapshot(previous, {
   positions,
   tradeSync,
 });
+const history = upsertPortfolioHistory(previousHistory, {
+  generatedAt: snapshot.generatedAt,
+  netLiquidation: snapshot.account.netLiquidation,
+  netDeposits: snapshot.account.netDeposits,
+});
 
 const temporaryPath = join(dirname(outputPath), `.portfolio-snapshot-${process.pid}.tmp`);
-await writeFile(temporaryPath, `${JSON.stringify(snapshot, null, 2)}\n`);
-await rename(temporaryPath, outputPath);
+const temporaryHistoryPath = join(dirname(historyOutputPath), `.portfolio-history-${process.pid}.tmp`);
+await Promise.all([
+  writeFile(temporaryPath, `${JSON.stringify(snapshot, null, 2)}\n`),
+  writeFile(temporaryHistoryPath, `${JSON.stringify(history, null, 2)}\n`),
+]);
+await Promise.all([
+  rename(temporaryPath, outputPath),
+  rename(temporaryHistoryPath, historyOutputPath),
+]);

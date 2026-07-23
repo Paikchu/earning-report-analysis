@@ -34,8 +34,9 @@ test("server-renders the investment record", async () => {
 });
 
 test("removes the disposable starter preview", async () => {
-  const [page, layout, packageJson, viewModel] = await Promise.all([
+  const [page, dashboard, layout, packageJson, viewModel] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../lib/portfolio-view-model.ts", import.meta.url), "utf8"),
@@ -45,10 +46,14 @@ test("removes the disposable starter preview", async () => {
   assert.doesNotMatch(page, /LedgerTab|TradeFilter|recentTrades|filteredTrades|switchLedger|updateUrl/);
   assert.doesNotMatch(page, /trade-disclosure|trade-toolbar|交易明细|role="tablist"/);
   assert.match(page, /buildPortfolioViewModel/);
+  assert.match(page, /portfolio-history\.json/);
+  assert.match(page, /PortfolioDashboard/);
+  assert.match(dashboard, /activeSymbol/);
+  assert.match(dashboard, /sortPositionGroups/);
+  assert.match(dashboard, /filterPortfolioHistory/);
   assert.doesNotMatch(page, /PageTab|activePage|switchPage|持仓分析|className="tabs"/);
   assert.match(viewModel, /actualCost/);
   assert.match(viewModel, /\(position\.costBasis - realized\) \/ position\.quantity/);
-  assert.match(page, /className="position-row"/);
   assert.match(page, /portfolio-snapshot\.json/);
   assert.doesNotMatch(page, /const holdings = \[/);
   assert.doesNotMatch(page, /const optionContracts = \[/);
@@ -71,25 +76,37 @@ test("uses the approved ledger-dominant hierarchy without horizontal scrolling",
   assert.doesNotMatch(page, /snapshot-status|ruled-heading|subtabs|formula-note|<footer/);
   assert.doesNotMatch(page, /点击展开合约|可收起|表内滚动/);
   assert.doesNotMatch(page, /个 Ticker|个正股|份期权/);
-  assert.equal(page.match(/className="section-divider"/g)?.length, 2);
   assert.match(css, /grid-template-columns: minmax\(240px, 28fr\) minmax\(0, 72fr\);/);
   assert.match(css, /\.lower-grid \{[\s\S]*?border-top: 1px solid var\(--ink\);/);
   assert.match(css, /\.section-divider \{[\s\S]*?border-top: 1px dashed var\(--paper-deep\);/);
   assert.doesNotMatch(css, /min-width:\s*900px/);
   assert.match(css, /\.position-scroll \{[\s\S]*?overflow-x: visible;/);
-  assert.match(css, /h1 \{[\s\S]*?font: 600 clamp\(36px, 3\.2vw, 44px\)\/.9 var\(--serif\);/);
+  assert.match(css, /\.portfolio-heading h1 \{[\s\S]*?font-size: 18px;/);
   assert.match(css, /h2 \{[\s\S]*?font: 600 22px\/1\.1 var\(--serif\);/);
-  assert.match(css, /\.summary-nav strong \{[\s\S]*?font-size: clamp\(26px, 2vw, 30px\);[\s\S]*?font-weight: 600;/);
+  assert.match(css, /\.summary-nav-value \{[\s\S]*?font-size: clamp\(48px, 5vw, 56px\);/);
+  assert.match(css, /font-variant-numeric: tabular-nums lining-nums;/);
   assert.doesNotMatch(css, /overscroll-behavior:\s*contain/);
   assert.match(css, /\.position-scroll \{[\s\S]*?overscroll-behavior: auto;/);
   assert.match(css, /\.table-wrap \{[\s\S]*?overscroll-behavior: auto;/);
 });
 
-test("keeps the compact portfolio summary without the reconciliation chart", async () => {
-  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+test("renders the portfolio history chart and compact supporting metrics", async () => {
+  const [response, dashboard] = await Promise.all([
+    render(),
+    readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
+  ]);
+  const html = await response.text();
 
-  assert.match(page, /className="portfolio-summary"/);
-  assert.doesNotMatch(page, /净值对照|capital-chart|capital-landing|analysis-page|<svg/);
+  assert.match(html, /当前净值/);
+  assert.match(html, /净入金/);
+  assert.match(html, /现金/);
+  assert.match(html, /1M/);
+  assert.match(html, /3M/);
+  assert.match(html, /YTD/);
+  assert.match(html, /ALL/);
+  assert.match(dashboard, /className="portfolio-chart"/);
+  assert.match(dashboard, /strokeDasharray="6 6"/);
+  assert.match(dashboard, /历史净值正在积累/);
 });
 
 test("renders the stock-only investment theme heatmap", async () => {
@@ -97,7 +114,7 @@ test("renders the stock-only investment theme heatmap", async () => {
   const html = await response.text();
 
   assert.match(html, /持仓主题热力图/);
-  assert.match(html, /含期权负债，正股权重可超过 100%/);
+  assert.match(html, /总敞口/);
   assert.match(html, /aria-label="持仓主题热力图"/);
   assert.match(html, /AI \/ 企业软件/);
   assert.match(html, /太空与通信/);
@@ -130,16 +147,15 @@ test("uses an in-plot floating window for holding details", async () => {
 });
 
 test("keeps the heatmap responsive and keyboard reachable", async () => {
-  const [page, component, css] = await Promise.all([
-    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+  const [dashboard, component, css] = await Promise.all([
+    readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/portfolio-heatmap.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(page, /PortfolioHeatmap/);
+  assert.match(dashboard, /PortfolioHeatmap/);
   assert.match(css, /\.heatmap-plot \{[^]*?overflow: hidden;/);
   assert.match(css, /\.heatmap-domain-compact \.heatmap-domain-heading \{ display: none; \}/);
-  assert.match(css, /\.heatmap-domain-compact \.heatmap-tile strong \{[^]*?transform: rotate\(90deg\);/);
   assert.match(css, /\.heatmap-tile:focus-visible/);
   assert.match(component, /onFocus=/);
   assert.match(component, /onBlur=/);
@@ -162,7 +178,37 @@ test("groups stock and option positions by ticker", async () => {
   assert.match(html, /净市值/);
   assert.match(html, /年内已实现/);
   assert.match(html, /年内净盈亏/);
+  assert.match(html, /持仓拆分/);
   assert.doesNotMatch(html, /期权覆盖/);
+});
+
+test("uses semantic color tokens, stable holding marks, and a filled plan button", async () => {
+  const [dashboard, heatmap, css] = await Promise.all([
+    readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/portfolio-heatmap.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(css, /--color-profit:/);
+  assert.match(css, /--color-loss:/);
+  assert.match(css, /\.add-plan-button[^]*?background: var\(--ink\);/);
+  assert.match(dashboard, /holdingColor/);
+  assert.match(dashboard, /otherWeight/);
+  assert.match(dashboard, /data-dimmed/);
+  assert.match(heatmap, /--holding-color/);
+  assert.match(heatmap, /signedPercent\(holding\.unrealizedRate\)/);
+  assert.doesNotMatch(css, /\.option-pill \{[^]*?color: #8b3b2b;/);
+});
+
+test("renders sortable ledger headers and short-option breakdowns", async () => {
+  const dashboard = await readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8");
+
+  assert.match(dashboard, /setSortKey/);
+  assert.match(dashboard, /sortDirection/);
+  assert.match(dashboard, /position-breakdown/);
+  assert.match(dashboard, /持仓拆分/);
+  assert.match(dashboard, /option\.marketValue/);
+  assert.match(dashboard, /href=\{`\/positions\//);
 });
 
 test("uses page-scrolling cards for mobile position details", async () => {

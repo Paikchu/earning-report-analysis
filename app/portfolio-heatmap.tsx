@@ -8,25 +8,30 @@ import {
   layoutTreemap,
   type HeatmapHolding,
 } from "@/lib/portfolio-heatmap";
+import { holdingColor } from "@/lib/portfolio-dashboard";
+import { money, percent } from "@/lib/portfolio-format";
 
-const currencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+const signedPercent = (value: number) => percent(value, true);
 
-const money = (value: number) => currencyFormatter.format(value);
-const signedPercent = (value: number) => `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(value).toFixed(2)}%`;
-
-type HeatStyle = CSSProperties & { "--heat-strength": string };
+type HeatStyle = CSSProperties & { "--heat-strength": string; "--holding-color": string };
 type PopoverState = { symbol: string; left: number; top: number };
 
-function heatStyle(rate: number): HeatStyle {
-  return { "--heat-strength": `${Math.min(Math.abs(rate), 25) / 25 * 62}%` };
+function heatStyle(symbol: string, rate: number): HeatStyle {
+  return {
+    "--heat-strength": `${Math.min(Math.abs(rate), 25) / 25 * 62}%`,
+    "--holding-color": holdingColor(symbol),
+  };
 }
 
-export function PortfolioHeatmap({ holdings }: { holdings: HeatmapHolding[] }) {
+export function PortfolioHeatmap({
+  holdings,
+  activeSymbol,
+  onActiveSymbolChange,
+}: {
+  holdings: HeatmapHolding[];
+  activeSymbol: string | null;
+  onActiveSymbolChange: (symbol: string | null) => void;
+}) {
   const plotRef = useRef<HTMLDivElement>(null);
   const activeTileRef = useRef<HTMLButtonElement>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -57,11 +62,15 @@ export function PortfolioHeatmap({ holdings }: { holdings: HeatmapHolding[] }) {
 
   const schedulePopoverClose = useCallback(() => {
     cancelPopoverClose();
-    closeTimerRef.current = setTimeout(() => setPopover(null), 80);
-  }, [cancelPopoverClose]);
+    closeTimerRef.current = setTimeout(() => {
+      setPopover(null);
+      onActiveSymbolChange(null);
+    }, 80);
+  }, [cancelPopoverClose, onActiveSymbolChange]);
 
   const showPopover = (holding: HeatmapHolding, tile: HTMLButtonElement) => {
     cancelPopoverClose();
+    onActiveSymbolChange(holding.symbol);
     positionPopover(holding.symbol, tile);
   };
 
@@ -91,9 +100,17 @@ export function PortfolioHeatmap({ holdings }: { holdings: HeatmapHolding[] }) {
       <div className="section-divider heatmap-divider" aria-hidden="true" />
       <div className="heatmap-heading">
         <h3 id="heatmap-title">持仓主题热力图</h3>
-        <strong>{totalWeight.toFixed(2)}%</strong>
+        <span className="exposure-label">
+          总敞口 <strong>{totalWeight.toFixed(2)}%</strong>
+          <button
+            aria-label="总敞口计算口径：热力图内正股市值除以当前净值，期权负债不进入热力图"
+            data-tip="热力图内正股市值 ÷ 当前净值；期权负债不进入热力图。"
+            type="button"
+          >
+            ⓘ
+          </button>
+        </span>
       </div>
-      <p className="heatmap-note">含期权负债，正股权重可超过 100%</p>
       <div className="heatmap-key" aria-label="未实现盈亏率图例">
         <span><i className="key-loss" aria-hidden="true" />亏损</span>
         <span><i className="key-neutral" aria-hidden="true" />持平</span>
@@ -136,6 +153,8 @@ export function PortfolioHeatmap({ holdings }: { holdings: HeatmapHolding[] }) {
                     <button
                       type="button"
                       className={`heatmap-tile${compact ? " heatmap-tile-compact" : ""}`}
+                      data-active={activeSymbol === holding.symbol}
+                      data-dimmed={Boolean(activeSymbol && activeSymbol !== holding.symbol)}
                       data-direction={direction}
                       aria-pressed={holding.symbol === selected?.symbol}
                       aria-describedby={holding.symbol === selected?.symbol ? "heatmap-popover" : undefined}
@@ -153,7 +172,7 @@ export function PortfolioHeatmap({ holdings }: { holdings: HeatmapHolding[] }) {
                       onMouseEnter={(event) => showPopover(holding, event.currentTarget)}
                       onMouseLeave={schedulePopoverClose}
                       style={{
-                        ...heatStyle(holding.unrealizedRate),
+                        ...heatStyle(holding.symbol, holding.unrealizedRate),
                         left: `${holdingRect.x / groupRect.width * 100}%`,
                         top: `${holdingRect.y / groupRect.height * 100}%`,
                         width: `${holdingRect.width / groupRect.width * 100}%`,
@@ -161,7 +180,10 @@ export function PortfolioHeatmap({ holdings }: { holdings: HeatmapHolding[] }) {
                       }}
                     >
                       <strong>{holding.symbol}</strong>
-                      <span>{holding.portfolioWeight.toFixed(2)}%</span>
+                      <span className="heatmap-tile-metrics">
+                        <i>{holding.portfolioWeight.toFixed(2)}%</i>
+                        <b>{signedPercent(holding.unrealizedRate)}</b>
+                      </span>
                     </button>
                   );
                 })}

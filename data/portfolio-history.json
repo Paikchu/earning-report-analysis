@@ -1,0 +1,20 @@
+[
+  {
+    "date": "2026-07-20",
+    "generatedAt": "2026-07-20T07:34:38.247Z",
+    "netLiquidation": 64554.56,
+    "netDeposits": 71563.39
+  },
+  {
+    "date": "2026-07-21",
+    "generatedAt": "2026-07-20T23:34:44.806Z",
+    "netLiquidation": 64892.22,
+    "netDeposits": 71563.39
+  },
+  {
+    "date": "2026-07-22",
+    "generatedAt": "2026-07-21T23:33:05.095Z",
+    "netLiquidation": 66531.3,
+    "netDeposits": 71563.39
+  }
+]

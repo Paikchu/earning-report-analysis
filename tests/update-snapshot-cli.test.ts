@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import test from "node:test";
 
 import type { PortfolioSnapshotV1 } from "../lib/portfolio-snapshot.ts";
+import type { PortfolioHistoryPoint } from "../lib/portfolio-history.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -15,6 +16,8 @@ test("the snapshot CLI normalizes IBKR responses and updates the versioned file"
   const previousPath = join(directory, "previous.json");
   const inputPath = join(directory, "input.json");
   const outputPath = join(directory, "output.json");
+  const historyPath = join(directory, "history.json");
+  const historyOutputPath = join(directory, "history-output.json");
   const previous: PortfolioSnapshotV1 = {
     schemaVersion: 1,
     generatedAt: "2026-07-19T00:00:00.000Z",
@@ -36,14 +39,31 @@ test("the snapshot CLI normalizes IBKR responses and updates the versioned file"
   await Promise.all([
     writeFile(previousPath, JSON.stringify(previous)),
     writeFile(inputPath, JSON.stringify(input)),
+    writeFile(historyPath, JSON.stringify([{
+      date: "2026-07-19",
+      generatedAt: previous.generatedAt,
+      netLiquidation: previous.account.netLiquidation,
+      netDeposits: previous.account.netDeposits,
+    }] satisfies PortfolioHistoryPoint[])),
   ]);
-  await execFileAsync(process.execPath, ["--experimental-strip-types", "scripts/update-portfolio-snapshot.ts", "--previous", previousPath, "--input", inputPath, "--output", outputPath], { cwd: new URL("../", import.meta.url) });
+  await execFileAsync(process.execPath, [
+    "--experimental-strip-types",
+    "scripts/update-portfolio-snapshot.ts",
+    "--previous", previousPath,
+    "--input", inputPath,
+    "--output", outputPath,
+    "--history", historyPath,
+    "--history-output", historyOutputPath,
+  ], { cwd: new URL("../", import.meta.url) });
 
   const result = JSON.parse(await readFile(outputPath, "utf8")) as PortfolioSnapshotV1;
+  const history = JSON.parse(await readFile(historyOutputPath, "utf8")) as PortfolioHistoryPoint[];
   assert.equal(result.account.netLiquidation, 68_000);
   assert.equal(result.account.cashBalance, 1_500);
   assert.equal(result.positions[0].positionKey, "STK:661513");
   assert.equal(result.trades[0].realizedPnl, 83.91);
+  assert.deepEqual(history.map((point) => point.date), ["2026-07-19", "2026-07-20"]);
+  assert.equal(history.at(-1)?.netLiquidation, 68_000);
 });
 
 test("the snapshot CLI rejects a current trade status without a trades response", async () => {
