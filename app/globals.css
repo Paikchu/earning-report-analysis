@@ -138,6 +138,7 @@ h2 {
 .summary-support {
   padding-bottom: 9px;
   display: flex;
+  flex-wrap: wrap;
   gap: clamp(34px, 5vw, 72px);
 }
 

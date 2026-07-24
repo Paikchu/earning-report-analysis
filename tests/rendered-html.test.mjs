@@ -84,6 +84,7 @@ test("uses the approved ledger-dominant hierarchy without horizontal scrolling",
   assert.match(css, /\.portfolio-heading h1 \{[\s\S]*?font-size: 18px;/);
   assert.match(css, /h2 \{[\s\S]*?font: 600 22px\/1\.1 var\(--serif\);/);
   assert.match(css, /\.summary-nav-value \{[\s\S]*?font-size: clamp\(48px, 5vw, 56px\);/);
+  assert.match(css, /\.summary-support \{[^}]*flex-wrap: wrap;/);
   assert.match(css, /font-variant-numeric: tabular-nums lining-nums;/);
   assert.doesNotMatch(css, /overscroll-behavior:\s*contain/);
   assert.match(css, /\.position-scroll \{[\s\S]*?overscroll-behavior: auto;/);
@@ -91,13 +92,23 @@ test("uses the approved ledger-dominant hierarchy without horizontal scrolling",
 });
 
 test("removes the portfolio history chart while keeping supporting metrics", async () => {
-  const [response, dashboard] = await Promise.all([
+  const [response, dashboard, snapshot] = await Promise.all([
     render(),
     readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../data/portfolio-snapshot.json", import.meta.url), "utf8").then(JSON.parse),
   ]);
   const html = await response.text();
 
   assert.match(html, /当前净值/);
+  const optionUnrealizedPnl = snapshot.positions
+    .filter((position) => position.assetClass === "OPT")
+    .reduce((sum, position) => sum + position.unrealizedPnl, 0);
+  const netLiquidationWithoutOptionPnl = snapshot.account.netLiquidation - optionUnrealizedPnl;
+  assert.match(html, /剔除期权浮盈亏/);
+  assert.match(html, new RegExp(`\\$${netLiquidationWithoutOptionPnl.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`.replace(".", "\\.")));
   assert.match(html, /净入金/);
   assert.match(html, /现金/);
   assert.doesNotMatch(html, /净值走势|aria-label="净值周期"/);
@@ -105,7 +116,10 @@ test("removes the portfolio history chart while keeping supporting metrics", asy
 });
 
 test("renders the stock-only investment theme heatmap", async () => {
-  const response = await render();
+  const [response, snapshot] = await Promise.all([
+    render(),
+    readFile(new URL("../data/portfolio-snapshot.json", import.meta.url), "utf8").then(JSON.parse),
+  ]);
   const html = await response.text();
 
   assert.match(html, /持仓主题热力图/);
@@ -113,8 +127,11 @@ test("renders the stock-only investment theme heatmap", async () => {
   assert.match(html, /aria-label="持仓主题热力图"/);
   assert.match(html, /AI \/ 企业软件/);
   assert.match(html, /太空与通信/);
-  assert.match(html, /NVDA[^]*?11\.32%/);
-  assert.match(html, /RKLB[^]*?1\.62%/);
+  for (const symbol of ["NVDA", "RKLB"]) {
+    const position = snapshot.positions.find((candidate) => candidate.assetClass === "STK" && candidate.symbol === symbol);
+    const weight = (position.marketValue / snapshot.account.netLiquidation * 100).toFixed(2).replace(".", "\\.");
+    assert.match(html, new RegExp(`${symbol}[^]*?${weight}%`));
+  }
 });
 
 test("keeps domain headers outside the holding tile area", async () => {

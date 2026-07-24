@@ -13,6 +13,10 @@ const heatmapHoldings = buildHeatmapHoldings(snapshot);
 const portfolio = buildPortfolioViewModel(snapshot);
 const totalPnl = snapshot.account.netLiquidation - snapshot.account.netDeposits;
 const totalPnlRate = snapshot.account.netDeposits === 0 ? 0 : totalPnl / snapshot.account.netDeposits * 100;
+const optionUnrealizedPnl = snapshot.positions
+  .filter((position) => position.assetClass === "OPT")
+  .reduce((sum, position) => sum + position.unrealizedPnl, 0);
+const netLiquidationWithoutOptionPnl = snapshot.account.netLiquidation - optionUnrealizedPnl;
 const snapshotTime = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Shanghai" }).format(new Date(snapshot.generatedAt));
 
 export default function Home() {
@@ -30,6 +34,7 @@ export default function Home() {
             </span>
           </div>
           <div className="summary-support" aria-label="组合摘要">
+            <article><span>剔除期权浮盈亏</span><strong>{money(netLiquidationWithoutOptionPnl)}</strong></article>
             <article><span>净入金</span><strong>{money(snapshot.account.netDeposits)}</strong></article>
             <article><span>现金</span><strong>{money(snapshot.account.cashBalance)}</strong></article>
           </div>
