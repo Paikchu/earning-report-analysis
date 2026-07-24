@@ -204,6 +204,16 @@ test("uses semantic color tokens, stable holding marks, and a filled plan button
   assert.doesNotMatch(css, /\.option-pill \{[^]*?color: #8b3b2b;/);
 });
 
+test("keeps small text high-contrast and visibly weighted", async () => {
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(css, /--ink-soft:\s*#3f4d5a/);
+  assert.match(css, /--color-loss:\s*#9f3528/);
+  assert.match(css, /--color-profit:\s*#3f6449/);
+  assert.match(css, /body\s*\{[^}]*font-weight:\s*500/s);
+  assert.match(css, /-webkit-font-smoothing:\s*auto/);
+});
+
 test("renders stock and option submenus directly below mixed holding rows", async () => {
   const snapshot = JSON.parse(await readFile(new URL("../data/portfolio-snapshot.json", import.meta.url), "utf8"));
   const [dashboard, css] = await Promise.all([

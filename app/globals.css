@@ -4,10 +4,10 @@
   --paper: #f3ecdf;
   --paper-deep: #e6dccb;
   --ink: #17283b;
-  --ink-soft: #59636d;
-  --color-loss: #b64632;
-  --color-profit: #56705c;
-  --color-neutral: #8a9094;
+  --ink-soft: #3f4d5a;
+  --color-loss: #9f3528;
+  --color-profit: #3f6449;
+  --color-neutral: #65717a;
   --vermilion: var(--color-loss);
   --sage: var(--color-profit);
   --serif: "Iowan Old Style", Baskerville, "Songti SC", STSong, serif;
@@ -26,7 +26,8 @@ body {
   color: var(--ink);
   background: radial-gradient(circle at 18% 0%, rgb(255 255 255 / 58%), transparent 32rem), var(--paper);
   font-family: var(--sans);
-  -webkit-font-smoothing: antialiased;
+  font-weight: 500;
+  -webkit-font-smoothing: auto;
   -webkit-tap-highlight-color: rgb(23 40 59 / 14%);
 }
 
