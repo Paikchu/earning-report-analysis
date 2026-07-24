@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { HoldingPlanRecord } from "@/lib/holding-plan-store";
 import type { PositionGroupView } from "@/lib/portfolio-view-model";
+import type { MarketQuote } from "@/lib/yahoo-quotes";
 import { PositionDetailContent, type PositionPlanStatus } from "./positions/[ticker]/PositionDetailContent";
+import type { QuoteLoadStatus } from "./use-market-quotes";
 
 export type PositionDetailTarget = {
   symbol: string;
@@ -15,10 +17,14 @@ export type PositionDetailTarget = {
 export function PositionDetailDialog({
   target,
   snapshotTime,
+  quote,
+  quoteStatus,
   onClose,
 }: {
   target: PositionDetailTarget;
   snapshotTime: string;
+  quote?: MarketQuote;
+  quoteStatus?: QuoteLoadStatus;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -94,6 +100,8 @@ export function PositionDetailDialog({
             plan={plan}
             planStatus={planStatus}
             position={target.position}
+            quote={quote}
+            quoteStatus={quoteStatus}
             snapshotTime={snapshotTime}
             ticker={target.symbol}
           />

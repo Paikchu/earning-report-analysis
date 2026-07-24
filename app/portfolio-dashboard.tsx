@@ -15,6 +15,8 @@ import type { PositionGroupView } from "@/lib/portfolio-view-model";
 import { AddPlanDialog } from "./AddPlanDialog";
 import { PortfolioHeatmap } from "./portfolio-heatmap";
 import { PositionDetailDialog, type PositionDetailTarget } from "./PositionDetailDialog";
+import { useMarketQuotes, type QuoteLoadStatus } from "./use-market-quotes";
+import type { MarketQuoteMap } from "@/lib/yahoo-quotes";
 
 function Pnl({ value }: { value: number }) {
   const className = value < 0 ? "loss" : value > 0 ? "gain" : "muted";
@@ -121,6 +123,8 @@ function AllocationRing({
 const columns: Array<{ key?: PositionSortKey; label: string }> = [
   { key: "symbol", label: "标的" },
   { label: "构成" },
+  { label: "股价" },
+  { label: "当日涨跌" },
   { key: "value", label: "净市值" },
   { key: "weight", label: "净权重" },
   { key: "cost", label: "持仓成本" },
@@ -135,11 +139,15 @@ function PositionLedger({
   activeSymbol,
   onActiveSymbolChange,
   onOpenPosition,
+  quotes,
+  quoteStatus,
 }: {
   groups: PositionGroupView[];
   activeSymbol: string | null;
   onActiveSymbolChange: (symbol: string | null) => void;
   onOpenPosition: (group: PositionGroupView) => void;
+  quotes: MarketQuoteMap;
+  quoteStatus: QuoteLoadStatus;
 }) {
   const [sortKey, setSortKey] = useState<PositionSortKey>("weight");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -206,6 +214,14 @@ function PositionLedger({
                 {group.stock && <i className="asset-pill stock-pill">正股</i>}
                 {group.options.length > 0 && <i className="asset-pill option-pill">{group.options.length} 期权</i>}
               </span>
+              <span data-label="股价">
+                {quotes[group.symbol] ? money(quotes[group.symbol].price) : <i className="quote-muted">{quoteStatus === "loading" ? "读取中" : "—"}</i>}
+              </span>
+              <span data-label="当日涨跌">
+                {quotes[group.symbol]
+                  ? <span className={quotes[group.symbol].changePercent < 0 ? "loss" : quotes[group.symbol].changePercent > 0 ? "gain" : "muted"}>{percent(quotes[group.symbol].changePercent, true)}</span>
+                  : <i className="quote-muted">{quoteStatus === "loading" ? "读取中" : "—"}</i>}
+              </span>
               <span data-label="净市值">{money(group.value)}</span>
               <span data-label="净权重">{percent(group.weight)}</span>
               <span data-label="持仓成本">{money(group.cost)}</span>
@@ -257,6 +273,8 @@ export function PortfolioDashboard({
 }) {
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
   const [selectedPosition, setSelectedPosition] = useState<PositionDetailTarget | null>(null);
+  const quoteSymbols = useMemo(() => positionGroups.map((group) => group.symbol).join(","), [positionGroups]);
+  const quoteState = useMarketQuotes(quoteSymbols);
 
   return (
     <>
@@ -288,6 +306,8 @@ export function PortfolioDashboard({
               activeSymbol={activeSymbol}
               onActiveSymbolChange={setActiveSymbol}
               onOpenPosition={(group) => setSelectedPosition({ symbol: group.symbol, name: group.name, position: group })}
+              quotes={quoteState.quotes}
+              quoteStatus={quoteState.status}
             />
           </div>
         </section>
@@ -295,6 +315,8 @@ export function PortfolioDashboard({
       {selectedPosition && (
         <PositionDetailDialog
           onClose={() => setSelectedPosition(null)}
+          quote={quoteState.quotes[selectedPosition.symbol]}
+          quoteStatus={selectedPosition.position ? quoteState.status : undefined}
           snapshotTime={snapshotTime}
           target={selectedPosition}
         />

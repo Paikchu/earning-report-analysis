@@ -833,7 +833,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .position-columns,
 .position-row {
   display: grid;
-  grid-template-columns: minmax(112px, 1.2fr) minmax(54px, .6fr) minmax(72px, 1fr) minmax(56px, .7fr) repeat(4, minmax(72px, 1fr)) 18px;
+  grid-template-columns: minmax(112px, 1.2fr) minmax(54px, .6fr) repeat(2, minmax(62px, .8fr)) minmax(72px, 1fr) minmax(56px, .7fr) repeat(4, minmax(72px, 1fr)) 18px;
   align-items: center;
   gap: 8px;
 }
@@ -889,6 +889,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 
 .position-row > span:not(:first-child) { text-align: right; }
 .position-row > span { min-width: 0; }
+.quote-muted { color: var(--ink-soft); font-style: normal; }
 
 .position-row:hover { background: rgb(230 220 203 / 42%); }
 .position-row[data-active="true"] { background: rgb(218 210 196 / 56%); }
@@ -1086,6 +1087,26 @@ td { font-size: 9px; }
 .snapshot-note { min-width: 170px; display: grid; gap: 5px; text-align: right; }
 .snapshot-note span { color: var(--ink-soft); font-size: 9px; }
 .snapshot-note strong { font: 600 13px/1.2 var(--serif); }
+
+.detail-market-panel {
+  min-width: 190px;
+  display: grid;
+  justify-items: end;
+  gap: 18px;
+}
+
+.detail-quote {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  text-align: right;
+}
+
+.detail-quote > span,
+.detail-quote small { color: var(--ink-soft); font-size: 9px; }
+.detail-quote strong { font: 600 28px/1 var(--serif); font-variant-numeric: tabular-nums lining-nums; }
+.detail-quote i { font-size: 11px; font-style: normal; font-weight: 650; }
+.detail-quote .quote-unavailable { color: var(--ink-soft); font-size: 13px; }
 
 .position-summary {
   padding: 22px 0;
@@ -1346,6 +1367,8 @@ td { font-size: 9px; }
   .back-link { margin-bottom: 18px; }
   .detail-hero { min-height: 170px; align-items: flex-start; flex-direction: column; gap: 24px; }
   .detail-hero h1 { font-size: 56px; }
+  .detail-market-panel { min-width: 0; justify-items: start; }
+  .detail-quote { justify-items: start; text-align: left; }
   .snapshot-note { min-width: 0; text-align: left; }
   .position-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 16px; }
   .position-summary strong { font-size: 17px; }

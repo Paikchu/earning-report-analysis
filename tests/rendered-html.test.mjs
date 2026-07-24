@@ -113,8 +113,8 @@ test("renders the stock-only investment theme heatmap", async () => {
   assert.match(html, /aria-label="持仓主题热力图"/);
   assert.match(html, /AI \/ 企业软件/);
   assert.match(html, /太空与通信/);
-  assert.match(html, /NVDA[^]*?10\.87%/);
-  assert.match(html, /RKLB[^]*?1\.68%/);
+  assert.match(html, /NVDA[^]*?11\.32%/);
+  assert.match(html, /RKLB[^]*?1\.62%/);
 });
 
 test("keeps domain headers outside the holding tile area", async () => {
@@ -260,6 +260,44 @@ test("opens position details in a homepage workspace dialog without navigation",
   assert.match(css, /\.position-detail-dialog-body \{[^]*?width: min\(1360px, calc\(100% - 48px\)\);/);
   assert.match(css, /@media \(min-width: 1025px\)[^]*?\.position-detail-dialog \.plan-editor \{[^]*?max-width: 83%;/);
   assert.match(css, /@media \(max-width: 620px\)[^]*?\.position-detail-dialog \{[^]*?width: 100vw;[^]*?height: 100dvh;/);
+});
+
+test("renders Yahoo price and daily change surfaces without changing ledger calculations", async () => {
+  const [response, detail] = await Promise.all([
+    render(),
+    readFile(new URL("../app/positions/[ticker]/PositionDetailContent.tsx", import.meta.url), "utf8"),
+  ]);
+  const html = await response.text();
+
+  assert.match(html, /股价/);
+  assert.match(html, /当日涨跌/);
+  assert.match(detail, /Yahoo Finance/);
+  assert.match(detail, /行情暂不可用/);
+  assert.doesNotMatch(detail, /position\.value\s*=\s*quote|position\.unrealized\s*=\s*quote/);
+});
+
+test("reuses homepage quotes for holdings and fetches unheld plan tickers separately", async () => {
+  const [dashboard, detail] = await Promise.all([
+    readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/positions/[ticker]/PositionDetailContent.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(dashboard, /quoteStatus=\{selectedPosition\.position \? quoteState\.status : undefined\}/);
+  assert.match(detail, /useMarketQuotes\(ticker, quoteStatus === undefined\)/);
+});
+
+test("protects the Yahoo quote endpoint with ChatGPT authentication", async () => {
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("quotes-test", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+  const response = await worker.fetch(
+    new Request("http://localhost/api/quotes?symbols=MSFT"),
+    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), { error: "未登录。" });
 });
 
 test("exposes authenticated plan reads for the workspace dialog", async () => {

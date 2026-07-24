@@ -3,6 +3,8 @@
 import type { HoldingPlanRecord } from "@/lib/holding-plan-store";
 import { money, number, percent } from "@/lib/portfolio-format";
 import type { PositionGroupView } from "@/lib/portfolio-view-model";
+import type { MarketQuote } from "@/lib/yahoo-quotes";
+import { useMarketQuotes, type QuoteLoadStatus } from "@/app/use-market-quotes";
 import { PlanEditor } from "./PlanEditor";
 
 export type PositionPlanStatus = "ready" | "loading" | "unavailable";
@@ -14,6 +16,8 @@ export function PositionDetailContent({
   snapshotTime,
   plan,
   planStatus = "ready",
+  quote,
+  quoteStatus,
   onPlanDirtyChange,
 }: {
   ticker: string;
@@ -22,8 +26,17 @@ export function PositionDetailContent({
   snapshotTime: string;
   plan: HoldingPlanRecord | null;
   planStatus?: PositionPlanStatus;
+  quote?: MarketQuote;
+  quoteStatus?: QuoteLoadStatus;
   onPlanDirtyChange?: (dirty: boolean) => void;
 }) {
+  const localQuoteState = useMarketQuotes(ticker, quoteStatus === undefined);
+  const activeQuoteStatus = quoteStatus ?? localQuoteState.status;
+  const activeQuote = quote ?? localQuoteState.quotes[ticker];
+  const quoteTime = activeQuote
+    ? new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Shanghai" }).format(new Date(activeQuote.marketTime))
+    : null;
+
   return (
     <>
       <header className="detail-hero">
@@ -32,7 +45,23 @@ export function PositionDetailContent({
           <h1 id="position-detail-title">{ticker}</h1>
           <p className="detail-company">{companyName}</p>
         </div>
-        <div className="snapshot-note"><span>IBKR 快照</span><strong>{snapshotTime}</strong></div>
+        <div className="detail-market-panel">
+          <div className="detail-quote" aria-live="polite">
+            <span>Yahoo Finance · 股价</span>
+            {activeQuote ? (
+              <>
+                <strong>{money(activeQuote.price)}</strong>
+                <i className={activeQuote.changePercent < 0 ? "loss" : activeQuote.changePercent > 0 ? "gain" : "muted"}>
+                  {percent(activeQuote.changePercent, true)}
+                </i>
+                <small>{quoteTime}</small>
+              </>
+            ) : (
+              <strong className="quote-unavailable">{activeQuoteStatus === "loading" ? "行情读取中" : "行情暂不可用"}</strong>
+            )}
+          </div>
+          <div className="snapshot-note"><span>IBKR 快照</span><strong>{snapshotTime}</strong></div>
+        </div>
       </header>
 
       {position ? (
