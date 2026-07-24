@@ -5,8 +5,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import {
   calculatePopoverPosition,
   groupHeatmapHoldings,
+  heatmapTileDensity,
   layoutTreemap,
   type HeatmapHolding,
+  type HeatmapTileDensity,
 } from "@/lib/portfolio-heatmap";
 import { holdingColor } from "@/lib/portfolio-dashboard";
 import { money, percent } from "@/lib/portfolio-format";
@@ -15,6 +17,12 @@ const signedPercent = (value: number) => percent(value, true);
 
 type HeatStyle = CSSProperties & { "--heat-strength": string; "--holding-color": string };
 type PopoverState = { symbol: string; left: number; top: number };
+
+const densityClassNames: Record<HeatmapTileDensity, string> = {
+  full: "heatmap-tile-full",
+  compact: "heatmap-tile-compact",
+  "symbol-only": "heatmap-tile-symbol-only",
+};
 
 function heatStyle(symbol: string, rate: number): HeatStyle {
   return {
@@ -147,12 +155,12 @@ export function PortfolioHeatmap({
                   const holding = group.holdings.find((item) => item.symbol === holdingRect.id);
                   if (!holding) return null;
                   const direction = holding.unrealizedRate < -0.01 ? "loss" : holding.unrealizedRate > 0.01 ? "gain" : "neutral";
-                  const compact = holdingRect.width * holdingRect.height < 1_800;
+                  const density = heatmapTileDensity(holdingRect.width, holdingRect.height);
 
                   return (
                     <button
                       type="button"
-                      className={`heatmap-tile${compact ? " heatmap-tile-compact" : ""}`}
+                      className={`heatmap-tile ${densityClassNames[density]}`}
                       data-active={activeSymbol === holding.symbol}
                       data-direction={direction}
                       aria-pressed={holding.symbol === selected?.symbol}

@@ -136,12 +136,12 @@ function AllocationRing({
   );
 }
 
-const columns: Array<{ key?: PositionSortKey; label: string }> = [
+const columns: Array<{ className?: string; key?: PositionSortKey; label: string }> = [
   { key: "symbol", label: "标的" },
-  { label: "构成" },
+  { className: "column-center", label: "构成" },
   { label: "股价" },
   { label: "当日涨跌" },
-  { label: "财报（预计）" },
+  { className: "column-center", label: "财报（预计）" },
   { key: "value", label: "净市值" },
   { key: "weight", label: "净权重" },
   { key: "cost", label: "持仓成本" },
@@ -200,14 +200,14 @@ function PositionLedger({
         {columns.map((column, index) => column.key ? (
           <button
             aria-label={`按${column.label}${column.key === sortKey && sortDirection === "desc" ? "升序" : "降序"}排列`}
-            className={column.key === sortKey ? "is-sorted" : ""}
+            className={[column.className, column.key === sortKey ? "is-sorted" : ""].filter(Boolean).join(" ")}
             key={column.label}
             onClick={() => updateSort(column.key!)}
             type="button"
           >
             {column.label}<i>{column.key === sortKey ? sortDirection === "desc" ? "↓" : "↑" : "↕"}</i>
           </button>
-        ) : <span key={`${column.label}-${index}`}>{column.label}</span>)}
+        ) : <span className={column.className} key={`${column.label}-${index}`}>{column.label}</span>)}
       </div>
       <div className="position-list">
         {sortedGroups.map((group) => (
@@ -240,10 +240,17 @@ function PositionLedger({
               </span>
               <span data-label="当日涨跌">
                 {quotes[group.symbol]
-                  ? <span className={quotes[group.symbol].changePercent < 0 ? "loss" : quotes[group.symbol].changePercent > 0 ? "gain" : "muted"}>{percent(quotes[group.symbol].changePercent, true)}</span>
+                  ? (
+                    <span
+                      className="daily-change-value"
+                      data-direction={quotes[group.symbol].changePercent < 0 ? "loss" : quotes[group.symbol].changePercent > 0 ? "gain" : "neutral"}
+                    >
+                      {percent(quotes[group.symbol].changePercent, true)}
+                    </span>
+                  )
                   : <i className="quote-muted">{quoteStatus === "loading" ? "读取中" : "—"}</i>}
               </span>
-              <span data-label="财报（预计）">
+              <span className="position-earnings" data-label="财报（预计）">
                 <EarningsCell event={earningsBySymbol.get(group.symbol)} asOf={earningsUpdatedAt} />
               </span>
               <span data-label="净市值">{money(group.value)}</span>

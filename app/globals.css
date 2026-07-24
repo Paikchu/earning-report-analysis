@@ -8,6 +8,8 @@
   --color-loss: #9f3528;
   --color-profit: #3f6449;
   --color-neutral: #65717a;
+  --daily-gain: #315b3d;
+  --daily-loss: #8f2f25;
   --vermilion: var(--color-loss);
   --sage: var(--color-profit);
   --serif: "Iowan Old Style", Baskerville, "Songti SC", STSong, serif;
@@ -442,6 +444,7 @@ h2 {
   border: 1px solid rgb(243 236 223 / 82%);
   box-shadow: inset 3px 0 0 var(--holding-color);
   cursor: pointer;
+  container-type: inline-size;
   text-align: left;
 }
 
@@ -501,6 +504,23 @@ h2 {
 }
 
 .heatmap-domain-compact .heatmap-tile-metrics { display: grid; gap: 1px; font-size: 6px; text-align: center; }
+
+.heatmap-tile-symbol-only {
+  padding: 1px;
+  align-items: center;
+  justify-content: center;
+}
+
+.heatmap-tile-symbol-only strong {
+  max-width: 100%;
+  font-family: var(--sans);
+  font-size: clamp(6px, 25cqw, 9px);
+  font-weight: 700;
+  letter-spacing: -.06em;
+  white-space: nowrap;
+}
+
+.heatmap-tile-symbol-only .heatmap-tile-metrics { display: none; }
 
 .heatmap-popover {
   position: absolute;
@@ -877,6 +897,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 }
 
 .position-columns > button:first-child { justify-content: flex-start; text-align: left; }
+.position-columns > .column-center { text-align: center; }
 .position-columns > button:hover,
 .position-columns > button.is-sorted { color: var(--ink); }
 .position-columns > button i { font-size: 8px; font-style: normal; }
@@ -903,10 +924,27 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .position-row > span { min-width: 0; }
 .quote-muted { color: var(--ink-soft); font-style: normal; }
 
+.daily-change-value {
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.daily-change-value[data-direction="gain"] { color: var(--daily-gain); }
+.daily-change-value[data-direction="loss"] { color: var(--daily-loss); }
+.daily-change-value[data-direction="neutral"] { color: var(--ink-soft); }
+
+.position-earnings {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
 .earnings-cell {
   display: grid;
   gap: 3px;
-  text-align: left;
+  justify-items: center;
+  text-align: center;
 }
 
 .earnings-cell strong {
@@ -953,7 +991,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
   z-index: 2;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 4px;
 }
 
@@ -1305,6 +1343,7 @@ td { font-size: 9px; }
     touch-action: pan-y;
   }
   .position-row > span:not(:first-child) { text-align: left; }
+  .daily-change-value { font-size: 12px; }
   .position-row > span[data-label] {
     min-width: 0;
     font-weight: 600;

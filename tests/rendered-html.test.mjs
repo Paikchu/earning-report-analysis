@@ -214,6 +214,35 @@ test("keeps small text high-contrast and visibly weighted", async () => {
   assert.match(css, /-webkit-font-smoothing:\s*auto/);
 });
 
+test("emphasizes daily changes and centers composition and earnings", async () => {
+  const [dashboard, css] = await Promise.all([
+    readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(dashboard, /className="daily-change-value/);
+  assert.match(dashboard, /className="position-earnings"/);
+  assert.match(css, /--daily-gain:\s*#315b3d/);
+  assert.match(css, /--daily-loss:\s*#8f2f25/);
+  assert.match(css, /\.daily-change-value\s*\{[^}]*font-size:\s*11px;[^}]*font-weight:\s*650;/s);
+  assert.match(css, /\.position-kinds\s*\{[^}]*justify-content:\s*center;/s);
+  assert.match(css, /\.position-earnings\s*\{[^}]*justify-content:\s*center;[^}]*text-align:\s*center;/s);
+  assert.match(css, /\.earnings-cell\s*\{[^}]*justify-items:\s*center;[^}]*text-align:\s*center;/s);
+  assert.match(css, /@media \(max-width: 620px\)[^]*?\.daily-change-value \{ font-size: 12px; \}/);
+});
+
+test("keeps full ticker symbols visible before heatmap metrics", async () => {
+  const [component, css] = await Promise.all([
+    readFile(new URL("../app/portfolio-heatmap.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(component, /heatmapTileDensity/);
+  assert.match(component, /heatmap-tile-symbol-only/);
+  assert.match(css, /\.heatmap-tile-symbol-only \.heatmap-tile-metrics \{ display: none; \}/);
+  assert.match(css, /\.heatmap-tile-symbol-only strong\s*\{[^}]*font-size:\s*clamp\(6px,\s*25cqw,\s*9px\);/s);
+});
+
 test("renders stock and option submenus directly below mixed holding rows", async () => {
   const snapshot = JSON.parse(await readFile(new URL("../data/portfolio-snapshot.json", import.meta.url), "utf8"));
   const [dashboard, css] = await Promise.all([

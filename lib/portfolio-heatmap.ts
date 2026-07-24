@@ -38,6 +38,8 @@ export interface TreemapInput {
   weight: number;
 }
 
+export type HeatmapTileDensity = "full" | "compact" | "symbol-only";
+
 export type TreemapRectangle<T extends TreemapInput> = T & {
   x: number;
   y: number;
@@ -50,6 +52,12 @@ export interface HeatmapBounds {
   top: number;
   width: number;
   height: number;
+}
+
+export function heatmapTileDensity(width: number, height: number): HeatmapTileDensity {
+  if (width < 32 || height < 28) return "symbol-only";
+  if (width * height < 1_800 || width < 58 || height < 48) return "compact";
+  return "full";
 }
 
 export function calculatePopoverPosition(

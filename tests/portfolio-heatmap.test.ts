@@ -148,6 +148,16 @@ test("lays out weighted rectangles inside their parent without overlap", async (
   }
 });
 
+test("prioritizes ticker symbols in the smallest heatmap tiles", async () => {
+  const { heatmapTileDensity } = await import("../lib/portfolio-heatmap.ts");
+
+  assert.equal(heatmapTileDensity(21.9, 45.2), "symbol-only");
+  assert.equal(heatmapTileDensity(25.1, 45.2), "symbol-only");
+  assert.equal(heatmapTileDensity(94.3, 27.9), "symbol-only");
+  assert.equal(heatmapTileDensity(39.2, 45.2), "compact");
+  assert.equal(heatmapTileDensity(119.2, 103.6), "full");
+});
+
 test("uses the rendered aspect ratio when laying out narrow screens", async () => {
   const { buildHeatmapHoldings, groupHeatmapHoldings, layoutTreemap } = await import("../lib/portfolio-heatmap.ts");
   const groups = groupHeatmapHoldings(buildHeatmapHoldings(acceptanceSnapshot));
