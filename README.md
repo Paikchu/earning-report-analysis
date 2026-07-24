@@ -6,6 +6,7 @@
 
 - `data/portfolio-snapshot.json`：IBKR 账户、持仓和成交快照，不是实时行情。
 - `data/us-securities.json`：由 Nasdaq Trader 官方目录生成的美股与 ETF 搜索索引。
+- `data/earnings-calendar.json`：未来 90 天 Nasdaq 财报日历快照；日期按美股市场日展示，并换算北京查看时段。
 - D1 `DB`：按 `owner_email + ticker` 保存持仓原因和规划点位。
 - 客户端不提交 owner；服务端从 `oai-authenticated-user-email` 读取身份。
 
@@ -29,6 +30,12 @@ npm run snapshot:update -- --input /absolute/path/to/ibkr-export.json
 
 ```bash
 npm run symbols:update
+```
+
+单独更新财报日历：
+
+```bash
+npm run earnings:update
 ```
 
 修改 `db/schema.ts` 后生成迁移：

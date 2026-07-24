@@ -9,6 +9,7 @@ import {
   type PositionSortKey,
   type SortDirection,
 } from "@/lib/portfolio-dashboard";
+import { buildEarningsReminder, type EarningsEvent } from "@/lib/earnings-calendar";
 import { money, number, percent } from "@/lib/portfolio-format";
 import type { HeatmapHolding } from "@/lib/portfolio-heatmap";
 import type { PositionGroupView } from "@/lib/portfolio-view-model";
@@ -21,6 +22,21 @@ import type { MarketQuoteMap } from "@/lib/yahoo-quotes";
 function Pnl({ value }: { value: number }) {
   const className = value < 0 ? "loss" : value > 0 ? "gain" : "muted";
   return <span className={className}>{money(value, true)}</span>;
+}
+
+function EarningsCell({ event, asOf }: { event?: EarningsEvent; asOf: string }) {
+  if (!event) return <i className="quote-muted">未公布</i>;
+  const reminder = buildEarningsReminder(event, asOf);
+
+  return (
+    <span
+      className="earnings-cell"
+      title={`美股 ${reminder.releaseDateLabel}${reminder.sessionLabel}发布；北京 ${reminder.viewDateLabel}${reminder.viewTimeLabel}查看`}
+    >
+      <strong>{reminder.releaseDateLabel} · {reminder.sessionLabel}</strong>
+      <small>北京{reminder.viewDateLabel}{reminder.viewTimeLabel} · {reminder.countdownLabel}</small>
+    </span>
+  );
 }
 
 function AllocationRing({
@@ -125,6 +141,7 @@ const columns: Array<{ key?: PositionSortKey; label: string }> = [
   { label: "构成" },
   { label: "股价" },
   { label: "当日涨跌" },
+  { label: "财报（预计）" },
   { key: "value", label: "净市值" },
   { key: "weight", label: "净权重" },
   { key: "cost", label: "持仓成本" },
@@ -141,6 +158,8 @@ function PositionLedger({
   onOpenPosition,
   quotes,
   quoteStatus,
+  earningsBySymbol,
+  earningsUpdatedAt,
 }: {
   groups: PositionGroupView[];
   activeSymbol: string | null;
@@ -148,6 +167,8 @@ function PositionLedger({
   onOpenPosition: (group: PositionGroupView) => void;
   quotes: MarketQuoteMap;
   quoteStatus: QuoteLoadStatus;
+  earningsBySymbol: Map<string, EarningsEvent>;
+  earningsUpdatedAt: string;
 }) {
   const [sortKey, setSortKey] = useState<PositionSortKey>("weight");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -222,6 +243,9 @@ function PositionLedger({
                   ? <span className={quotes[group.symbol].changePercent < 0 ? "loss" : quotes[group.symbol].changePercent > 0 ? "gain" : "muted"}>{percent(quotes[group.symbol].changePercent, true)}</span>
                   : <i className="quote-muted">{quoteStatus === "loading" ? "读取中" : "—"}</i>}
               </span>
+              <span data-label="财报（预计）">
+                <EarningsCell event={earningsBySymbol.get(group.symbol)} asOf={earningsUpdatedAt} />
+              </span>
               <span data-label="净市值">{money(group.value)}</span>
               <span data-label="净权重">{percent(group.weight)}</span>
               <span data-label="持仓成本">{money(group.cost)}</span>
@@ -263,6 +287,8 @@ export function PortfolioDashboard({
   optionMarketValue,
   netPositionsValue,
   snapshotTime,
+  earningsEvents,
+  earningsUpdatedAt,
 }: {
   heatmapHoldings: HeatmapHolding[];
   positionGroups: PositionGroupView[];
@@ -270,11 +296,23 @@ export function PortfolioDashboard({
   optionMarketValue: number;
   netPositionsValue: number;
   snapshotTime: string;
+  earningsEvents: EarningsEvent[];
+  earningsUpdatedAt: string;
 }) {
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
   const [selectedPosition, setSelectedPosition] = useState<PositionDetailTarget | null>(null);
   const quoteSymbols = useMemo(() => positionGroups.map((group) => group.symbol).join(","), [positionGroups]);
   const quoteState = useMarketQuotes(quoteSymbols);
+  const positionSymbols = useMemo(() => new Set(positionGroups.map((group) => group.symbol)), [positionGroups]);
+  const earningsBySymbol = useMemo(() => {
+    const events = new Map<string, EarningsEvent>();
+    for (const event of earningsEvents) {
+      if (positionSymbols.has(event.symbol) && !events.has(event.symbol)) events.set(event.symbol, event);
+    }
+    return events;
+  }, [earningsEvents, positionSymbols]);
+  const nextEarnings = earningsEvents.find((event) => positionSymbols.has(event.symbol));
+  const nextEarningsReminder = nextEarnings ? buildEarningsReminder(nextEarnings, earningsUpdatedAt) : null;
 
   return (
     <>
@@ -300,6 +338,12 @@ export function PortfolioDashboard({
               <span>持仓净市值 <strong>{money(netPositionsValue)}</strong></span>
               <span>正股 <strong>{money(stockMarketValue)}</strong></span>
               <span>期权 <strong>{money(optionMarketValue)}</strong></span>
+              {nextEarnings && nextEarningsReminder && (
+                <span className="next-earnings">
+                  最近财报 <strong>{nextEarnings.symbol} {nextEarningsReminder.releaseDateLabel} · {nextEarningsReminder.sessionLabel}</strong>
+                  <i>北京{nextEarningsReminder.viewDateLabel}{nextEarningsReminder.viewTimeLabel}，{nextEarningsReminder.countdownLabel}</i>
+                </span>
+              )}
             </div>
             <PositionLedger
               groups={positionGroups}
@@ -308,6 +352,8 @@ export function PortfolioDashboard({
               onOpenPosition={(group) => setSelectedPosition({ symbol: group.symbol, name: group.name, position: group })}
               quotes={quoteState.quotes}
               quoteStatus={quoteState.status}
+              earningsBySymbol={earningsBySymbol}
+              earningsUpdatedAt={earningsUpdatedAt}
             />
           </div>
         </section>

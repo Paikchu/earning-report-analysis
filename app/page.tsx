@@ -1,4 +1,6 @@
+import earningsData from "@/data/earnings-calendar.json";
 import snapshotData from "@/data/portfolio-snapshot.json";
+import type { EarningsCalendarSnapshot } from "@/lib/earnings-calendar";
 import { money, percent } from "@/lib/portfolio-format";
 import { buildHeatmapHoldings } from "@/lib/portfolio-heatmap";
 import type { PortfolioSnapshotV1 } from "@/lib/portfolio-snapshot";
@@ -6,6 +8,7 @@ import { buildPortfolioViewModel } from "@/lib/portfolio-view-model";
 import { PortfolioDashboard } from "./portfolio-dashboard";
 
 const snapshot = snapshotData as PortfolioSnapshotV1;
+const earnings = earningsData as EarningsCalendarSnapshot;
 const heatmapHoldings = buildHeatmapHoldings(snapshot);
 const portfolio = buildPortfolioViewModel(snapshot);
 const totalPnl = snapshot.account.netLiquidation - snapshot.account.netDeposits;
@@ -39,6 +42,8 @@ export default function Home() {
           optionMarketValue={portfolio.optionMarketValue}
           netPositionsValue={portfolio.netPositionsValue}
           snapshotTime={snapshotTime}
+          earningsEvents={earnings.events}
+          earningsUpdatedAt={earnings.generatedAt}
         />
       </main>
     </>

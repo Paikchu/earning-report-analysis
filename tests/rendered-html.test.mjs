@@ -174,6 +174,8 @@ test("groups stock and option positions by ticker", async () => {
   assert.match(html, /净市值/);
   assert.match(html, /年内已实现/);
   assert.match(html, /年内净盈亏/);
+  assert.match(html, /财报/);
+  assert.match(html, /北京/);
   assert.match(html, /NVDA 正股与期权持仓/);
   assert.match(html, /NVDA Jan15&#x27;27 180 PUT @AMEX/);
   assert.doesNotMatch(html, /持仓拆分|>拆分</);
