@@ -162,10 +162,11 @@ test("groups stock and option positions by ticker", async () => {
   const response = await render();
   const html = await response.text();
   const expectedTickerCount = new Set(snapshot.positions.map((position) => position.symbol)).size;
-  const renderedTickerCount = html.match(/class="position-row"/g)?.length ?? 0;
+  const renderedTickerCount = html.match(/class="position-row position-row-button"/g)?.length ?? 0;
 
   assert.equal(renderedTickerCount, expectedTickerCount);
-  assert.match(html, /href="\/positions\/INTC"/);
+  assert.match(html, /aria-label="查看 INTC 持仓详情"/);
+  assert.doesNotMatch(html, /href="\/positions\/INTC"/);
   assert.doesNotMatch(html, /<details class="position-row"/);
   assert.match(html, /INTC/);
   assert.match(html, /正股/);
@@ -228,21 +229,58 @@ test("renders stock and option submenus directly below mixed holding rows", asyn
   assert.match(dashboard, /className="position-submenu-row"/);
   assert.match(dashboard, /option\.contract/);
   assert.match(dashboard, /option\.marketValue/);
-  assert.match(dashboard, /href=\{`\/positions\//);
+  assert.match(dashboard, /onOpenPosition\(group\)/);
+  assert.doesNotMatch(dashboard, /href=\{`\/positions\//);
   assert.doesNotMatch(dashboard, /breakdownSymbol|breakdown-trigger|position-breakdown|持仓拆分/);
   assert.match(css, /\.position-submenu \{[^]*?display: grid;/);
   assert.match(css, /\.position-submenu-row \{[^]*?grid-template-columns:/);
 });
 
-test("uses page-scrolling cards for mobile position details", async () => {
-  const [detailPage, css] = await Promise.all([
-    readFile(new URL("../app/positions/[ticker]/page.tsx", import.meta.url), "utf8"),
+test("opens position details in a homepage workspace dialog without navigation", async () => {
+  const [dashboard, dialog, addPlanDialog, css] = await Promise.all([
+    readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/PositionDetailDialog.tsx", import.meta.url), "utf8").catch(() => ""),
+    readFile(new URL("../app/AddPlanDialog.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(detailPage, /data-label="平均成本"/);
-  assert.match(detailPage, /data-label="未实现盈亏"/);
-  assert.doesNotMatch(detailPage, /持仓，可横向滚动|持仓明细，可横向滚动/);
+  assert.match(dashboard, /PositionDetailDialog/);
+  assert.match(dashboard, /selectedPosition/);
+  assert.doesNotMatch(dashboard, /import Link from "next\/link"/);
+  assert.match(dialog, /<dialog/);
+  assert.match(dialog, /\.showModal\(\)/);
+  assert.match(dialog, /fetch\(`\/api\/plans\/\$\{encodeURIComponent\(target\.symbol\)\}`/);
+  assert.match(dialog, /onPlanDirtyChange/);
+  assert.match(dialog, /window\.confirm\("放弃未保存的更改？"\)/);
+  assert.match(dialog, /addEventListener\("keydown"/);
+  assert.match(dialog, /event\.key === "Escape"/);
+  assert.match(addPlanDialog, /onSelect/);
+  assert.doesNotMatch(addPlanDialog, /href=\{`\/positions\//);
+  assert.match(css, /\.position-detail-dialog \{[^]*?width: min\(1440px, calc\(100vw - 48px\)\);[^]*?height: calc\(100dvh - 48px\);/);
+  assert.match(css, /\.position-detail-dialog-body \{[^]*?width: min\(1360px, calc\(100% - 48px\)\);/);
+  assert.match(css, /@media \(min-width: 1025px\)[^]*?\.position-detail-dialog \.plan-editor \{[^]*?max-width: 83%;/);
+  assert.match(css, /@media \(max-width: 620px\)[^]*?\.position-detail-dialog \{[^]*?width: 100vw;[^]*?height: 100dvh;/);
+});
+
+test("exposes authenticated plan reads for the workspace dialog", async () => {
+  const route = await readFile(new URL("../app/api/plans/[ticker]/route.ts", import.meta.url), "utf8");
+
+  assert.match(route, /export async function GET/);
+  assert.match(route, /getHoldingPlan/);
+  assert.match(route, /return Response\.json\(\{ plan \}\)/);
+});
+
+test("uses page-scrolling cards for mobile position details", async () => {
+  const [detailPage, detailContent, css] = await Promise.all([
+    readFile(new URL("../app/positions/[ticker]/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/positions/[ticker]/PositionDetailContent.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(detailPage, /PositionDetailContent/);
+  assert.match(detailContent, /data-label="平均成本"/);
+  assert.match(detailContent, /data-label="未实现盈亏"/);
+  assert.doesNotMatch(detailContent, /持仓，可横向滚动|持仓明细，可横向滚动/);
   assert.match(css, /\.position-detail\.table-wrap \{\s*overflow: visible;\s*overscroll-behavior: auto;/);
   assert.match(css, /\.instrument-table thead \{ display: none; \}/);
   assert.match(css, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);

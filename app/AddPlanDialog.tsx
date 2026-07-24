@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 type SearchResult = { symbol: string; name: string; exchange: string; type: "stock" | "etf"; isHeld: boolean };
 
-export function AddPlanDialog() {
+export function AddPlanDialog({ onSelect }: { onSelect: (result: SearchResult) => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -64,10 +64,15 @@ export function AddPlanDialog() {
             {loading && <p className="search-message">正在搜索…</p>}
             {!loading && message && <p className="search-message">{message}</p>}
             {!loading && results.map((result) => (
-              <a href={`/positions/${encodeURIComponent(result.symbol)}#plan-editor`} className="search-result" key={result.symbol}>
+              <button
+                className="search-result"
+                key={result.symbol}
+                onClick={() => { dialogRef.current?.close(); onSelect(result); }}
+                type="button"
+              >
                 <span><strong>{result.symbol}</strong><small>{result.name}</small></span>
                 <span><i>{result.isHeld ? "当前持仓" : result.type === "etf" ? "ETF" : "股票"}</i><small>{result.exchange}</small></span>
-              </a>
+              </button>
             ))}
             {!loading && directoryUpdatedAt && <p className="directory-timestamp">证券目录更新于 {new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium" }).format(new Date(directoryUpdatedAt))}</p>}
           </div>

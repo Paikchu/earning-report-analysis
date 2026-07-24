@@ -622,6 +622,78 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 
 .plan-dialog::backdrop { background: rgb(23 40 59 / 42%); backdrop-filter: blur(3px); }
 
+.position-detail-dialog {
+  position: fixed;
+  inset: 50% auto auto 50%;
+  width: min(1440px, calc(100vw - 48px));
+  height: calc(100dvh - 48px);
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  box-shadow: 0 30px 96px rgb(23 40 59 / 28%);
+  transform: translate(-50%, -50%);
+}
+
+.position-detail-dialog::backdrop {
+  background: rgb(23 40 59 / 42%);
+  backdrop-filter: blur(3px);
+}
+
+.position-detail-dialog-scroll {
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: auto;
+  scrollbar-width: none;
+}
+
+.position-detail-dialog-scroll::-webkit-scrollbar { display: none; }
+
+.position-detail-dialog-toolbar {
+  position: sticky;
+  z-index: 5;
+  top: 0;
+  min-height: 48px;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid var(--paper-deep);
+  background: rgb(243 236 223 / 96%);
+  backdrop-filter: blur(8px);
+}
+
+.position-detail-dialog-toolbar span {
+  color: var(--ink-soft);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.position-detail-dialog-toolbar button {
+  min-height: 30px;
+  padding: 0 11px;
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  background: transparent;
+  font: 600 9px/1 var(--sans);
+  cursor: pointer;
+}
+
+.position-detail-dialog-toolbar button:hover { color: var(--paper); background: var(--ink); }
+
+.position-detail-dialog-body {
+  width: min(1360px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 18px 0 72px;
+}
+
 .dialog-card {
   max-height: var(--dialog-max-height);
   padding: 28px;
@@ -701,6 +773,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .directory-timestamp { margin: 12px 2px 0; color: var(--ink-soft); font-size: 8px; text-align: right; }
 
 .search-result {
+  width: 100%;
   min-height: 62px;
   padding: 11px 2px;
   display: flex;
@@ -708,8 +781,13 @@ button:disabled { cursor: not-allowed; opacity: .45; }
   justify-content: space-between;
   gap: 20px;
   color: inherit;
+  border: 0;
   border-bottom: 1px solid var(--paper-deep);
+  background: transparent;
+  font: inherit;
+  text-align: left;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .search-result:hover { background: rgb(230 220 203 / 36%); }
@@ -815,10 +893,13 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .position-row:hover { background: rgb(230 220 203 / 42%); }
 .position-row[data-active="true"] { background: rgb(218 210 196 / 56%); }
 
-.position-row-link {
-  position: absolute;
-  z-index: 1;
-  inset: 0;
+.position-row-button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .position-identity {
@@ -1044,6 +1125,13 @@ td { font-size: 9px; }
 .no-position span { color: var(--ink-soft); font-size: 10px; }
 
 .plan-editor { max-width: 980px; }
+.plan-loading > p {
+  margin: 20px 0 0;
+  padding: 28px 0;
+  color: var(--ink-soft);
+  border-top: 1px solid var(--paper-deep);
+  font-size: 10px;
+}
 .field-block { margin-top: 20px; }
 .save-status { margin: 0; color: var(--ink-soft); font-size: 10px; }
 .save-status.saved { color: var(--sage); }
@@ -1086,6 +1174,11 @@ td { font-size: 9px; }
 .plan-save-row > span { color: var(--ink-soft); font-size: 9px; }
 .primary-button { min-width: 116px; padding: 0 18px; color: var(--paper); background: var(--ink); }
 .primary-button:hover:not(:disabled) { background: #263e56; }
+
+@media (min-width: 1025px) {
+  .position-detail-dialog .plan-editor { max-width: 83%; }
+  .position-detail-dialog .field-block textarea { min-height: 168px; }
+}
 
 @media (max-width: 1024px) {
   .lower-grid { grid-template-columns: 1fr; gap: 32px; }
@@ -1240,6 +1333,15 @@ td { font-size: 9px; }
     --dialog-max-height: calc(100dvh - 20px);
     width: calc(100% - 20px);
   }
+  .position-detail-dialog {
+    inset: 0;
+    width: 100vw;
+    height: 100dvh;
+    border: 0;
+    transform: none;
+  }
+  .position-detail-dialog-toolbar { min-height: 44px; padding: 0 12px; }
+  .position-detail-dialog-body { width: calc(100% - 24px); padding: 0 0 52px; }
   .detail-shell { width: calc(100% - 24px); padding-top: 16px; }
   .back-link { margin-bottom: 18px; }
   .detail-hero { min-height: 170px; align-items: flex-start; flex-direction: column; gap: 24px; }

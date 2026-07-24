@@ -19,7 +19,17 @@ const ACTION_LABELS: Record<PlanAction, string> = {
   target: "目标",
 };
 
-export function PlanEditor({ ticker, initialPlan, unavailable = false }: { ticker: string; initialPlan: HoldingPlanRecord | null; unavailable?: boolean }) {
+export function PlanEditor({
+  ticker,
+  initialPlan,
+  unavailable = false,
+  onDirtyChange,
+}: {
+  ticker: string;
+  initialPlan: HoldingPlanRecord | null;
+  unavailable?: boolean;
+  onDirtyChange?: (dirty: boolean) => void;
+}) {
   const [holdingReason, setHoldingReason] = useState(initialPlan?.holdingReason ?? "");
   const [levels, setLevels] = useState<EditableLevel[]>(() => initialPlan?.levels.map((level) => ({
     id: level.id,
@@ -35,11 +45,13 @@ export function PlanEditor({ ticker, initialPlan, unavailable = false }: { ticke
     if (levels.length >= 20) return;
     setLevels((current) => [...current, { id: crypto.randomUUID(), action: "add", price: "", sizeNote: "", triggerNote: "" }]);
     setStatus("idle");
+    onDirtyChange?.(true);
   };
 
   const updateLevel = (id: string, patch: Partial<EditableLevel>) => {
     setLevels((current) => current.map((level) => level.id === id ? { ...level, ...patch } : level));
     setStatus("idle");
+    onDirtyChange?.(true);
   };
 
   const moveLevel = (index: number, offset: number) => {
@@ -51,6 +63,13 @@ export function PlanEditor({ ticker, initialPlan, unavailable = false }: { ticke
       return next;
     });
     setStatus("idle");
+    onDirtyChange?.(true);
+  };
+
+  const removeLevel = (id: string) => {
+    setLevels((current) => current.filter((item) => item.id !== id));
+    setStatus("idle");
+    onDirtyChange?.(true);
   };
 
   const save = async () => {
@@ -78,6 +97,7 @@ export function PlanEditor({ ticker, initialPlan, unavailable = false }: { ticke
       if (!response.ok) throw new Error(result.error ?? "计划保存失败。");
       setStatus("saved");
       setMessage("计划已保存");
+      onDirtyChange?.(false);
     } catch (error) {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "计划保存失败。");
@@ -98,7 +118,7 @@ export function PlanEditor({ ticker, initialPlan, unavailable = false }: { ticke
         <span>持仓原因</span>
         <textarea
           value={holdingReason}
-          onChange={(event) => { setHoldingReason(event.target.value); setStatus("idle"); }}
+          onChange={(event) => { setHoldingReason(event.target.value); setStatus("idle"); onDirtyChange?.(true); }}
           placeholder="为什么持有它？什么事实支持这个判断？"
           maxLength={5_000}
           rows={6}
@@ -122,7 +142,7 @@ export function PlanEditor({ ticker, initialPlan, unavailable = false }: { ticke
             <div className="level-actions">
               <button type="button" onClick={() => moveLevel(index, -1)} disabled={unavailable || index === 0} aria-label={`上移第 ${index + 1} 条点位`}>↑</button>
               <button type="button" onClick={() => moveLevel(index, 1)} disabled={unavailable || index === levels.length - 1} aria-label={`下移第 ${index + 1} 条点位`}>↓</button>
-              <button type="button" onClick={() => setLevels((current) => current.filter((item) => item.id !== level.id))} disabled={unavailable} aria-label={`删除第 ${index + 1} 条点位`}>删除</button>
+              <button type="button" onClick={() => removeLevel(level.id)} disabled={unavailable} aria-label={`删除第 ${index + 1} 条点位`}>删除</button>
             </div>
           </article>
         ))}
@@ -136,4 +156,3 @@ export function PlanEditor({ ticker, initialPlan, unavailable = false }: { ticke
     </section>
   );
 }
-

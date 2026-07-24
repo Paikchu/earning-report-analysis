@@ -10,6 +10,7 @@ const heatmapHoldings = buildHeatmapHoldings(snapshot);
 const portfolio = buildPortfolioViewModel(snapshot);
 const totalPnl = snapshot.account.netLiquidation - snapshot.account.netDeposits;
 const totalPnlRate = snapshot.account.netDeposits === 0 ? 0 : totalPnl / snapshot.account.netDeposits * 100;
+const snapshotTime = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Shanghai" }).format(new Date(snapshot.generatedAt));
 
 export default function Home() {
   return (
@@ -37,6 +38,7 @@ export default function Home() {
           stockMarketValue={portfolio.stockMarketValue}
           optionMarketValue={portfolio.optionMarketValue}
           netPositionsValue={portfolio.netPositionsValue}
+          snapshotTime={snapshotTime}
         />
       </main>
     </>

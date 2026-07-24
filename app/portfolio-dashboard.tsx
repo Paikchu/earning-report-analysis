@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState, type CSSProperties } from "react";
 
 import {
@@ -15,6 +14,7 @@ import type { HeatmapHolding } from "@/lib/portfolio-heatmap";
 import type { PositionGroupView } from "@/lib/portfolio-view-model";
 import { AddPlanDialog } from "./AddPlanDialog";
 import { PortfolioHeatmap } from "./portfolio-heatmap";
+import { PositionDetailDialog, type PositionDetailTarget } from "./PositionDetailDialog";
 
 function Pnl({ value }: { value: number }) {
   const className = value < 0 ? "loss" : value > 0 ? "gain" : "muted";
@@ -134,10 +134,12 @@ function PositionLedger({
   groups,
   activeSymbol,
   onActiveSymbolChange,
+  onOpenPosition,
 }: {
   groups: PositionGroupView[];
   activeSymbol: string | null;
   onActiveSymbolChange: (symbol: string | null) => void;
+  onOpenPosition: (group: PositionGroupView) => void;
 }) {
   const [sortKey, setSortKey] = useState<PositionSortKey>("weight");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -185,14 +187,16 @@ function PositionLedger({
             key={group.symbol}
             style={{ "--holding-color": holdingColor(group.symbol) } as CSSProperties}
           >
-            <div
-              className="position-row"
+            <button
+              aria-label={`查看 ${group.symbol} 持仓详情`}
+              className="position-row position-row-button"
               data-active={activeSymbol === group.symbol}
               onFocus={() => onActiveSymbolChange(group.symbol)}
               onMouseEnter={() => onActiveSymbolChange(group.symbol)}
               onMouseLeave={() => onActiveSymbolChange(null)}
+              onClick={() => onOpenPosition(group)}
+              type="button"
             >
-              <Link className="position-row-link" href={`/positions/${encodeURIComponent(group.symbol)}`} aria-label={`查看 ${group.symbol} 持仓详情`} />
               <span className="position-identity">
                 <i className="holding-mark" aria-hidden="true" />
                 <strong className="symbol">{group.symbol}</strong>
@@ -209,7 +213,7 @@ function PositionLedger({
               <span data-label="年内已实现"><Pnl value={group.realized} /></span>
               <span data-label="年内净盈亏"><Pnl value={group.netPnl} /></span>
               <span className="row-arrow" aria-hidden="true">→</span>
-            </div>
+            </button>
             {group.stock && group.options.length > 0 && (
               <div className="position-submenu" aria-label={`${group.symbol} 正股与期权持仓`}>
                 <div className="position-submenu-row">
@@ -242,39 +246,59 @@ export function PortfolioDashboard({
   stockMarketValue,
   optionMarketValue,
   netPositionsValue,
+  snapshotTime,
 }: {
   heatmapHoldings: HeatmapHolding[];
   positionGroups: PositionGroupView[];
   stockMarketValue: number;
   optionMarketValue: number;
   netPositionsValue: number;
+  snapshotTime: string;
 }) {
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
+  const [selectedPosition, setSelectedPosition] = useState<PositionDetailTarget | null>(null);
 
   return (
-    <section className="lower-grid">
-      <aside className="allocation-panel">
-        <h2>仓位构成</h2>
-        <div className="section-divider" aria-hidden="true" />
-        <AllocationRing groups={positionGroups} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
-        <PortfolioHeatmap holdings={heatmapHoldings} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
-      </aside>
+    <>
+      <section className="lower-grid">
+        <aside className="allocation-panel">
+          <h2>仓位构成</h2>
+          <div className="section-divider" aria-hidden="true" />
+          <AllocationRing groups={positionGroups} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
+          <PortfolioHeatmap holdings={heatmapHoldings} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
+        </aside>
 
-      <section className="ledger-panel" aria-labelledby="ledger-title">
-        <div className="ledger-heading">
-          <h2 id="ledger-title">投资账本</h2>
-          <AddPlanDialog />
-        </div>
-        <div className="section-divider" aria-hidden="true" />
-        <div className="ledger-content">
-          <div className="ledger-meta">
-            <span>持仓净市值 <strong>{money(netPositionsValue)}</strong></span>
-            <span>正股 <strong>{money(stockMarketValue)}</strong></span>
-            <span>期权 <strong>{money(optionMarketValue)}</strong></span>
+        <section className="ledger-panel" aria-labelledby="ledger-title">
+          <div className="ledger-heading">
+            <h2 id="ledger-title">投资账本</h2>
+            <AddPlanDialog onSelect={(result) => {
+              const position = positionGroups.find((group) => group.symbol === result.symbol);
+              setSelectedPosition({ symbol: result.symbol, name: result.name, position });
+            }} />
           </div>
-          <PositionLedger groups={positionGroups} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
-        </div>
+          <div className="section-divider" aria-hidden="true" />
+          <div className="ledger-content">
+            <div className="ledger-meta">
+              <span>持仓净市值 <strong>{money(netPositionsValue)}</strong></span>
+              <span>正股 <strong>{money(stockMarketValue)}</strong></span>
+              <span>期权 <strong>{money(optionMarketValue)}</strong></span>
+            </div>
+            <PositionLedger
+              groups={positionGroups}
+              activeSymbol={activeSymbol}
+              onActiveSymbolChange={setActiveSymbol}
+              onOpenPosition={(group) => setSelectedPosition({ symbol: group.symbol, name: group.name, position: group })}
+            />
+          </div>
+        </section>
       </section>
-    </section>
+      {selectedPosition && (
+        <PositionDetailDialog
+          onClose={() => setSelectedPosition(null)}
+          snapshotTime={snapshotTime}
+          target={selectedPosition}
+        />
+      )}
+    </>
   );
 }

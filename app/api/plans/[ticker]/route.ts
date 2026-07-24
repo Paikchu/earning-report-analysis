@@ -1,9 +1,25 @@
 import { getChatGPTUser } from "@/app/chatgpt-auth";
 import { getD1 } from "@/db";
 import { validateHoldingPlanInput } from "@/lib/holding-plan";
-import { saveHoldingPlan } from "@/lib/holding-plan-store";
+import { getHoldingPlan, saveHoldingPlan } from "@/lib/holding-plan-store";
 import { isSameOriginRequest } from "@/lib/request-security";
 import { findSecurity } from "@/lib/site-data";
+
+export async function GET(_request: Request, context: { params: Promise<{ ticker: string }> }) {
+  const user = await getChatGPTUser();
+  if (!user) return Response.json({ error: "未登录。" }, { status: 401 });
+
+  const { ticker } = await context.params;
+  const security = findSecurity(ticker);
+  if (!security) return Response.json({ error: "未找到对应的美股或 ETF。" }, { status: 404 });
+
+  try {
+    const plan = await getHoldingPlan(await getD1(), user.email, security.symbol);
+    return Response.json({ plan });
+  } catch {
+    return Response.json({ error: "计划暂时无法读取，请稍后重试。" }, { status: 500 });
+  }
+}
 
 export async function PUT(request: Request, context: { params: Promise<{ ticker: string }> }) {
   const user = await getChatGPTUser();
