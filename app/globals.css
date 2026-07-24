@@ -625,7 +625,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .position-detail-dialog {
   position: fixed;
   inset: 50% auto auto 50%;
-  width: min(1440px, calc(100vw - 48px));
+  width: min(1180px, calc(100vw - 48px));
   height: calc(100dvh - 48px);
   max-width: none;
   max-height: none;
