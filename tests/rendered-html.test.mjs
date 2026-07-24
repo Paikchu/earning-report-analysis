@@ -204,6 +204,20 @@ test("uses semantic color tokens, stable holding marks, and a filled plan button
   assert.doesNotMatch(css, /\.option-pill \{[^]*?color: #8b3b2b;/);
 });
 
+test("uses investment theme colors for heatmap headers and holding marks", async () => {
+  const [dashboard, heatmap, css] = await Promise.all([
+    readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/portfolio-heatmap.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(dashboard, /"--holding-color": heatmapThemeColor\(group\.symbol\)/);
+  assert.match(heatmap, /"--theme-color": heatmapDomainColor\(group\.domain\)/);
+  assert.match(heatmap, /"--holding-color": heatmapThemeColor\(symbol\)/);
+  assert.match(css, /\.heatmap-domain-heading\s*\{[^}]*background:\s*color-mix\(in oklch, var\(--theme-color\) 34%, var\(--paper\)\);[^}]*box-shadow:\s*inset 0 4px 0 var\(--theme-color\);/s);
+  assert.match(css, /\.holding-mark\s*\{[^}]*background:\s*var\(--holding-color\);/s);
+});
+
 test("keeps small text high-contrast and visibly weighted", async () => {
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 

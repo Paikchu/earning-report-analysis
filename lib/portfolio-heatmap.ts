@@ -16,6 +16,29 @@ export const HEATMAP_DOMAINS = {
   MSTR: "数字资产",
 } as const satisfies Record<string, string>;
 
+export const HEATMAP_DOMAIN_COLORS = {
+  "现金管理": "#52718f",
+  "AI / 企业软件": "#2e6fdb",
+  "半导体": "#d27a1d",
+  "智能汽车": "#c45235",
+  "太空与通信": "#16888e",
+  "数字资产": "#7654c6",
+  "其他": "#68717b",
+} as const;
+
+export function heatmapDomain(symbol: string) {
+  const normalized = symbol.trim().toUpperCase();
+  return HEATMAP_DOMAINS[normalized as keyof typeof HEATMAP_DOMAINS] ?? "其他";
+}
+
+export function heatmapDomainColor(domain: string) {
+  return HEATMAP_DOMAIN_COLORS[domain as keyof typeof HEATMAP_DOMAIN_COLORS] ?? HEATMAP_DOMAIN_COLORS.其他;
+}
+
+export function heatmapThemeColor(symbol: string) {
+  return heatmapDomainColor(heatmapDomain(symbol));
+}
+
 export interface HeatmapHolding {
   symbol: string;
   company: string;
@@ -91,7 +114,7 @@ export function buildHeatmapHoldings(snapshot: PortfolioSnapshotV1): HeatmapHold
     .map((position) => ({
       symbol: position.symbol,
       company: companyNames[position.symbol] ?? position.contractDescription,
-      domain: HEATMAP_DOMAINS[position.symbol as keyof typeof HEATMAP_DOMAINS] ?? "其他",
+      domain: heatmapDomain(position.symbol),
       marketValue: position.marketValue,
       portfolioWeight: position.marketValue / snapshot.account.netLiquidation * 100,
       costBasis: position.costBasis,

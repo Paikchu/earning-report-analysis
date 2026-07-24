@@ -5,17 +5,19 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import {
   calculatePopoverPosition,
   groupHeatmapHoldings,
+  heatmapDomainColor,
+  heatmapThemeColor,
   heatmapTileDensity,
   layoutTreemap,
   type HeatmapHolding,
   type HeatmapTileDensity,
 } from "@/lib/portfolio-heatmap";
-import { holdingColor } from "@/lib/portfolio-dashboard";
 import { money, percent } from "@/lib/portfolio-format";
 
 const signedPercent = (value: number) => percent(value, true);
 
 type HeatStyle = CSSProperties & { "--heat-strength": string; "--holding-color": string };
+type DomainStyle = CSSProperties & { "--theme-color": string };
 type PopoverState = { symbol: string; left: number; top: number };
 
 const densityClassNames: Record<HeatmapTileDensity, string> = {
@@ -27,7 +29,7 @@ const densityClassNames: Record<HeatmapTileDensity, string> = {
 function heatStyle(symbol: string, rate: number): HeatStyle {
   return {
     "--heat-strength": `${Math.min(Math.abs(rate), 25) / 25 * 62}%`,
-    "--holding-color": holdingColor(symbol),
+    "--holding-color": heatmapThemeColor(symbol),
   };
 }
 
@@ -140,11 +142,12 @@ export function PortfolioHeatmap({
               key={group.domain}
               aria-label={`${group.domain}，组合权重 ${group.portfolioWeight.toFixed(2)}%`}
               style={{
+                "--theme-color": heatmapDomainColor(group.domain),
                 left: `${groupRect.x / plotSize.width * 100}%`,
                 top: `${groupRect.y / plotSize.height * 100}%`,
                 width: `${groupRect.width / plotSize.width * 100}%`,
                 height: `${groupRect.height / plotSize.height * 100}%`,
-              }}
+              } as DomainStyle}
             >
               <div className="heatmap-domain-heading">
                 <span>{group.domain}</span>

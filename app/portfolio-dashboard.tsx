@@ -11,7 +11,7 @@ import {
 } from "@/lib/portfolio-dashboard";
 import { buildEarningsReminder, type EarningsEvent } from "@/lib/earnings-calendar";
 import { money, number, percent } from "@/lib/portfolio-format";
-import type { HeatmapHolding } from "@/lib/portfolio-heatmap";
+import { heatmapThemeColor, type HeatmapHolding } from "@/lib/portfolio-heatmap";
 import type { PositionGroupView } from "@/lib/portfolio-view-model";
 import { AddPlanDialog } from "./AddPlanDialog";
 import { PortfolioHeatmap } from "./portfolio-heatmap";
@@ -214,7 +214,7 @@ function PositionLedger({
           <div
             className="position-group"
             key={group.symbol}
-            style={{ "--holding-color": holdingColor(group.symbol) } as CSSProperties}
+            style={{ "--holding-color": heatmapThemeColor(group.symbol) } as CSSProperties}
           >
             <button
               aria-label={`查看 ${group.symbol} 持仓详情`}

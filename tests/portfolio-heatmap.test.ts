@@ -94,6 +94,19 @@ test("groups holdings into the approved investment themes", async () => {
   });
 });
 
+test("assigns one vivid terminal color to every investment theme", async () => {
+  const { heatmapDomainColor, heatmapThemeColor } = await import("../lib/portfolio-heatmap.ts");
+
+  assert.equal(heatmapThemeColor("BOXX"), "#52718f");
+  assert.equal(heatmapThemeColor("MSFT"), "#2e6fdb");
+  assert.equal(heatmapThemeColor("NOW"), heatmapThemeColor("MSFT"));
+  assert.equal(heatmapThemeColor("NVDA"), "#d27a1d");
+  assert.equal(heatmapThemeColor("TSLA"), "#c45235");
+  assert.equal(heatmapThemeColor("RKLB"), "#16888e");
+  assert.equal(heatmapThemeColor("MSTR"), "#7654c6");
+  assert.equal(heatmapThemeColor("UNKNOWN"), heatmapDomainColor("其他"));
+});
+
 test("uses other for unknown symbols and neutral performance for zero cost", async () => {
   const { buildHeatmapHoldings } = await import("../lib/portfolio-heatmap.ts");
   const fixture: PortfolioSnapshotV1 = {
