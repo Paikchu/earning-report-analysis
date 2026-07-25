@@ -6,6 +6,7 @@ import type { PositionGroupView } from "@/lib/portfolio-view-model";
 import type { MarketQuote } from "@/lib/yahoo-quotes";
 import { useMarketQuotes, type QuoteLoadStatus } from "@/app/use-market-quotes";
 import { PlanEditor } from "./PlanEditor";
+import { SecFilingsSection } from "./SecFilingsSection";
 
 export type PositionPlanStatus = "ready" | "loading" | "unavailable";
 
@@ -90,6 +91,8 @@ export function PositionDetailContent({
       ) : (
         <section className="no-position"><strong>暂无持仓数据</strong><span>这份计划不会写入 IBKR 账本；建立持仓后，快照数据会自动出现在这里。</span></section>
       )}
+
+      <SecFilingsSection ticker={ticker} />
 
       {planStatus === "loading" ? (
         <section className="plan-editor plan-loading" aria-labelledby="plan-loading-title">

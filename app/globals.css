@@ -1258,6 +1258,7 @@ td { font-size: 9px; }
 .position-summary strong { overflow: hidden; font: 600 20px/1.1 var(--serif); font-variant-numeric: tabular-nums lining-nums; text-overflow: ellipsis; white-space: nowrap; }
 
 .instrument-section,
+.sec-filings-section,
 .plan-editor { padding-top: 46px; }
 
 .detail-section-heading,
@@ -1281,6 +1282,83 @@ td { font-size: 9px; }
 
 .no-position strong { font: 600 18px/1.1 var(--serif); }
 .no-position span { color: var(--ink-soft); font-size: 10px; }
+
+.sec-filings-section { max-width: 980px; }
+.sec-updated { color: var(--ink-soft); font-size: 9px; }
+.sec-state {
+  margin: 18px 0 0;
+  padding: 24px 0;
+  color: var(--ink-soft);
+  border-top: 1px solid var(--paper-deep);
+  font-size: 10px;
+}
+.sec-state-error,
+.sec-summary-error { color: var(--color-loss); }
+.sec-stale {
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  color: #6c5534;
+  background: #f1ead9;
+  font-size: 9px;
+}
+.sec-filing-list { margin-top: 16px; border-top: 1px solid var(--ink); }
+.sec-filing-card { border-bottom: 1px solid var(--paper-deep); }
+.sec-filing-card > button {
+  width: 100%;
+  min-height: 68px;
+  padding: 13px 4px;
+  display: grid;
+  grid-template-columns: 58px 108px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 14px;
+  color: var(--ink);
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.sec-filing-card > button:hover { background: color-mix(in srgb, var(--paper-deep) 34%, transparent); }
+.sec-filing-card > button:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.sec-form-badge {
+  width: fit-content;
+  padding: 5px 7px;
+  color: var(--paper);
+  background: var(--ink);
+  font: 650 9px/1 var(--sans);
+  letter-spacing: .04em;
+}
+.sec-filing-date,
+.sec-filing-description { min-width: 0; display: grid; gap: 5px; }
+.sec-filing-date strong,
+.sec-filing-description strong { overflow: hidden; font: 600 12px/1.2 var(--serif); text-overflow: ellipsis; white-space: nowrap; }
+.sec-filing-date small,
+.sec-filing-description small { color: var(--ink-soft); font-size: 8px; }
+.sec-disclosure { color: var(--ink-soft); font: 500 18px/1 var(--serif); text-align: center; }
+.sec-filing-body { padding: 3px 4px 20px 180px; }
+.sec-filing-body > a { color: var(--ink-soft); font-size: 9px; text-decoration: none; }
+.sec-filing-body > a:hover { color: var(--ink); }
+.sec-summary { display: grid; gap: 14px; }
+.sec-summary-headline { margin: 0; max-width: 760px; font: 600 19px/1.4 var(--serif); }
+.sec-summary ul { margin: 0; padding: 0; display: grid; gap: 10px; list-style: none; }
+.sec-summary li { display: grid; grid-template-columns: 7px minmax(0, 1fr); align-items: start; gap: 9px; }
+.sec-summary li i { width: 5px; height: 5px; margin-top: 6px; background: var(--ink-soft); border-radius: 50%; }
+.sec-summary li[data-importance="high"] i { background: var(--color-loss); }
+.sec-summary li[data-importance="low"] i { background: var(--paper-deep); }
+.sec-summary li span { color: var(--ink-soft); font-size: 10px; line-height: 1.6; }
+.sec-summary li strong { margin-right: 7px; color: var(--ink); }
+.sec-analyst-view {
+  margin: 0;
+  padding: 13px 14px;
+  display: grid;
+  gap: 5px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper-deep) 48%, transparent);
+  font: 600 11px/1.55 var(--serif);
+}
+.sec-analyst-view span { color: var(--ink-soft); font: 650 8px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; }
+.sec-ai-note { padding-bottom: 3px; color: var(--ink-soft); font-size: 8px; }
+.sec-summary-pending,
+.sec-summary-error { margin: 0 0 14px; font-size: 10px; }
 
 .plan-editor { max-width: 980px; }
 .plan-loading > p {
@@ -1523,7 +1601,11 @@ td { font-size: 9px; }
   .position-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 16px; }
   .position-summary strong { font-size: 17px; }
   .instrument-section,
+  .sec-filings-section,
   .plan-editor { padding-top: 38px; }
+  .sec-filing-card > button { grid-template-columns: 50px minmax(0, 1fr) 18px; gap: 10px; }
+  .sec-filing-date { display: none; }
+  .sec-filing-body { padding-left: 4px; }
   .detail-section-heading { align-items: flex-start; flex-direction: column; gap: 9px; }
   .levels-heading { align-items: flex-start; }
   .levels-heading p { max-width: 230px; }

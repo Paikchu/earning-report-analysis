@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const holdingPlans = sqliteTable("holding_plans", {
   id: text("id").primaryKey(),
@@ -20,3 +20,18 @@ export const planLevels = sqliteTable("plan_levels", {
   triggerNote: text("trigger_note").notNull().default(""),
   sortOrder: integer("sort_order").notNull(),
 });
+
+export const secCache = sqliteTable("sec_cache", {
+  cacheKey: text("cache_key").primaryKey(),
+  payload: text("payload").notNull(),
+  fetchedAt: text("fetched_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const secFilingSummaries = sqliteTable("sec_filing_summaries", {
+  ticker: text("ticker").notNull(),
+  accessionNumber: text("accession_number").notNull(),
+  generatedAt: text("generated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  payload: text("payload").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.ticker, table.accessionNumber] }),
+]);
