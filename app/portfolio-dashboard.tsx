@@ -95,17 +95,27 @@ function PortfolioHeader({
   );
 }
 
-function EarningsCell({ event, asOf }: { event?: EarningsEvent; asOf: string }) {
-  if (!event) return <i className="quote-muted">未公布</i>;
-  const reminder = buildEarningsReminder(event, asOf);
+function EarningsWindow({ event, asOf }: { event?: EarningsEvent; asOf: string }) {
+  if (!event) {
+    return (
+      <span className="earnings-window" data-empty="true" title="预计财报日期尚未公布">
+        <i>财报</i>
+        <span><strong>未公布</strong><small>等待日程</small></span>
+      </span>
+    );
+  }
 
+  const reminder = buildEarningsReminder(event, asOf);
   return (
     <span
-      className="earnings-cell"
+      className="earnings-window"
       title={`美股 ${reminder.releaseDateLabel}${reminder.sessionLabel}发布；北京 ${reminder.viewDateLabel}${reminder.viewTimeLabel}查看`}
     >
-      <strong>{reminder.releaseDateLabel} · {reminder.sessionLabel}</strong>
-      <small>北京{reminder.viewDateLabel}{reminder.viewTimeLabel} · {reminder.countdownLabel}</small>
+      <i>财报</i>
+      <span>
+        <strong>{reminder.releaseDateLabel} · {reminder.sessionLabel}</strong>
+        <small>北京{reminder.viewDateLabel}{reminder.viewTimeLabel} · {reminder.countdownLabel}</small>
+      </span>
     </span>
   );
 }
@@ -212,7 +222,6 @@ const columns: Array<{ className?: string; key?: PositionSortKey; label: string 
   { className: "column-center", label: "构成" },
   { label: "股价" },
   { label: "当日涨跌" },
-  { className: "column-center", label: "财报（预计）" },
   { key: "value", label: "净市值" },
   { key: "weight", label: "净权重" },
   { key: "cost", label: "持仓成本" },
@@ -299,8 +308,11 @@ function PositionLedger({
             >
               <span className="position-identity">
                 <i className="holding-mark" aria-hidden="true" />
-                <strong className="symbol">{group.symbol}</strong>
-                <small className="company">{group.name}</small>
+                <span className="position-name">
+                  <strong className="symbol">{group.symbol}</strong>
+                  <small className="company">{group.name}</small>
+                </span>
+                <EarningsWindow event={earningsBySymbol.get(group.symbol)} asOf={earningsUpdatedAt} />
               </span>
               <span className="position-kinds" data-label="构成">
                 {group.stock && <i className="asset-pill stock-pill">正股</i>}
@@ -320,9 +332,6 @@ function PositionLedger({
                     </span>
                   )
                   : <i className="quote-muted">{quoteStatus === "loading" ? "读取中" : "—"}</i>}
-              </span>
-              <span className="position-earnings" data-label="财报（预计）">
-                <EarningsCell event={earningsBySymbol.get(group.symbol)} asOf={earningsUpdatedAt} />
               </span>
               <span data-label="净市值">{money(group.value)}</span>
               <span data-label="净权重">{percent(group.weight)}</span>

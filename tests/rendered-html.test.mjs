@@ -98,14 +98,21 @@ test("uses the approved ledger-dominant hierarchy without horizontal scrolling",
   assert.match(css, /\.table-wrap \{[\s\S]*?overscroll-behavior: auto;/);
 });
 
-test("renders the mobile earnings reminder as a full-width readable row", async () => {
-  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+test("keeps earnings out of the ledger columns and beside the ticker", async () => {
+  const [dashboard, css] = await Promise.all([
+    readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
   const mobileCss = css.match(/@media \(max-width: 620px\) \{([\s\S]*)\}\s*$/)?.[1] ?? "";
 
-  assert.match(mobileCss, /\.position-earnings \{[^}]*grid-column: 1 \/ -1;[^}]*display: grid;[^}]*grid-template-columns: 72px minmax\(0, 1fr\);[^}]*text-align: left;/);
-  assert.match(mobileCss, /\.position-earnings \.earnings-cell \{[^}]*min-width: 0;[^}]*justify-items: start;[^}]*text-align: left;/);
-  assert.match(mobileCss, /\.position-earnings \.earnings-cell strong \{[^}]*font-size: 12px;/);
-  assert.match(mobileCss, /\.position-earnings \.earnings-cell small \{[^}]*font-size: 9px;[^}]*overflow-wrap: anywhere;/);
+  assert.doesNotMatch(dashboard, /label: "财报（预计）"/);
+  assert.match(dashboard, /className="position-identity"[\s\S]*?<EarningsWindow/);
+  assert.match(dashboard, /className="earnings-window"/);
+  assert.doesNotMatch(dashboard, /className="position-earnings"/);
+  assert.match(css, /\.position-identity\s*\{[^}]*grid-template-columns:\s*4px minmax\(0, 1fr\) auto;/s);
+  assert.match(css, /\.earnings-window\s*\{[^}]*border:\s*1px solid var\(--paper-deep\);[^}]*background:\s*rgb\(230 220 203 \/ 44%\);/s);
+  assert.match(mobileCss, /\.position-identity \{[^}]*grid-column: 1 \/ -1;[^}]*grid-template-columns: 4px minmax\(0, 1fr\) minmax\(126px, 42%\);/);
+  assert.match(mobileCss, /\.earnings-window \{[^}]*width: 100%;[^}]*min-height: 42px;/);
 });
 
 test("removes the portfolio history chart while keeping supporting metrics", async () => {
@@ -262,20 +269,17 @@ test("keeps small text high-contrast and visibly weighted", async () => {
   assert.match(css, /-webkit-font-smoothing:\s*auto/);
 });
 
-test("emphasizes daily changes and centers composition and earnings", async () => {
+test("emphasizes daily changes and centers composition", async () => {
   const [dashboard, css] = await Promise.all([
     readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
   assert.match(dashboard, /className="daily-change-value/);
-  assert.match(dashboard, /className="position-earnings"/);
   assert.match(css, /--daily-gain:\s*#315b3d/);
   assert.match(css, /--daily-loss:\s*#8f2f25/);
   assert.match(css, /\.daily-change-value\s*\{[^}]*font-size:\s*11px;[^}]*font-weight:\s*650;/s);
   assert.match(css, /\.position-kinds\s*\{[^}]*justify-content:\s*center;/s);
-  assert.match(css, /\.position-earnings\s*\{[^}]*justify-content:\s*center;[^}]*text-align:\s*center;/s);
-  assert.match(css, /\.earnings-cell\s*\{[^}]*justify-items:\s*center;[^}]*text-align:\s*center;/s);
   assert.match(css, /@media \(max-width: 620px\)[^]*?\.daily-change-value \{ font-size: 12px; \}/);
 });
 
@@ -323,6 +327,11 @@ test("renders stock and option submenus directly below mixed holding rows", asyn
   assert.doesNotMatch(dashboard, /breakdownSymbol|breakdown-trigger|position-breakdown|持仓拆分/);
   assert.match(css, /\.position-submenu \{[^]*?display: grid;/);
   assert.match(css, /\.position-submenu-row \{[^]*?grid-template-columns:/);
+  const mobileCss = css.match(/@media \(max-width: 620px\) \{([\s\S]*)\}\s*$/)?.[1] ?? "";
+  assert.match(mobileCss, /\.position-submenu \{[^}]*width: min\(calc\(100% - 8px\), 620px\);[^}]*margin: 0 auto 10px;/);
+  assert.match(mobileCss, /\.position-submenu-row \{[^}]*min-height: 34px;[^}]*grid-template-columns: 32px minmax\(0, 1fr\) auto 76px;[^}]*text-align: center;/);
+  assert.match(mobileCss, /\.position-submenu-row \.submenu-value \{ text-align: center; \}/);
+  assert.doesNotMatch(mobileCss, /\.position-submenu-row \.(?:submenu-type|submenu-quantity|submenu-value) \{[^}]*grid-row:/);
 });
 
 test("opens position details in a homepage workspace dialog without navigation", async () => {
@@ -430,7 +439,7 @@ test("uses page-scrolling cards for mobile position details", async () => {
   assert.match(css, /\.instrument-table thead \{ display: none; \}/);
   assert.match(css, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
   assert.match(css, /\.row-arrow \{\s*position: absolute;/);
-  assert.match(css, /\.position-identity \{ grid-column: 1 \/ -1; \}/);
+  assert.match(css, /\.position-identity\s*\{[^}]*grid-column: 1 \/ -1;/);
   assert.match(css, /\.position-kinds \{ grid-column: 1 \/ -1;/);
 });
 
