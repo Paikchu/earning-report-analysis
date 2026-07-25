@@ -175,7 +175,9 @@ test("keeps domain headers outside the holding tile area", async () => {
   assert.match(css, /\.heatmap-domain-tiles \{[^]*?inset: 22px 0 0;/);
   assert.doesNotMatch(css, /\.heatmap-domain-compact \.heatmap-domain-heading \{ display: none; \}/);
   assert.match(css, /\.heatmap-domain-compact \.heatmap-domain-heading \{[^]*?display: flex;/);
-  assert.match(css, /\.heatmap-domain-narrow \.heatmap-domain-heading \{[^]*?writing-mode: vertical-rl;/);
+  assert.match(css, /\.heatmap-domain-compact \.heatmap-domain-tiles \{ inset: 16px 0 0; \}/);
+  assert.match(css, /\.heatmap-domain-narrow \.heatmap-domain-heading \{[^]*?height: 18px;[^]*?writing-mode: horizontal-tb;/);
+  assert.match(css, /\.heatmap-domain-narrow \.heatmap-domain-tiles \{ inset: 18px 0 0; \}/);
   assert.match(component, /heatmapDomainDensity/);
   assert.match(component, /insetTreemapRectangle/);
 });
