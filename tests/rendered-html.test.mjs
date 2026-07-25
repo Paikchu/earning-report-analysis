@@ -167,10 +167,17 @@ test("renders the stock-only investment theme heatmap", async () => {
 });
 
 test("keeps domain headers outside the holding tile area", async () => {
-  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const [component, css] = await Promise.all([
+    readFile(new URL("../app/portfolio-heatmap.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
 
   assert.match(css, /\.heatmap-domain-tiles \{[^]*?inset: 22px 0 0;/);
-  assert.match(css, /\.heatmap-domain-compact \.heatmap-domain-tiles \{ inset: 0; \}/);
+  assert.doesNotMatch(css, /\.heatmap-domain-compact \.heatmap-domain-heading \{ display: none; \}/);
+  assert.match(css, /\.heatmap-domain-compact \.heatmap-domain-heading \{[^]*?display: flex;/);
+  assert.match(css, /\.heatmap-domain-narrow \.heatmap-domain-heading \{[^]*?writing-mode: vertical-rl;/);
+  assert.match(component, /heatmapDomainDensity/);
+  assert.match(component, /insetTreemapRectangle/);
 });
 
 test("uses an in-plot floating window for holding details", async () => {
@@ -199,7 +206,6 @@ test("keeps the heatmap responsive and keyboard reachable", async () => {
 
   assert.match(dashboard, /PortfolioHeatmap/);
   assert.match(css, /\.heatmap-plot \{[^]*?overflow: hidden;/);
-  assert.match(css, /\.heatmap-domain-compact \.heatmap-domain-heading \{ display: none; \}/);
   assert.match(css, /\.heatmap-tile:focus-visible/);
   assert.match(component, /onFocus=/);
   assert.match(component, /onBlur=/);
@@ -264,6 +270,8 @@ test("uses investment theme colors for heatmap headers and holding marks", async
   assert.match(heatmap, /"--theme-color": heatmapDomainColor\(group\.domain\)/);
   assert.match(heatmap, /"--holding-color": heatmapThemeColor\(symbol\)/);
   assert.match(css, /\.heatmap-domain-heading\s*\{[^}]*background:\s*color-mix\(in oklch, var\(--theme-color\) 34%, var\(--paper\)\);[^}]*box-shadow:\s*inset 0 4px 0 var\(--theme-color\);/s);
+  assert.match(css, /\.heatmap-tile\[data-direction="loss"\]\s*\{[^}]*color-mix\(in oklch,/s);
+  assert.match(css, /\.heatmap-tile\[data-direction="gain"\]\s*\{[^}]*color-mix\(in oklch,/s);
   assert.match(css, /\.holding-mark\s*\{[^}]*background:\s*var\(--holding-color\);/s);
 });
 

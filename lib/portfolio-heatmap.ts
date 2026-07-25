@@ -62,6 +62,7 @@ export interface TreemapInput {
 }
 
 export type HeatmapTileDensity = "full" | "compact" | "symbol-only";
+export type HeatmapDomainDensity = "full" | "compact" | "narrow";
 
 export type TreemapRectangle<T extends TreemapInput> = T & {
   x: number;
@@ -81,6 +82,35 @@ export function heatmapTileDensity(width: number, height: number): HeatmapTileDe
   if (width < 32 || height < 28) return "symbol-only";
   if (width * height < 1_800 || width < 58 || height < 48) return "compact";
   return "full";
+}
+
+export function heatmapDomainDensity(width: number, height: number): HeatmapDomainDensity {
+  if (width < 48) return "narrow";
+  if (width < 78 || height < 64) return "compact";
+  return "full";
+}
+
+export function heatmapColorStrength(rate: number) {
+  if (!Number.isFinite(rate) || Math.abs(rate) < 0.01) return 0;
+  const normalized = Math.min(Math.abs(rate), 25) / 25;
+  return Math.round((18 + normalized * 70) * 10) / 10;
+}
+
+export function insetTreemapRectangle<T extends TreemapInput>(
+  rectangle: TreemapRectangle<T>,
+  gap = 6,
+): TreemapRectangle<T> {
+  const safeGap = Number.isFinite(gap)
+    ? Math.max(0, Math.min(gap, rectangle.width - 1, rectangle.height - 1))
+    : 0;
+  const inset = safeGap / 2;
+  return {
+    ...rectangle,
+    x: rectangle.x + inset,
+    y: rectangle.y + inset,
+    width: rectangle.width - safeGap,
+    height: rectangle.height - safeGap,
+  };
 }
 
 export function calculatePopoverPosition(

@@ -5,9 +5,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import {
   calculatePopoverPosition,
   groupHeatmapHoldings,
+  heatmapColorStrength,
+  heatmapDomainDensity,
   heatmapDomainColor,
   heatmapThemeColor,
   heatmapTileDensity,
+  insetTreemapRectangle,
   layoutTreemap,
   type HeatmapHolding,
   type HeatmapTileDensity,
@@ -28,7 +31,7 @@ const densityClassNames: Record<HeatmapTileDensity, string> = {
 
 function heatStyle(symbol: string, rate: number): HeatStyle {
   return {
-    "--heat-strength": `${Math.min(Math.abs(rate), 25) / 25 * 62}%`,
+    "--heat-strength": `${heatmapColorStrength(rate)}%`,
     "--holding-color": heatmapThemeColor(symbol),
   };
 }
@@ -50,7 +53,9 @@ export function PortfolioHeatmap({
   const groupRectangles = useMemo(() => layoutTreemap(groups.map((group) => ({
     id: group.domain,
     weight: group.portfolioWeight,
-  })), plotSize.width, plotSize.height), [groups, plotSize]);
+  })), plotSize.width, plotSize.height).map((rectangle) => (
+    insetTreemapRectangle(rectangle)
+  )), [groups, plotSize]);
   const [popover, setPopover] = useState<PopoverState | null>(null);
   const selected = holdings.find((holding) => holding.symbol === popover?.symbol);
   const totalWeight = holdings.reduce((sum, holding) => sum + holding.portfolioWeight, 0);
@@ -134,11 +139,11 @@ export function PortfolioHeatmap({
             id: holding.symbol,
             weight: holding.portfolioWeight,
           })), groupRect.width, groupRect.height);
-          const compactDomain = groupRect.width < 78 || groupRect.height < 64;
+          const domainDensity = heatmapDomainDensity(groupRect.width, groupRect.height);
 
           return (
             <section
-              className={`heatmap-domain${compactDomain ? " heatmap-domain-compact" : ""}`}
+              className={`heatmap-domain heatmap-domain-${domainDensity}`}
               key={group.domain}
               aria-label={`${group.domain}，组合权重 ${group.portfolioWeight.toFixed(2)}%`}
               style={{

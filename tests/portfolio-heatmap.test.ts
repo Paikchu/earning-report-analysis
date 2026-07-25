@@ -182,6 +182,67 @@ test("uses the rendered aspect ratio when laying out narrow screens", async () =
   assert.equal(Number(rectangles.reduce((sum, rectangle) => sum + rectangle.width * rectangle.height, 0).toFixed(2)), 112_480);
 });
 
+test("keeps a readable theme label for compact and narrow domains", async () => {
+  const heatmapModule = await import("../lib/portfolio-heatmap.ts");
+  const domainDensity = (heatmapModule as typeof heatmapModule & {
+    heatmapDomainDensity?: (width: number, height: number) => "full" | "compact" | "narrow";
+  }).heatmapDomainDensity;
+
+  assert.equal(typeof domainDensity, "function");
+  assert.equal(domainDensity!(120, 100), "full");
+  assert.equal(domainDensity!(120, 48), "compact");
+  assert.equal(domainDensity!(32, 100), "narrow");
+  assert.equal(domainDensity!(32, 30), "narrow");
+});
+
+test("creates visible spacing between investment-theme rectangles", async () => {
+  const heatmapModule = await import("../lib/portfolio-heatmap.ts");
+  const insetRectangle = (heatmapModule as typeof heatmapModule & {
+    insetTreemapRectangle?: <T extends { id: string; weight: number; x: number; y: number; width: number; height: number }>(
+      rectangle: T,
+      gap?: number,
+    ) => T;
+  }).insetTreemapRectangle;
+
+  assert.equal(typeof insetRectangle, "function");
+  assert.deepEqual(insetRectangle!({ id: "theme", weight: 1, x: 0, y: 0, width: 100, height: 50 }, 6), {
+    id: "theme",
+    weight: 1,
+    x: 3,
+    y: 3,
+    width: 94,
+    height: 44,
+  });
+});
+
+test("uses a deeper perceptual heat scale with distinct loss levels", async () => {
+  const heatmapModule = await import("../lib/portfolio-heatmap.ts");
+  const colorStrength = (heatmapModule as typeof heatmapModule & {
+    heatmapColorStrength?: (rate: number) => number;
+  }).heatmapColorStrength;
+
+  assert.equal(typeof colorStrength, "function");
+  assert.equal(colorStrength!(0), 0);
+  assert.ok(colorStrength!(-0.68) >= 18);
+  assert.ok(colorStrength!(-16.68) - colorStrength!(-11.22) >= 14);
+  assert.equal(colorStrength!(-25), 88);
+  assert.equal(colorStrength!(-100), 88);
+});
+
+test("keeps every stock in exactly one investment theme, including sub-1% holdings", async () => {
+  const { buildHeatmapHoldings, groupHeatmapHoldings } = await import("../lib/portfolio-heatmap.ts");
+  const holdings = buildHeatmapHoldings(acceptanceSnapshot);
+  const groupedHoldings = groupHeatmapHoldings(holdings).flatMap((group) => group.holdings);
+
+  assert.equal(groupedHoldings.length, holdings.length);
+  assert.deepEqual(
+    groupedHoldings.map((holding) => holding.symbol).sort(),
+    holdings.map((holding) => holding.symbol).sort(),
+  );
+  assert.ok(groupedHoldings.some((holding) => holding.symbol === "SPCX" && holding.portfolioWeight < 1));
+  assert.ok(groupedHoldings.every((holding) => holding.domain.length > 0));
+});
+
 test("keeps the floating detail window inside the plot after resize", async () => {
   const heatmapModule = await import("../lib/portfolio-heatmap.ts");
   const calculatePosition = (heatmapModule as typeof heatmapModule & {
