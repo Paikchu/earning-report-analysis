@@ -981,7 +981,8 @@ button:disabled { cursor: not-allowed; opacity: .45; }
   min-height: 44px;
   padding: 4px 6px;
   color: inherit;
-  font-size: 10px;
+  font-size: 11px;
+  line-height: 1;
   font-weight: 400;
   font-variant-numeric: tabular-nums lining-nums;
   text-decoration: none;
@@ -1013,7 +1014,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 
 .position-reminder strong {
   overflow: hidden;
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1021,7 +1022,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 
 .position-reminder small {
   overflow: hidden;
-  font-size: 6px;
+  font-size: 7px;
   line-height: 1.2;
   opacity: .72;
   text-overflow: ellipsis;
@@ -1081,6 +1082,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .stock-pill,
 .option-pill { color: var(--ink-soft); background: #e4ddd1; }
 
+.position-row .asset-pill { font-size: 9px; }
 .position-kinds > .asset-pill { flex: 0 0 auto; }
 
 .position-submenu {
@@ -1111,7 +1113,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 
 .symbol {
   flex: 0 0 auto;
-  font: 600 13px/1 var(--serif);
+  font: 600 14px/1 var(--serif);
 }
 
 .row-arrow { color: var(--ink-soft); font-size: 13px; justify-self: end; }

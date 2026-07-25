@@ -277,7 +277,7 @@ test("keeps small text high-contrast and visibly weighted", async () => {
   assert.match(css, /-webkit-font-smoothing:\s*auto/);
 });
 
-test("emphasizes daily changes and centers composition", async () => {
+test("enlarges and center-aligns holding row text", async () => {
   const [dashboard, css] = await Promise.all([
     readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
@@ -286,6 +286,13 @@ test("emphasizes daily changes and centers composition", async () => {
   assert.match(dashboard, /className="daily-change-value/);
   assert.match(css, /--daily-gain:\s*#315b3d/);
   assert.match(css, /--daily-loss:\s*#8f2f25/);
+  assert.match(css, /\.position-row\s*\{[^}]*font-size:\s*11px;[^}]*line-height:\s*1;/s);
+  assert.match(css, /\.position-identity\s*\{[^}]*align-items:\s*center;/s);
+  assert.match(css, /\.position-reminder\s*\{[^}]*align-content:\s*center;/s);
+  assert.match(css, /\.symbol\s*\{[^}]*font:\s*600 14px\/1 var\(--serif\);/s);
+  assert.match(css, /\.position-row \.asset-pill\s*\{[^}]*font-size:\s*9px;/s);
+  assert.match(css, /\.position-reminder strong\s*\{[^}]*font-size:\s*9px;/s);
+  assert.match(css, /\.position-reminder small\s*\{[^}]*font-size:\s*7px;/s);
   assert.match(css, /\.daily-change-value\s*\{[^}]*font-size:\s*11px;[^}]*font-weight:\s*650;/s);
   assert.match(css, /\.position-kinds\s*\{[^}]*justify-content:\s*center;/s);
   assert.match(css, /@media \(max-width: 620px\)[^]*?\.daily-change-value \{ font-size: 12px; \}/);
