@@ -43,6 +43,10 @@ test("removes the disposable starter preview", async () => {
   ]);
 
   assert.match(dashboard, /投资组合/);
+  assert.match(dashboard, /<div className="hero">/);
+  assert.match(dashboard, /className="portfolio-heading"/);
+  assert.match(dashboard, /className="summary-support"/);
+  assert.doesNotMatch(dashboard, /MAX \/ PORTFOLIO 01|header-identity/);
   assert.doesNotMatch(page, /LedgerTab|TradeFilter|recentTrades|filteredTrades|switchLedger|updateUrl/);
   assert.doesNotMatch(page, /trade-disclosure|trade-toolbar|交易明细|role="tablist"/);
   assert.match(page, /buildPortfolioViewModel/);
@@ -82,11 +86,11 @@ test("uses the approved ledger-dominant hierarchy without horizontal scrolling",
   assert.match(css, /\.section-divider \{[\s\S]*?border-top: 1px dashed var\(--paper-deep\);/);
   assert.doesNotMatch(css, /min-width:\s*900px/);
   assert.match(css, /\.position-scroll \{[\s\S]*?overflow-x: visible;/);
-  assert.match(css, /\.portfolio-header \{[\s\S]*?background: var\(--ink\);/);
-  assert.match(css, /\.header-main \{[\s\S]*?grid-template-columns:/);
+  assert.match(css, /\.hero \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto;/);
+  assert.match(css, /\.summary-nav-value \{[\s\S]*?font-size: clamp\(48px, 5vw, 56px\);/);
   assert.match(css, /\.market-grid \{[\s\S]*?grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/);
   assert.match(css, /h2 \{[\s\S]*?font: 600 22px\/1\.1 var\(--serif\);/);
-  assert.match(css, /\.header-nav-value \{[\s\S]*?font-size: clamp\(/);
+  assert.doesNotMatch(css, /\.portfolio-header \{[^}]*background:/);
   assert.match(css, /@media \(max-width: 820px\)[\s\S]*?\.market-grid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
   assert.match(css, /font-variant-numeric: tabular-nums lining-nums;/);
   assert.doesNotMatch(css, /overscroll-behavior:\s*contain/);

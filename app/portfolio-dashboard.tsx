@@ -53,20 +53,16 @@ function PortfolioHeader({
 }) {
   return (
     <header className="portfolio-header" aria-labelledby="portfolio-title">
-      <div className="header-main">
-        <div className="header-identity">
-          <span translate="no">MAX / PORTFOLIO 01</span>
+      <div className="hero">
+        <div className="portfolio-heading">
           <h1 id="portfolio-title">投资组合</h1>
-          <p>个人持仓与净值记录</p>
-        </div>
-        <div className="header-nav">
-          <span>当前净值</span>
-          <strong className="header-nav-value">{money(netLiquidation)}</strong>
-          <span className="header-pnl" data-direction={totalPnl < 0 ? "loss" : totalPnl > 0 ? "gain" : "neutral"}>
-            总盈亏 {money(totalPnl, true)} · {percent(totalPnlRate, true)}
+          <span className="summary-nav-label">当前净值</span>
+          <strong className="summary-nav-value">{money(netLiquidation)}</strong>
+          <span className={`pnl-pill ${totalPnl < 0 ? "loss" : totalPnl > 0 ? "gain" : "muted"}`}>
+            {money(totalPnl, true)}（{percent(totalPnlRate, true)}）
           </span>
         </div>
-        <div className="header-support" aria-label="组合摘要">
+        <div className="summary-support" aria-label="组合摘要">
           <article><span>剔除期权浮盈亏</span><strong>{money(netLiquidationWithoutOptionPnl)}</strong></article>
           <article><span>净入金</span><strong>{money(netDeposits)}</strong></article>
           <article><span>现金</span><strong>{money(cashBalance)}</strong></article>
