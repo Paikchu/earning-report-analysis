@@ -1,7 +1,6 @@
 import earningsData from "@/data/earnings-calendar.json";
 import snapshotData from "@/data/portfolio-snapshot.json";
 import type { EarningsCalendarSnapshot } from "@/lib/earnings-calendar";
-import { money, percent } from "@/lib/portfolio-format";
 import { buildHeatmapHoldings } from "@/lib/portfolio-heatmap";
 import type { PortfolioSnapshotV1 } from "@/lib/portfolio-snapshot";
 import { buildPortfolioViewModel } from "@/lib/portfolio-view-model";
@@ -24,22 +23,6 @@ export default function Home() {
     <>
       <a className="skip-link" href="#main-content">跳到主要内容</a>
       <main className="page-shell" id="main-content">
-        <section className="hero" aria-labelledby="portfolio-title">
-          <div className="portfolio-heading">
-            <h1 id="portfolio-title">投资组合</h1>
-            <span className="summary-nav-label">当前净值</span>
-            <strong className="summary-nav-value">{money(snapshot.account.netLiquidation)}</strong>
-            <span className={`pnl-pill ${totalPnl < 0 ? "loss" : totalPnl > 0 ? "gain" : "muted"}`}>
-              {money(totalPnl, true)}（{percent(totalPnlRate, true)}）
-            </span>
-          </div>
-          <div className="summary-support" aria-label="组合摘要">
-            <article><span>剔除期权浮盈亏</span><strong>{money(netLiquidationWithoutOptionPnl)}</strong></article>
-            <article><span>净入金</span><strong>{money(snapshot.account.netDeposits)}</strong></article>
-            <article><span>现金</span><strong>{money(snapshot.account.cashBalance)}</strong></article>
-          </div>
-        </section>
-
         <PortfolioDashboard
           heatmapHoldings={heatmapHoldings}
           positionGroups={portfolio.positionGroups}
@@ -49,6 +32,12 @@ export default function Home() {
           snapshotTime={snapshotTime}
           earningsEvents={earnings.events}
           earningsUpdatedAt={earnings.generatedAt}
+          netLiquidation={snapshot.account.netLiquidation}
+          totalPnl={totalPnl}
+          totalPnlRate={totalPnlRate}
+          netLiquidationWithoutOptionPnl={netLiquidationWithoutOptionPnl}
+          netDeposits={snapshot.account.netDeposits}
+          cashBalance={snapshot.account.cashBalance}
         />
       </main>
     </>

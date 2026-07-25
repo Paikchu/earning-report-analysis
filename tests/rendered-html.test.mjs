@@ -42,7 +42,7 @@ test("removes the disposable starter preview", async () => {
     readFile(new URL("../lib/portfolio-view-model.ts", import.meta.url), "utf8"),
   ]);
 
-  assert.match(page, /投资组合/);
+  assert.match(dashboard, /投资组合/);
   assert.doesNotMatch(page, /LedgerTab|TradeFilter|recentTrades|filteredTrades|switchLedger|updateUrl/);
   assert.doesNotMatch(page, /trade-disclosure|trade-toolbar|交易明细|role="tablist"/);
   assert.match(page, /buildPortfolioViewModel/);
@@ -59,7 +59,8 @@ test("removes the disposable starter preview", async () => {
   assert.doesNotMatch(page, /const optionContracts = \[/);
   assert.doesNotMatch(page, /const recentTrades = \[/);
   assert.doesNotMatch(page, /holding\.weight \/ 31\.12/);
-  assert.doesNotMatch(page, /<header|masthead|SnapshotNotice|className="(?:eyebrow|kicker)"/);
+  assert.match(dashboard, /<header className="portfolio-header"/);
+  assert.doesNotMatch(page, /masthead|SnapshotNotice|className="(?:eyebrow|kicker)"/);
   assert.match(layout, /lang="zh-CN"/);
   assert.match(layout, /个人投资组合与持仓记录/);
   assert.doesNotMatch(layout, /个人持仓、交易与盈亏记录/);
@@ -81,10 +82,12 @@ test("uses the approved ledger-dominant hierarchy without horizontal scrolling",
   assert.match(css, /\.section-divider \{[\s\S]*?border-top: 1px dashed var\(--paper-deep\);/);
   assert.doesNotMatch(css, /min-width:\s*900px/);
   assert.match(css, /\.position-scroll \{[\s\S]*?overflow-x: visible;/);
-  assert.match(css, /\.portfolio-heading h1 \{[\s\S]*?font-size: 18px;/);
+  assert.match(css, /\.portfolio-header \{[\s\S]*?background: var\(--ink\);/);
+  assert.match(css, /\.header-main \{[\s\S]*?grid-template-columns:/);
+  assert.match(css, /\.market-grid \{[\s\S]*?grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/);
   assert.match(css, /h2 \{[\s\S]*?font: 600 22px\/1\.1 var\(--serif\);/);
-  assert.match(css, /\.summary-nav-value \{[\s\S]*?font-size: clamp\(48px, 5vw, 56px\);/);
-  assert.match(css, /\.summary-support \{[^}]*flex-wrap: wrap;/);
+  assert.match(css, /\.header-nav-value \{[\s\S]*?font-size: clamp\(/);
+  assert.match(css, /@media \(max-width: 820px\)[\s\S]*?\.market-grid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
   assert.match(css, /font-variant-numeric: tabular-nums lining-nums;/);
   assert.doesNotMatch(css, /overscroll-behavior:\s*contain/);
   assert.match(css, /\.position-scroll \{[\s\S]*?overscroll-behavior: auto;/);
@@ -346,6 +349,24 @@ test("renders Yahoo price and daily change surfaces without changing ledger calc
   assert.match(detail, /Yahoo Finance/);
   assert.match(detail, /行情暂不可用/);
   assert.doesNotMatch(detail, /position\.value\s*=\s*quote|position\.unrealized\s*=\s*quote/);
+});
+
+test("renders the large-cap market pulse in the header from the homepage quote batch", async () => {
+  const [response, dashboard] = await Promise.all([
+    render(),
+    readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
+  ]);
+  const html = await response.text();
+
+  assert.match(html, /美股大盘/);
+  assert.match(html, /标普 500/);
+  assert.match(html, /纳斯达克/);
+  assert.match(html, /道琼斯/);
+  assert.match(html, /罗素 2000/);
+  assert.match(html, /Yahoo Finance · 页面打开时获取/);
+  assert.match(dashboard, /MARKET_INDEX_SYMBOLS/);
+  assert.match(dashboard, /const quoteSymbols = useMemo\(\(\) => \[\.\.\.MARKET_INDEX_SYMBOLS/);
+  assert.match(dashboard, /useMarketQuotes\(quoteSymbols\)/);
 });
 
 test("reuses homepage quotes for holdings and fetches unheld plan tickers separately", async () => {

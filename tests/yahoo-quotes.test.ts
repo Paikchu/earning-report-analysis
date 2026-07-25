@@ -81,9 +81,9 @@ test("omits Yahoo results without a usable previous close", () => {
 });
 
 test("normalizes, deduplicates, and validates requested tickers", () => {
-  assert.deepEqual(parseRequestedSymbols(" msft,NVDA,msft,BRK.B "), {
+  assert.deepEqual(parseRequestedSymbols(" msft,NVDA,msft,BRK.B,^GSPC,^IXIC "), {
     ok: true,
-    symbols: ["MSFT", "NVDA", "BRK.B"],
+    symbols: ["MSFT", "NVDA", "BRK.B", "^GSPC", "^IXIC"],
   });
   assert.deepEqual(parseRequestedSymbols("MSFT,$BAD"), {
     ok: false,
@@ -97,7 +97,7 @@ test("normalizes, deduplicates, and validates requested tickers", () => {
 
 test("fetches all tickers through one Yahoo spark request", async () => {
   let requestedUrl = "";
-  const quotes = await fetchYahooQuotes(["MSFT", "BRK.B"], async (input, init) => {
+  const quotes = await fetchYahooQuotes(["MSFT", "BRK.B", "^GSPC"], async (input, init) => {
     requestedUrl = String(input);
     assert.ok(init?.signal instanceof AbortSignal);
     return Response.json({
@@ -105,6 +105,10 @@ test("fetches all tickers through one Yahoo spark request", async () => {
         error: null,
         result: [
           yahooPayload.spark.result[1],
+          { ...yahooPayload.spark.result[0], symbol: "^GSPC", response: [{
+            ...yahooPayload.spark.result[0].response[0],
+            meta: { ...yahooPayload.spark.result[0].response[0].meta, symbol: "^GSPC" },
+          }] },
           { ...yahooPayload.spark.result[0], symbol: "BRK-B", response: [{
             ...yahooPayload.spark.result[0].response[0],
             meta: { ...yahooPayload.spark.result[0].response[0].meta, symbol: "BRK-B" },
@@ -116,10 +120,11 @@ test("fetches all tickers through one Yahoo spark request", async () => {
 
   const url = new URL(requestedUrl);
   assert.equal(url.pathname, "/v7/finance/spark");
-  assert.equal(url.searchParams.get("symbols"), "MSFT,BRK-B");
+  assert.equal(url.searchParams.get("symbols"), "MSFT,BRK-B,^GSPC");
   assert.equal(url.searchParams.get("range"), "1d");
   assert.equal(url.searchParams.get("interval"), "1d");
   assert.equal(quotes["BRK.B"].price, 208.76);
+  assert.equal(quotes["^GSPC"].price, 208.76);
 });
 
 test("rejects Yahoo non-success responses", async () => {

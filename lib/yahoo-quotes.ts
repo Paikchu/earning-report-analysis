@@ -10,7 +10,7 @@ type SymbolParseResult =
   | { ok: true; symbols: string[] }
   | { ok: false; error: string };
 
-const TICKER_PATTERN = /^[A-Z0-9][A-Z0-9.-]{0,14}$/;
+const TICKER_PATTERN = /^\^?[A-Z0-9][A-Z0-9.-]{0,14}$/;
 
 export function parseYahooSparkQuotes(payload: unknown, requestedSymbols: string[]): MarketQuoteMap {
   const root = asRecord(payload);

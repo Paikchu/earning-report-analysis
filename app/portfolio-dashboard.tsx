@@ -19,9 +19,84 @@ import { PositionDetailDialog, type PositionDetailTarget } from "./PositionDetai
 import { useMarketQuotes, type QuoteLoadStatus } from "./use-market-quotes";
 import type { MarketQuoteMap } from "@/lib/yahoo-quotes";
 
+const MARKET_INDEXES = [
+  { symbol: "^GSPC", label: "标普 500", code: "SPX" },
+  { symbol: "^IXIC", label: "纳斯达克", code: "COMP" },
+  { symbol: "^DJI", label: "道琼斯", code: "DJIA" },
+  { symbol: "^RUT", label: "罗素 2000", code: "RUT" },
+] as const;
+const MARKET_INDEX_SYMBOLS = MARKET_INDEXES.map((index) => index.symbol);
+
 function Pnl({ value }: { value: number }) {
   const className = value < 0 ? "loss" : value > 0 ? "gain" : "muted";
   return <span className={className}>{money(value, true)}</span>;
+}
+
+function PortfolioHeader({
+  quotes,
+  quoteStatus,
+  netLiquidation,
+  totalPnl,
+  totalPnlRate,
+  netLiquidationWithoutOptionPnl,
+  netDeposits,
+  cashBalance,
+}: {
+  quotes: MarketQuoteMap;
+  quoteStatus: QuoteLoadStatus;
+  netLiquidation: number;
+  totalPnl: number;
+  totalPnlRate: number;
+  netLiquidationWithoutOptionPnl: number;
+  netDeposits: number;
+  cashBalance: number;
+}) {
+  return (
+    <header className="portfolio-header" aria-labelledby="portfolio-title">
+      <div className="header-main">
+        <div className="header-identity">
+          <span translate="no">MAX / PORTFOLIO 01</span>
+          <h1 id="portfolio-title">投资组合</h1>
+          <p>个人持仓与净值记录</p>
+        </div>
+        <div className="header-nav">
+          <span>当前净值</span>
+          <strong className="header-nav-value">{money(netLiquidation)}</strong>
+          <span className="header-pnl" data-direction={totalPnl < 0 ? "loss" : totalPnl > 0 ? "gain" : "neutral"}>
+            总盈亏 {money(totalPnl, true)} · {percent(totalPnlRate, true)}
+          </span>
+        </div>
+        <div className="header-support" aria-label="组合摘要">
+          <article><span>剔除期权浮盈亏</span><strong>{money(netLiquidationWithoutOptionPnl)}</strong></article>
+          <article><span>净入金</span><strong>{money(netDeposits)}</strong></article>
+          <article><span>现金</span><strong>{money(cashBalance)}</strong></article>
+        </div>
+      </div>
+      <section className="market-tape" aria-labelledby="market-title">
+        <div className="market-tape-label">
+          <strong id="market-title">美股大盘</strong>
+          <span>Yahoo Finance · 页面打开时获取</span>
+        </div>
+        <div className="market-grid" aria-live="polite">
+          {MARKET_INDEXES.map((index) => {
+            const quote = quotes[index.symbol];
+            const direction = quote?.changePercent
+              ? quote.changePercent < 0 ? "loss" : "gain"
+              : "neutral";
+
+            return (
+              <article className="market-quote" data-direction={direction} key={index.symbol}>
+                <span><b>{index.label}</b><i translate="no">{index.code}</i></span>
+                {quote
+                  ? <strong>{number(quote.price, 2, 2)} <em>{percent(quote.changePercent, true)}</em></strong>
+                  : <strong className="market-quote-placeholder">{quoteStatus === "loading" ? "读取中…" : "—"}</strong>}
+              </article>
+            );
+          })}
+        </div>
+      </section>
+    </header>
+  );
 }
 
 function EarningsCell({ event, asOf }: { event?: EarningsEvent; asOf: string }) {
@@ -296,6 +371,12 @@ export function PortfolioDashboard({
   snapshotTime,
   earningsEvents,
   earningsUpdatedAt,
+  netLiquidation,
+  totalPnl,
+  totalPnlRate,
+  netLiquidationWithoutOptionPnl,
+  netDeposits,
+  cashBalance,
 }: {
   heatmapHoldings: HeatmapHolding[];
   positionGroups: PositionGroupView[];
@@ -305,10 +386,16 @@ export function PortfolioDashboard({
   snapshotTime: string;
   earningsEvents: EarningsEvent[];
   earningsUpdatedAt: string;
+  netLiquidation: number;
+  totalPnl: number;
+  totalPnlRate: number;
+  netLiquidationWithoutOptionPnl: number;
+  netDeposits: number;
+  cashBalance: number;
 }) {
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
   const [selectedPosition, setSelectedPosition] = useState<PositionDetailTarget | null>(null);
-  const quoteSymbols = useMemo(() => positionGroups.map((group) => group.symbol).join(","), [positionGroups]);
+  const quoteSymbols = useMemo(() => [...MARKET_INDEX_SYMBOLS, ...positionGroups.map((group) => group.symbol)].join(","), [positionGroups]);
   const quoteState = useMarketQuotes(quoteSymbols);
   const positionSymbols = useMemo(() => new Set(positionGroups.map((group) => group.symbol)), [positionGroups]);
   const earningsBySymbol = useMemo(() => {
@@ -323,6 +410,16 @@ export function PortfolioDashboard({
 
   return (
     <>
+      <PortfolioHeader
+        quotes={quoteState.quotes}
+        quoteStatus={quoteState.status}
+        netLiquidation={netLiquidation}
+        totalPnl={totalPnl}
+        totalPnlRate={totalPnlRate}
+        netLiquidationWithoutOptionPnl={netLiquidationWithoutOptionPnl}
+        netDeposits={netDeposits}
+        cashBalance={cashBalance}
+      />
       <section className="lower-grid">
         <aside className="allocation-panel">
           <h2>仓位构成</h2>
