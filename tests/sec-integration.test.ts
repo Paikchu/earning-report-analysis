@@ -44,3 +44,9 @@ test("provides authenticated feed and protected background refresh routes", asyn
   assert.match(refreshRoute, /hasInternalSecAccess/);
   assert.match(refreshRoute, /refreshSecTicker/);
 });
+
+test("defaults new DeepSeek credentials to the supported v4 flash model", async () => {
+  const runtime = await readFile(new URL("../lib/sec-runtime.ts", import.meta.url), "utf8");
+  assert.match(runtime, /deepseek-v4-flash/);
+  assert.doesNotMatch(runtime, /"deepseek-chat"/);
+});

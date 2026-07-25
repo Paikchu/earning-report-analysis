@@ -72,6 +72,23 @@ test("retries failed summaries after 24 hours but never regenerates useful summa
   assert.equal(isSummaryRetryDue(ready, Date.parse("2027-07-25T00:00:00.000Z")), false);
 });
 
+test("retries model configuration errors immediately after the provider model is corrected", () => {
+  const summary = {
+    ticker: "MSFT",
+    form: "10-Q",
+    filingDate: "2026-07-24",
+    accessionNumber: "a",
+    headline: "",
+    bullets: [],
+    analystView: "",
+    source: "error" as const,
+    generatedAt: "2026-07-25T00:00:00.000Z",
+    error: "DeepSeek HTTP 400",
+  };
+
+  assert.equal(isSummaryRetryDue(summary, Date.parse("2026-07-25T00:01:00.000Z")), true);
+});
+
 test("parses the five newest supported filings from SEC submissions", () => {
   const payload = {
     name: "Nokia Oyj",

@@ -133,6 +133,7 @@ export function normalizeSecSummary(
 export function isSummaryRetryDue(summary: SecFilingSummary, nowMs = Date.now()): boolean {
   if (summary.headline || summary.bullets.length || summary.analystView) return false;
   if (summary.source !== "error") return true;
+  if (summary.error === "DeepSeek HTTP 400") return true;
   const generatedAt = Date.parse(summary.generatedAt);
   return !Number.isFinite(generatedAt) || nowMs - generatedAt >= 24 * 60 * 60 * 1_000;
 }
