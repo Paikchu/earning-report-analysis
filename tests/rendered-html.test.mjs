@@ -98,6 +98,16 @@ test("uses the approved ledger-dominant hierarchy without horizontal scrolling",
   assert.match(css, /\.table-wrap \{[\s\S]*?overscroll-behavior: auto;/);
 });
 
+test("renders the mobile earnings reminder as a full-width readable row", async () => {
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const mobileCss = css.match(/@media \(max-width: 620px\) \{([\s\S]*)\}\s*$/)?.[1] ?? "";
+
+  assert.match(mobileCss, /\.position-earnings \{[^}]*grid-column: 1 \/ -1;[^}]*display: grid;[^}]*grid-template-columns: 72px minmax\(0, 1fr\);[^}]*text-align: left;/);
+  assert.match(mobileCss, /\.position-earnings \.earnings-cell \{[^}]*min-width: 0;[^}]*justify-items: start;[^}]*text-align: left;/);
+  assert.match(mobileCss, /\.position-earnings \.earnings-cell strong \{[^}]*font-size: 12px;/);
+  assert.match(mobileCss, /\.position-earnings \.earnings-cell small \{[^}]*font-size: 9px;[^}]*overflow-wrap: anywhere;/);
+});
+
 test("removes the portfolio history chart while keeping supporting metrics", async () => {
   const [response, dashboard, snapshot] = await Promise.all([
     render(),

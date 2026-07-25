@@ -1512,6 +1512,27 @@ td { font-size: 9px; }
     font-size: 9px;
   }
   .position-kinds { grid-column: 1 / -1; justify-content: flex-start; }
+  .position-earnings {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
+    padding: 8px 0;
+    border-block: 1px dashed var(--paper-deep);
+    text-align: left;
+  }
+  .position-earnings .earnings-cell {
+    min-width: 0;
+    justify-items: start;
+    text-align: left;
+  }
+  .position-earnings .earnings-cell strong { font-size: 12px; }
+  .position-earnings .earnings-cell small {
+    font-size: 9px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
   .position-submenu { margin: 0 4px 12px; }
   .position-submenu-row {
     min-height: 42px;
