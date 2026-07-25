@@ -18,13 +18,15 @@ test("adds the SEC section to the shared position detail flow", async () => {
   ]);
 
   assert.match(detail, /<SecFilingsSection ticker=\{ticker\} \/>/);
-  assert.match(detail, /instrument-section[\s\S]*SecFilingsSection[\s\S]*PlanEditor/);
+  assert.match(detail, /instrument-section[\s\S]*PlanEditor[\s\S]*SecFilingsSection/);
   assert.match(section, /SEC 文件与 AI 解读/);
   assert.match(section, /\/api\/sec\/\$\{encodeURIComponent\(ticker\)\}\/filings/);
   assert.match(section, /aria-expanded=\{isOpen\}/);
   assert.match(section, /target="_blank"/);
   assert.match(css, /\.sec-filings-section/);
   assert.match(css, /\.sec-filing-card/);
+  assert.match(css, /\.sec-filings-section,\s*\.plan-editor \{ width: 100%; max-width: none; \}/);
+  assert.doesNotMatch(css, /\.position-detail-dialog \.plan-editor \{[^}]*max-width:/);
 });
 
 test("provides authenticated feed and protected background refresh routes", async () => {

@@ -1283,7 +1283,8 @@ td { font-size: 9px; }
 .no-position strong { font: 600 18px/1.1 var(--serif); }
 .no-position span { color: var(--ink-soft); font-size: 10px; }
 
-.sec-filings-section { max-width: 980px; }
+.sec-filings-section,
+.plan-editor { width: 100%; max-width: none; }
 .sec-updated { color: var(--ink-soft); font-size: 9px; }
 .sec-state {
   margin: 18px 0 0;
@@ -1360,7 +1361,6 @@ td { font-size: 9px; }
 .sec-summary-pending,
 .sec-summary-error { margin: 0 0 14px; font-size: 10px; }
 
-.plan-editor { max-width: 980px; }
 .plan-loading > p {
   margin: 20px 0 0;
   padding: 28px 0;
@@ -1412,7 +1412,6 @@ td { font-size: 9px; }
 .primary-button:hover:not(:disabled) { background: #263e56; }
 
 @media (min-width: 1025px) {
-  .position-detail-dialog .plan-editor { max-width: 83%; }
   .position-detail-dialog .field-block textarea { min-height: 168px; }
 }
 

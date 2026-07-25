@@ -92,8 +92,6 @@ export function PositionDetailContent({
         <section className="no-position"><strong>暂无持仓数据</strong><span>这份计划不会写入 IBKR 账本；建立持仓后，快照数据会自动出现在这里。</span></section>
       )}
 
-      <SecFilingsSection ticker={ticker} />
-
       {planStatus === "loading" ? (
         <section className="plan-editor plan-loading" aria-labelledby="plan-loading-title">
           <div className="detail-section-heading">
@@ -110,6 +108,8 @@ export function PositionDetailContent({
           onDirtyChange={onPlanDirtyChange}
         />
       )}
+
+      <SecFilingsSection ticker={ticker} />
     </>
   );
 }

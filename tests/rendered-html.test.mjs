@@ -347,7 +347,7 @@ test("opens position details in a homepage workspace dialog without navigation",
   assert.doesNotMatch(addPlanDialog, /href=\{`\/positions\//);
   assert.match(css, /\.position-detail-dialog \{[^]*?width: min\(1180px, calc\(100vw - 48px\)\);[^]*?height: calc\(100dvh - 48px\);/);
   assert.match(css, /\.position-detail-dialog-body \{[^]*?width: min\(1360px, calc\(100% - 48px\)\);/);
-  assert.match(css, /@media \(min-width: 1025px\)[^]*?\.position-detail-dialog \.plan-editor \{[^]*?max-width: 83%;/);
+  assert.match(css, /\.sec-filings-section,\s*\.plan-editor \{ width: 100%; max-width: none; \}/);
   assert.match(css, /@media \(max-width: 620px\)[^]*?\.position-detail-dialog \{[^]*?width: 100vw;[^]*?height: 100dvh;/);
 });
 
