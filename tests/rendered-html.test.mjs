@@ -98,21 +98,29 @@ test("uses the approved ledger-dominant hierarchy without horizontal scrolling",
   assert.match(css, /\.table-wrap \{[\s\S]*?overscroll-behavior: auto;/);
 });
 
-test("keeps earnings out of the ledger columns and beside the ticker", async () => {
+test("uses an uncolored generic reminder slot beside the ticker", async () => {
   const [dashboard, css] = await Promise.all([
     readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   const mobileCss = css.match(/@media \(max-width: 620px\) \{([\s\S]*)\}\s*$/)?.[1] ?? "";
+  const reminderCss = css.match(/\.position-reminder\s*\{([^}]*)\}/)?.[1] ?? "";
 
   assert.doesNotMatch(dashboard, /label: "财报（预计）"/);
-  assert.match(dashboard, /className="position-identity"[\s\S]*?<EarningsWindow/);
-  assert.match(dashboard, /className="earnings-window"/);
+  assert.doesNotMatch(dashboard, /className="company"/);
+  assert.match(dashboard, /function PositionReminder/);
+  assert.match(dashboard, /if \(!event\) return null;/);
+  assert.match(dashboard, /className="position-identity"[\s\S]*?<PositionReminder/);
+  assert.match(dashboard, /className="position-reminder"/);
+  assert.doesNotMatch(dashboard, /<i>财报<\/i>|等待日程|data-empty/);
   assert.doesNotMatch(dashboard, /className="position-earnings"/);
-  assert.match(css, /\.position-identity\s*\{[^}]*grid-template-columns:\s*4px minmax\(0, 1fr\) auto;/s);
-  assert.match(css, /\.earnings-window\s*\{[^}]*border:\s*1px solid var\(--paper-deep\);[^}]*background:\s*rgb\(230 220 203 \/ 44%\);/s);
-  assert.match(mobileCss, /\.position-identity \{[^}]*grid-column: 1 \/ -1;[^}]*grid-template-columns: 4px minmax\(0, 1fr\) minmax\(126px, 42%\);/);
-  assert.match(mobileCss, /\.earnings-window \{[^}]*width: 100%;[^}]*min-height: 42px;/);
+  assert.match(css, /\.position-identity\s*\{[^}]*grid-template-columns:\s*4px auto minmax\(0, 1fr\);/s);
+  assert.match(reminderCss, /min-width:\s*0;/);
+  assert.match(reminderCss, /overflow:\s*hidden;/);
+  assert.match(reminderCss, /justify-self:\s*stretch;/);
+  assert.doesNotMatch(reminderCss, /background|border|box-shadow|color/);
+  assert.match(mobileCss, /\.position-identity \{[^}]*grid-column: 1 \/ -1;[^}]*grid-template-columns: 4px auto minmax\(0, 1fr\);/);
+  assert.match(mobileCss, /\.position-reminder \{[^}]*max-width: 210px;[^}]*justify-self: end;/);
 });
 
 test("removes the portfolio history chart while keeping supporting metrics", async () => {

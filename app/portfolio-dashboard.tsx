@@ -95,27 +95,17 @@ function PortfolioHeader({
   );
 }
 
-function EarningsWindow({ event, asOf }: { event?: EarningsEvent; asOf: string }) {
-  if (!event) {
-    return (
-      <span className="earnings-window" data-empty="true" title="预计财报日期尚未公布">
-        <i>财报</i>
-        <span><strong>未公布</strong><small>等待日程</small></span>
-      </span>
-    );
-  }
+function PositionReminder({ event, asOf }: { event?: EarningsEvent; asOf: string }) {
+  if (!event) return null;
 
   const reminder = buildEarningsReminder(event, asOf);
   return (
     <span
-      className="earnings-window"
+      className="position-reminder"
       title={`美股 ${reminder.releaseDateLabel}${reminder.sessionLabel}发布；北京 ${reminder.viewDateLabel}${reminder.viewTimeLabel}查看`}
     >
-      <i>财报</i>
-      <span>
-        <strong>{reminder.releaseDateLabel} · {reminder.sessionLabel}</strong>
-        <small>北京{reminder.viewDateLabel}{reminder.viewTimeLabel} · {reminder.countdownLabel}</small>
-      </span>
+      <strong>{reminder.releaseDateLabel} · {reminder.sessionLabel}</strong>
+      <small>北京{reminder.viewDateLabel}{reminder.viewTimeLabel} · {reminder.countdownLabel}</small>
     </span>
   );
 }
@@ -308,11 +298,8 @@ function PositionLedger({
             >
               <span className="position-identity">
                 <i className="holding-mark" aria-hidden="true" />
-                <span className="position-name">
-                  <strong className="symbol">{group.symbol}</strong>
-                  <small className="company">{group.name}</small>
-                </span>
-                <EarningsWindow event={earningsBySymbol.get(group.symbol)} asOf={earningsUpdatedAt} />
+                <strong className="symbol">{group.symbol}</strong>
+                <PositionReminder event={earningsBySymbol.get(group.symbol)} asOf={earningsUpdatedAt} />
               </span>
               <span className="position-kinds" data-label="构成">
                 {group.stock && <i className="asset-pill stock-pill">正股</i>}

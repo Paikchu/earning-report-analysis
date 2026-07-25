@@ -1001,53 +1001,32 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .daily-change-value[data-direction="loss"] { color: var(--daily-loss); }
 .daily-change-value[data-direction="neutral"] { color: var(--ink-soft); }
 
-.earnings-window {
-  min-width: 112px;
-  min-height: 34px;
-  padding: 4px 6px;
+.position-reminder {
+  min-width: 0;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--paper-deep);
-  background: rgb(230 220 203 / 44%);
-  box-shadow: inset 2px 0 0 var(--holding-color);
+  align-content: center;
+  gap: 2px;
+  overflow: hidden;
+  justify-self: stretch;
   text-align: left;
 }
 
-.earnings-window > i {
-  color: var(--accent);
-  font-size: 7px;
-  font-style: normal;
-  font-weight: 700;
-  letter-spacing: .08em;
-}
-
-.earnings-window > span {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.earnings-window strong {
+.position-reminder strong {
   overflow: hidden;
-  color: var(--ink);
   font-size: 8px;
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.earnings-window small {
+.position-reminder small {
   overflow: hidden;
-  color: var(--ink-soft);
   font-size: 6px;
   line-height: 1.2;
+  opacity: .72;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-.earnings-window[data-empty="true"] { opacity: .72; }
 
 .position-row:hover { background: rgb(230 220 203 / 42%); }
 .position-row[data-active="true"] { background: rgb(218 210 196 / 56%); }
@@ -1064,15 +1043,8 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .position-identity {
   min-width: 0;
   display: grid;
-  grid-template-columns: 4px minmax(0, 1fr) auto;
+  grid-template-columns: 4px auto minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
-}
-
-.position-name {
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
   gap: 8px;
 }
 
@@ -1140,16 +1112,6 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .symbol {
   flex: 0 0 auto;
   font: 600 13px/1 var(--serif);
-}
-
-.company {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--ink-soft);
-  font-size: 9px;
-  font-weight: 400;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .row-arrow { color: var(--ink-soft); font-size: 13px; justify-self: end; }
@@ -1535,22 +1497,15 @@ td { font-size: 9px; }
   }
   .position-identity {
     grid-column: 1 / -1;
-    grid-template-columns: 4px minmax(0, 1fr) minmax(126px, 42%);
+    grid-template-columns: 4px auto minmax(0, 1fr);
   }
-  .position-name { display: grid; gap: 3px; }
   .position-identity .symbol { font-size: 18px; }
-  .position-identity .company {
-    max-width: 100%;
-    font-size: 9px;
+  .position-reminder {
+    max-width: 210px;
+    justify-self: end;
   }
-  .earnings-window {
-    width: 100%;
-    min-height: 42px;
-    padding: 5px 7px;
-  }
-  .earnings-window > i { font-size: 8px; }
-  .earnings-window strong { font-size: 10px; }
-  .earnings-window small { font-size: 7px; }
+  .position-reminder strong { font-size: 10px; }
+  .position-reminder small { font-size: 7px; }
   .position-kinds { grid-column: 1 / -1; justify-content: flex-start; }
   .position-submenu {
     width: min(calc(100% - 8px), 620px);
