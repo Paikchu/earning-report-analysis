@@ -423,13 +423,6 @@ export function PortfolioDashboard({
         <section className="ledger-panel" aria-labelledby="ledger-title">
           <div className="ledger-heading">
             <h2 id="ledger-title">投资账本</h2>
-            <AddPlanDialog onSelect={(result) => {
-              const position = positionGroups.find((group) => group.symbol === result.symbol);
-              setSelectedPosition({ symbol: result.symbol, name: result.name, position });
-            }} />
-          </div>
-          <div className="section-divider" aria-hidden="true" />
-          <div className="ledger-content">
             <div className="ledger-meta">
               <span>持仓净市值 <strong>{money(netPositionsValue)}</strong></span>
               <span>正股 <strong>{money(stockMarketValue)}</strong></span>
@@ -441,6 +434,13 @@ export function PortfolioDashboard({
                 </span>
               )}
             </div>
+            <AddPlanDialog onSelect={(result) => {
+              const position = positionGroups.find((group) => group.symbol === result.symbol);
+              setSelectedPosition({ symbol: result.symbol, name: result.name, position });
+            }} />
+          </div>
+          <div className="section-divider" aria-hidden="true" />
+          <div className="ledger-content">
             <PositionLedger
               groups={positionGroups}
               activeSymbol={activeSymbol}
