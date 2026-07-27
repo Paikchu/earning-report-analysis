@@ -19,37 +19,35 @@ import { PositionDetailDialog, type PositionDetailTarget } from "./PositionDetai
 import { useMarketQuotes, type QuoteLoadStatus } from "./use-market-quotes";
 import type { MarketQuoteMap } from "@/lib/yahoo-quotes";
 
-const MARKET_INDEXES = [
-  { symbol: "^GSPC", label: "标普 500", code: "SPX" },
-  { symbol: "^IXIC", label: "纳斯达克", code: "COMP" },
-  { symbol: "^DJI", label: "道琼斯", code: "DJIA" },
-  { symbol: "^RUT", label: "罗素 2000", code: "RUT" },
-] as const;
-const MARKET_INDEX_SYMBOLS = MARKET_INDEXES.map((index) => index.symbol);
-
 function Pnl({ value }: { value: number }) {
   const className = value < 0 ? "loss" : value > 0 ? "gain" : "muted";
   return <span className={className}>{money(value, true)}</span>;
 }
 
 function PortfolioHeader({
-  quotes,
-  quoteStatus,
   netLiquidation,
   totalPnl,
   totalPnlRate,
   netLiquidationWithoutOptionPnl,
   netDeposits,
   cashBalance,
+  netPositionsValue,
+  stockMarketValue,
+  optionMarketValue,
+  nextEarnings,
+  nextEarningsReminder,
 }: {
-  quotes: MarketQuoteMap;
-  quoteStatus: QuoteLoadStatus;
   netLiquidation: number;
   totalPnl: number;
   totalPnlRate: number;
   netLiquidationWithoutOptionPnl: number;
   netDeposits: number;
   cashBalance: number;
+  netPositionsValue: number;
+  stockMarketValue: number;
+  optionMarketValue: number;
+  nextEarnings?: EarningsEvent;
+  nextEarningsReminder: ReturnType<typeof buildEarningsReminder> | null;
 }) {
   return (
     <header className="portfolio-header" aria-labelledby="portfolio-title">
@@ -68,28 +66,17 @@ function PortfolioHeader({
           <article><span>现金</span><strong>{money(cashBalance)}</strong></article>
         </div>
       </div>
-      <section className="market-tape" aria-labelledby="market-title">
-        <div className="market-tape-label">
-          <strong id="market-title">美股大盘</strong>
-          <span>Yahoo Finance · 页面打开时获取</span>
-        </div>
-        <div className="market-grid" aria-live="polite">
-          {MARKET_INDEXES.map((index) => {
-            const quote = quotes[index.symbol];
-            const direction = quote?.changePercent
-              ? quote.changePercent < 0 ? "loss" : "gain"
-              : "neutral";
-
-            return (
-              <article className="market-quote" data-direction={direction} key={index.symbol}>
-                <span><b>{index.label}</b><i translate="no">{index.code}</i></span>
-                {quote
-                  ? <strong>{number(quote.price, 2, 2)} <em>{percent(quote.changePercent, true)}</em></strong>
-                  : <strong className="market-quote-placeholder">{quoteStatus === "loading" ? "读取中…" : "—"}</strong>}
-              </article>
-            );
-          })}
-        </div>
+      <section className="header-position-summary" aria-label="持仓摘要">
+        <article><span>持仓净市值</span><strong>{money(netPositionsValue)}</strong></article>
+        <article><span>正股</span><strong>{money(stockMarketValue)}</strong></article>
+        <article><span>期权</span><strong>{money(optionMarketValue)}</strong></article>
+        {nextEarnings && nextEarningsReminder && (
+          <article className="header-next-earnings">
+            <span>最近财报</span>
+            <strong>{nextEarnings.symbol} {nextEarningsReminder.releaseDateLabel} · {nextEarningsReminder.sessionLabel}</strong>
+            <i>北京{nextEarningsReminder.viewDateLabel}{nextEarningsReminder.viewTimeLabel}，{nextEarningsReminder.countdownLabel}</i>
+          </article>
+        )}
       </section>
     </header>
   );
@@ -387,7 +374,7 @@ export function PortfolioDashboard({
 }) {
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
   const [selectedPosition, setSelectedPosition] = useState<PositionDetailTarget | null>(null);
-  const quoteSymbols = useMemo(() => [...MARKET_INDEX_SYMBOLS, ...positionGroups.map((group) => group.symbol)].join(","), [positionGroups]);
+  const quoteSymbols = useMemo(() => positionGroups.map((group) => group.symbol).join(","), [positionGroups]);
   const quoteState = useMarketQuotes(quoteSymbols);
   const positionSymbols = useMemo(() => new Set(positionGroups.map((group) => group.symbol)), [positionGroups]);
   const earningsBySymbol = useMemo(() => {
@@ -403,14 +390,17 @@ export function PortfolioDashboard({
   return (
     <>
       <PortfolioHeader
-        quotes={quoteState.quotes}
-        quoteStatus={quoteState.status}
         netLiquidation={netLiquidation}
         totalPnl={totalPnl}
         totalPnlRate={totalPnlRate}
         netLiquidationWithoutOptionPnl={netLiquidationWithoutOptionPnl}
         netDeposits={netDeposits}
         cashBalance={cashBalance}
+        netPositionsValue={netPositionsValue}
+        stockMarketValue={stockMarketValue}
+        optionMarketValue={optionMarketValue}
+        nextEarnings={nextEarnings}
+        nextEarningsReminder={nextEarningsReminder}
       />
       <section className="lower-grid">
         <aside className="allocation-panel">
@@ -423,17 +413,6 @@ export function PortfolioDashboard({
         <section className="ledger-panel" aria-labelledby="ledger-title">
           <div className="ledger-heading">
             <h2 id="ledger-title">投资账本</h2>
-            <div className="ledger-meta">
-              <span>持仓净市值 <strong>{money(netPositionsValue)}</strong></span>
-              <span>正股 <strong>{money(stockMarketValue)}</strong></span>
-              <span>期权 <strong>{money(optionMarketValue)}</strong></span>
-              {nextEarnings && nextEarningsReminder && (
-                <span className="next-earnings">
-                  最近财报 <strong>{nextEarnings.symbol} {nextEarningsReminder.releaseDateLabel} · {nextEarningsReminder.sessionLabel}</strong>
-                  <i>北京{nextEarningsReminder.viewDateLabel}{nextEarningsReminder.viewTimeLabel}，{nextEarningsReminder.countdownLabel}</i>
-                </span>
-              )}
-            </div>
             <AddPlanDialog onSelect={(result) => {
               const position = positionGroups.find((group) => group.symbol === result.symbol);
               setSelectedPosition({ symbol: result.symbol, name: result.name, position });

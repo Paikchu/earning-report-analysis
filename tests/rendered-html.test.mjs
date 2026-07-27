@@ -88,10 +88,10 @@ test("uses the approved ledger-dominant hierarchy without horizontal scrolling",
   assert.match(css, /\.position-scroll \{[\s\S]*?overflow-x: visible;/);
   assert.match(css, /\.hero \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto;/);
   assert.match(css, /\.summary-nav-value \{[\s\S]*?font-size: clamp\(48px, 5vw, 56px\);/);
-  assert.match(css, /\.market-grid \{[\s\S]*?grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/);
+  assert.match(css, /\.header-position-summary \{[\s\S]*?grid-template-columns: repeat\(3, minmax\(120px, \.65fr\)\) minmax\(280px, 1\.8fr\);/);
   assert.match(css, /h2 \{[\s\S]*?font: 600 22px\/1\.1 var\(--serif\);/);
   assert.doesNotMatch(css, /\.portfolio-header \{[^}]*background:/);
-  assert.match(css, /@media \(max-width: 820px\)[\s\S]*?\.market-grid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
+  assert.match(css, /@media \(max-width: 620px\)[\s\S]*?\.header-position-summary \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
   assert.match(css, /font-variant-numeric: tabular-nums lining-nums;/);
   assert.doesNotMatch(css, /overscroll-behavior:\s*contain/);
   assert.match(css, /\.position-scroll \{[\s\S]*?overscroll-behavior: auto;/);
@@ -399,21 +399,20 @@ test("renders Yahoo price and daily change surfaces without changing ledger calc
   assert.doesNotMatch(detail, /position\.value\s*=\s*quote|position\.unrealized\s*=\s*quote/);
 });
 
-test("renders the large-cap market pulse in the header from the homepage quote batch", async () => {
+test("renders the holding summary in the header without the market pulse", async () => {
   const [response, dashboard] = await Promise.all([
     render(),
     readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
   ]);
   const html = await response.text();
 
-  assert.match(html, /美股大盘/);
-  assert.match(html, /标普 500/);
-  assert.match(html, /纳斯达克/);
-  assert.match(html, /道琼斯/);
-  assert.match(html, /罗素 2000/);
-  assert.match(html, /Yahoo Finance · 页面打开时获取/);
-  assert.match(dashboard, /MARKET_INDEX_SYMBOLS/);
-  assert.match(dashboard, /const quoteSymbols = useMemo\(\(\) => \[\.\.\.MARKET_INDEX_SYMBOLS/);
+  assert.match(html, /持仓净市值/);
+  assert.match(html, /正股/);
+  assert.match(html, /期权/);
+  assert.match(html, /最近财报/);
+  assert.doesNotMatch(html, /美股大盘|标普 500|纳斯达克|道琼斯|罗素 2000/);
+  assert.doesNotMatch(dashboard, /MARKET_INDEXES|MARKET_INDEX_SYMBOLS|market-tape/);
+  assert.match(dashboard, /const quoteSymbols = useMemo\(\(\) => positionGroups\.map/);
   assert.match(dashboard, /useMarketQuotes\(quoteSymbols\)/);
 });
 
