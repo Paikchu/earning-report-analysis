@@ -28,5 +28,11 @@
     "generatedAt": "2026-07-24T23:34:09.222Z",
     "netLiquidation": 62683.58,
     "netDeposits": 71563.39
+  },
+  {
+    "date": "2026-07-29",
+    "generatedAt": "2026-07-29T02:16:07.963Z",
+    "netLiquidation": 62640.23,
+    "netDeposits": 71563.39
   }
 ]
