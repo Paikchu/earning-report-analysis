@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildEarningsReminder,
+  isUpcomingEarnings,
   parseNasdaqEarningsRows,
   sortEarningsEvents,
 } from "../lib/earnings-calendar.ts";
@@ -55,4 +56,11 @@ test("sorts earnings by date and ticker", () => {
   ]);
 
   assert.deepEqual(events.map((event) => event.symbol), ["MSFT", "AVGO", "NVDA"]);
+});
+
+test("excludes earnings dates that have already passed in Beijing", () => {
+  const event = { symbol: "MSFT", name: "Microsoft", date: "2026-07-29", session: "after-market" } as const;
+
+  assert.equal(isUpcomingEarnings(event, "2026-07-29T15:59:59.000Z"), true);
+  assert.equal(isUpcomingEarnings(event, "2026-07-29T16:00:00.000Z"), false);
 });

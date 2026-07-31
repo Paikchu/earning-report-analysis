@@ -409,7 +409,7 @@ test("renders the holding summary in the header without the market pulse", async
   assert.match(html, /持仓净市值/);
   assert.match(html, /正股/);
   assert.match(html, /期权/);
-  assert.match(html, /最近财报/);
+  assert.match(html, /即将财报/);
   assert.doesNotMatch(html, /美股大盘|标普 500|纳斯达克|道琼斯|罗素 2000/);
   assert.doesNotMatch(dashboard, /MARKET_INDEXES|MARKET_INDEX_SYMBOLS|market-tape/);
   assert.match(dashboard, /const quoteSymbols = useMemo\(\(\) => positionGroups\.map/);

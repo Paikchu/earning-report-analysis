@@ -31,7 +31,6 @@ export default function Home() {
           netPositionsValue={portfolio.netPositionsValue}
           snapshotTime={snapshotTime}
           earningsEvents={earnings.events}
-          earningsUpdatedAt={earnings.generatedAt}
           netLiquidation={snapshot.account.netLiquidation}
           totalPnl={totalPnl}
           totalPnlRate={totalPnlRate}

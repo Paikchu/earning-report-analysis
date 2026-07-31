@@ -70,6 +70,10 @@ export function buildEarningsReminder(event: EarningsEvent, asOf: string | Date)
   };
 }
 
+export function isUpcomingEarnings(event: EarningsEvent, asOf: string | Date): boolean {
+  return event.date >= toShanghaiDate(asOf);
+}
+
 export function sortEarningsEvents(events: EarningsEvent[]): EarningsEvent[] {
   return [...events].sort((left, right) => left.date.localeCompare(right.date) || left.symbol.localeCompare(right.symbol));
 }

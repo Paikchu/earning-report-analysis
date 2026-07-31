@@ -1,18 +1,12 @@
 {
   "version": 1,
-  "generatedAt": "2026-07-24T13:15:05.476Z",
-  "rangeStart": "2026-07-24",
-  "rangeEnd": "2026-10-22",
+  "generatedAt": "2026-07-31T01:02:45.868Z",
+  "rangeStart": "2026-07-30",
+  "rangeEnd": "2026-10-28",
   "source": "Nasdaq Earnings Calendar",
   "successfulDates": 65,
   "requestedDates": 65,
   "events": [
-    {
-      "symbol": "MSFT",
-      "name": "Microsoft Corporation",
-      "date": "2026-07-29",
-      "session": "after-market"
-    },
     {
       "symbol": "MSTR",
       "name": "Strategy Inc",
@@ -35,7 +29,7 @@
       "symbol": "NVDA",
       "name": "NVIDIA Corporation",
       "date": "2026-08-26",
-      "session": "unknown"
+      "session": "after-market"
     },
     {
       "symbol": "MRVL",

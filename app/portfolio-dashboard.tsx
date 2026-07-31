@@ -9,7 +9,7 @@ import {
   type PositionSortKey,
   type SortDirection,
 } from "@/lib/portfolio-dashboard";
-import { buildEarningsReminder, type EarningsEvent } from "@/lib/earnings-calendar";
+import { buildEarningsReminder, isUpcomingEarnings, type EarningsEvent } from "@/lib/earnings-calendar";
 import { money, number, percent } from "@/lib/portfolio-format";
 import { heatmapThemeColor, type HeatmapHolding } from "@/lib/portfolio-heatmap";
 import type { PositionGroupView } from "@/lib/portfolio-view-model";
@@ -72,7 +72,7 @@ function PortfolioHeader({
         <article><span>期权</span><strong>{money(optionMarketValue)}</strong></article>
         {nextEarnings && nextEarningsReminder && (
           <article className="header-next-earnings">
-            <span>最近财报</span>
+            <span>即将财报</span>
             <strong>{nextEarnings.symbol} {nextEarningsReminder.releaseDateLabel} · {nextEarningsReminder.sessionLabel}</strong>
             <i>北京{nextEarningsReminder.viewDateLabel}{nextEarningsReminder.viewTimeLabel}，{nextEarningsReminder.countdownLabel}</i>
           </article>
@@ -349,7 +349,6 @@ export function PortfolioDashboard({
   netPositionsValue,
   snapshotTime,
   earningsEvents,
-  earningsUpdatedAt,
   netLiquidation,
   totalPnl,
   totalPnlRate,
@@ -364,7 +363,6 @@ export function PortfolioDashboard({
   netPositionsValue: number;
   snapshotTime: string;
   earningsEvents: EarningsEvent[];
-  earningsUpdatedAt: string;
   netLiquidation: number;
   totalPnl: number;
   totalPnlRate: number;
@@ -376,16 +374,23 @@ export function PortfolioDashboard({
   const [selectedPosition, setSelectedPosition] = useState<PositionDetailTarget | null>(null);
   const quoteSymbols = useMemo(() => positionGroups.map((group) => group.symbol).join(","), [positionGroups]);
   const quoteState = useMarketQuotes(quoteSymbols);
+  const [earningsAsOf] = useState(() => new Date().toISOString());
   const positionSymbols = useMemo(() => new Set(positionGroups.map((group) => group.symbol)), [positionGroups]);
   const earningsBySymbol = useMemo(() => {
     const events = new Map<string, EarningsEvent>();
     for (const event of earningsEvents) {
-      if (positionSymbols.has(event.symbol) && !events.has(event.symbol)) events.set(event.symbol, event);
+      if (
+        positionSymbols.has(event.symbol) &&
+        isUpcomingEarnings(event, earningsAsOf) &&
+        !events.has(event.symbol)
+      ) events.set(event.symbol, event);
     }
     return events;
-  }, [earningsEvents, positionSymbols]);
-  const nextEarnings = earningsEvents.find((event) => positionSymbols.has(event.symbol));
-  const nextEarningsReminder = nextEarnings ? buildEarningsReminder(nextEarnings, earningsUpdatedAt) : null;
+  }, [earningsAsOf, earningsEvents, positionSymbols]);
+  const nextEarnings = earningsEvents.find((event) => (
+    positionSymbols.has(event.symbol) && isUpcomingEarnings(event, earningsAsOf)
+  ));
+  const nextEarningsReminder = nextEarnings ? buildEarningsReminder(nextEarnings, earningsAsOf) : null;
 
   return (
     <>
@@ -428,7 +433,7 @@ export function PortfolioDashboard({
               quotes={quoteState.quotes}
               quoteStatus={quoteState.status}
               earningsBySymbol={earningsBySymbol}
-              earningsUpdatedAt={earningsUpdatedAt}
+              earningsUpdatedAt={earningsAsOf}
             />
           </div>
         </section>
