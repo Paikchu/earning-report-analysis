@@ -297,14 +297,22 @@ test("enlarges and center-aligns holding row text", async () => {
   assert.match(dashboard, /className="daily-change-value/);
   assert.match(css, /--daily-gain:\s*#315b3d/);
   assert.match(css, /--daily-loss:\s*#8f2f25/);
-  assert.match(css, /\.position-row\s*\{[^}]*font-size:\s*11px;[^}]*line-height:\s*1;/s);
+  assert.match(css, /\.position-row\s*\{[^}]*font-size:\s*12px;[^}]*line-height:\s*1\.15;[^}]*font-weight:\s*500;/s);
   assert.match(css, /\.position-identity\s*\{[^}]*align-items:\s*center;/s);
   assert.match(css, /\.position-reminder\s*\{[^}]*align-content:\s*center;/s);
-  assert.match(css, /\.symbol\s*\{[^}]*font:\s*600 14px\/1 var\(--serif\);/s);
-  assert.match(css, /\.position-reminder strong\s*\{[^}]*font-size:\s*9px;/s);
-  assert.match(css, /\.position-reminder small\s*\{[^}]*font-size:\s*7px;/s);
-  assert.match(css, /\.daily-change-value\s*\{[^}]*font-size:\s*11px;[^}]*font-weight:\s*650;/s);
-  assert.match(css, /@media \(max-width: 620px\)[^]*?\.daily-change-value \{ font-size: 12px; \}/);
+  assert.match(css, /\.symbol\s*\{[^}]*font:\s*600 15px\/1 var\(--serif\);/s);
+  assert.match(css, /\.position-reminder strong\s*\{[^}]*font-size:\s*10px;/s);
+  assert.match(css, /\.position-reminder small\s*\{[^}]*font-size:\s*8px;/s);
+  assert.match(css, /\.daily-change-value\s*\{[^}]*font-size:\s*12px;[^}]*font-weight:\s*650;/s);
+  assert.match(css, /@media \(max-width: 620px\)[^]*?\.daily-change-value \{ font-size: 13px; \}/);
+});
+
+test("places actual cost in the third ledger column", async () => {
+  const dashboard = await readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8");
+
+  assert.match(dashboard, /\{ label: "股价" \},\s*\{ label: "实际成本" \},\s*\{ label: "当日涨跌" \}/);
+  assert.match(dashboard, /data-label="股价"[\s\S]*data-label="实际成本"[\s\S]*data-label="当日涨跌"/);
+  assert.match(dashboard, /group\.stock \? money\(group\.stock\.actualCost\)/);
 });
 
 test("keeps full ticker symbols visible before heatmap metrics", async () => {
@@ -351,7 +359,7 @@ test("renders option-only submenus below every ticker with options", async () =>
   assert.doesNotMatch(css, /\.position-kinds/);
   const mobileCss = css.match(/@media \(max-width: 620px\) \{([\s\S]*)\}\s*$/)?.[1] ?? "";
   assert.match(mobileCss, /\.position-submenu \{[^}]*width: min\(calc\(100% - 8px\), 620px\);[^}]*margin: 0 auto 10px;/);
-  assert.match(mobileCss, /\.position-submenu-row \{[^}]*min-height: 34px;[^}]*grid-template-columns: 32px minmax\(0, 1fr\) auto 76px;[^}]*text-align: center;/);
+  assert.match(mobileCss, /\.position-submenu-row \{[^}]*min-height: 38px;[^}]*grid-template-columns: 32px minmax\(0, 1fr\) auto 76px;[^}]*font-size: 11px;[^}]*text-align: center;/);
   assert.match(mobileCss, /\.position-submenu-row \.submenu-value \{ text-align: center; \}/);
   assert.doesNotMatch(mobileCss, /\.position-submenu-row \.(?:submenu-type|submenu-quantity|submenu-value) \{[^}]*grid-row:/);
 });

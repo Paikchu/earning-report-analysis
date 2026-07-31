@@ -197,6 +197,7 @@ function AllocationRing({
 const columns: Array<{ className?: string; key?: PositionSortKey; label: string }> = [
   { key: "symbol", label: "标的" },
   { label: "股价" },
+  { label: "实际成本" },
   { label: "当日涨跌" },
   { key: "value", label: "净市值" },
   { key: "weight", label: "净权重" },
@@ -289,6 +290,9 @@ function PositionLedger({
               </span>
               <span data-label="股价">
                 {quotes[group.symbol] ? money(quotes[group.symbol].price) : <i className="quote-muted">{quoteStatus === "loading" ? "读取中" : "—"}</i>}
+              </span>
+              <span data-label="实际成本">
+                {group.stock ? money(group.stock.actualCost) : <i className="quote-muted">—</i>}
               </span>
               <span data-label="当日涨跌">
                 {quotes[group.symbol]
