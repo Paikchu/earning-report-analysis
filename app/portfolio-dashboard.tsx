@@ -196,7 +196,6 @@ function AllocationRing({
 
 const columns: Array<{ className?: string; key?: PositionSortKey; label: string }> = [
   { key: "symbol", label: "标的" },
-  { className: "column-center", label: "构成" },
   { label: "股价" },
   { label: "当日涨跌" },
   { key: "value", label: "净市值" },
@@ -288,10 +287,6 @@ function PositionLedger({
                 <strong className="symbol">{group.symbol}</strong>
                 <PositionReminder event={earningsBySymbol.get(group.symbol)} asOf={earningsUpdatedAt} />
               </span>
-              <span className="position-kinds" data-label="构成">
-                {group.stock && <i className="asset-pill stock-pill">正股</i>}
-                {group.options.length > 0 && <i className="asset-pill option-pill">{group.options.length} 期权</i>}
-              </span>
               <span data-label="股价">
                 {quotes[group.symbol] ? money(quotes[group.symbol].price) : <i className="quote-muted">{quoteStatus === "loading" ? "读取中" : "—"}</i>}
               </span>
@@ -315,14 +310,8 @@ function PositionLedger({
               <span data-label="年内净盈亏"><Pnl value={group.netPnl} /></span>
               <span className="row-arrow" aria-hidden="true">→</span>
             </button>
-            {group.stock && group.options.length > 0 && (
-              <div className="position-submenu" aria-label={`${group.symbol} 正股与期权持仓`}>
-                <div className="position-submenu-row">
-                  <span className="submenu-type">正股</span>
-                  <strong>{group.stock.name}</strong>
-                  <span className="submenu-quantity">{number(group.stock.quantity, 0, 4)} 股</span>
-                  <i className="submenu-value">{money(group.stock.value)}</i>
-                </div>
+            {group.options.length > 0 && (
+              <div className="position-submenu" aria-label={`${group.symbol} 期权持仓`}>
                 {group.options.map((option) => (
                   <div className="position-submenu-row" key={option.contract}>
                     <span className="submenu-type">期权</span>
