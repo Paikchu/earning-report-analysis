@@ -160,7 +160,7 @@ h2 {
 .header-position-summary {
   min-height: 62px;
   display: grid;
-  grid-template-columns: repeat(3, minmax(120px, .65fr)) minmax(280px, 1.8fr);
+  grid-template-columns: repeat(4, minmax(110px, .65fr)) minmax(280px, 1.8fr);
   border-top: 1px dashed var(--paper-deep);
 }
 
@@ -1424,7 +1424,7 @@ td { font-size: 9px; }
   .hero { grid-template-columns: 1fr; align-items: start; gap: 22px; }
   .summary-support { padding-bottom: 0; justify-content: flex-start; }
   .summary-support article { min-width: 0; text-align: left; }
-  .header-position-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .header-position-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .header-position-summary .header-next-earnings {
     grid-column: 1 / -1;
     padding-left: 0;

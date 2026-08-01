@@ -16,6 +16,8 @@ const optionUnrealizedPnl = snapshot.positions
   .filter((position) => position.assetClass === "OPT")
   .reduce((sum, position) => sum + position.unrealizedPnl, 0);
 const netLiquidationWithoutOptionPnl = snapshot.account.netLiquidation - optionUnrealizedPnl;
+const grossPositionsValue = snapshot.positions.reduce((sum, position) => sum + Math.abs(position.marketValue), 0);
+const portfolioLeverage = snapshot.account.netLiquidation === 0 ? 0 : grossPositionsValue / snapshot.account.netLiquidation;
 const snapshotTime = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Shanghai" }).format(new Date(snapshot.generatedAt));
 
 export default function Home() {
@@ -35,6 +37,7 @@ export default function Home() {
           totalPnl={totalPnl}
           totalPnlRate={totalPnlRate}
           netLiquidationWithoutOptionPnl={netLiquidationWithoutOptionPnl}
+          portfolioLeverage={portfolioLeverage}
           netDeposits={snapshot.account.netDeposits}
           cashBalance={snapshot.account.cashBalance}
         />

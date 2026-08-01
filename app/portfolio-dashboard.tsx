@@ -30,6 +30,7 @@ function PortfolioHeader({
   totalPnl,
   totalPnlRate,
   netLiquidationWithoutOptionPnl,
+  portfolioLeverage,
   netDeposits,
   cashBalance,
   netPositionsValue,
@@ -42,6 +43,7 @@ function PortfolioHeader({
   totalPnl: number;
   totalPnlRate: number;
   netLiquidationWithoutOptionPnl: number;
+  portfolioLeverage: number;
   netDeposits: number;
   cashBalance: number;
   netPositionsValue: number;
@@ -71,6 +73,7 @@ function PortfolioHeader({
         <article><span>持仓净市值</span><strong>{money(netPositionsValue)}</strong></article>
         <article><span>正股</span><strong>{money(stockMarketValue)}</strong></article>
         <article><span>期权</span><strong>{money(optionMarketValue)}</strong></article>
+        <article><span>杠杆率</span><strong>{number(portfolioLeverage, 2, 2)}x</strong></article>
         {nextEarnings && nextEarningsReminder && (
           <article className="header-next-earnings">
             <span>即将财报</span>
@@ -402,6 +405,7 @@ export function PortfolioDashboard({
   totalPnl,
   totalPnlRate,
   netLiquidationWithoutOptionPnl,
+  portfolioLeverage,
   netDeposits,
   cashBalance,
 }: {
@@ -416,6 +420,7 @@ export function PortfolioDashboard({
   totalPnl: number;
   totalPnlRate: number;
   netLiquidationWithoutOptionPnl: number;
+  portfolioLeverage: number;
   netDeposits: number;
   cashBalance: number;
 }) {
@@ -448,6 +453,7 @@ export function PortfolioDashboard({
         totalPnl={totalPnl}
         totalPnlRate={totalPnlRate}
         netLiquidationWithoutOptionPnl={netLiquidationWithoutOptionPnl}
+        portfolioLeverage={portfolioLeverage}
         netDeposits={netDeposits}
         cashBalance={cashBalance}
         netPositionsValue={netPositionsValue}
