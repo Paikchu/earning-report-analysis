@@ -142,3 +142,49 @@ test("returns an explicit unsupported state when SEC has no CIK", async () => {
   assert.equal(feed.filings.length, 0);
   assert.equal((await getCachedSecFeed(repository, "SPCX")).status, "unsupported");
 });
+
+test("orders an existing cached feed by filing date", async () => {
+  const repository = new MemorySecRepository();
+  await repository.setCache("sec:filings:MSFT", {
+    ticker: "MSFT",
+    company: { ticker: "MSFT", cik: "0000789019", name: "Microsoft Corp" },
+    filings: [
+      {
+        ticker: "MSFT",
+        cik: "0000789019",
+        cikNumber: 789019,
+        companyName: "Microsoft Corp",
+        form: "10-Q",
+        filingDate: "2026-04-29",
+        reportDate: "2026-03-31",
+        accessionNumber: "old",
+        primaryDocument: "old.htm",
+        description: "Quarterly report",
+        items: "",
+        documentUrl: "https://example.com/old.htm",
+        indexUrl: "https://example.com/old-index.html",
+      },
+      {
+        ticker: "MSFT",
+        cik: "0000789019",
+        cikNumber: 789019,
+        companyName: "Microsoft Corp",
+        form: "10-K",
+        filingDate: "2026-07-29",
+        reportDate: "2026-06-30",
+        accessionNumber: "new",
+        primaryDocument: "new.htm",
+        description: "Annual report",
+        items: "",
+        documentUrl: "https://example.com/new.htm",
+        indexUrl: "https://example.com/new-index.html",
+      },
+    ],
+    fetchedAt: "2026-07-30T00:00:00.000Z",
+    status: "ready",
+  }, "2026-07-30T00:00:00.000Z");
+
+  const feed = await getCachedSecFeed(repository, "MSFT");
+
+  assert.deepEqual(feed.filings.map((filing) => filing.accessionNumber), ["new", "old"]);
+});

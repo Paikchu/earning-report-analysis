@@ -61,6 +61,15 @@ export type SecFilingFeed = {
   error?: string;
 };
 
+const SEC_REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1_000;
+
+export function isSecFeedRefreshDue(feed: SecFilingFeed, nowMs = Date.now()): boolean {
+  if (feed.status === "unsupported" || feed.status === "not_applicable") return false;
+  if (feed.status === "pending" || feed.status === "stale" || !feed.fetchedAt) return true;
+  const fetchedAt = Date.parse(feed.fetchedAt);
+  return !Number.isFinite(fetchedAt) || nowMs - fetchedAt >= SEC_REFRESH_INTERVAL_MS;
+}
+
 export type SecCompany = {
   ticker: string;
   cik: string;
@@ -80,6 +89,16 @@ export function cleanSecAccession(value: string): string {
 
 export function isBusinessFiling(form: string): boolean {
   return BUSINESS_FILING_FORMS.has(form);
+}
+
+export function sortSecFilings(filings: SecFiling[]): SecFiling[] {
+  return [...filings].sort((left, right) => {
+    const filingDate = right.filingDate.localeCompare(left.filingDate);
+    if (filingDate !== 0) return filingDate;
+    const reportDate = right.reportDate.localeCompare(left.reportDate);
+    if (reportDate !== 0) return reportDate;
+    return right.accessionNumber.localeCompare(left.accessionNumber);
+  });
 }
 
 export function htmlToSecText(html: string): string {
@@ -151,7 +170,7 @@ export function parseSecSubmissions(payload: unknown, company: SecCompany, limit
   const items = asArray(recent?.items);
   const companyName = typeof root?.name === "string" && root.name ? root.name : company.name;
 
-  return accessions.flatMap((accessionValue, index): SecFiling[] => {
+  const filings = accessions.flatMap((accessionValue, index): SecFiling[] => {
     const accessionNumber = String(accessionValue ?? "");
     const form = String(forms[index] ?? "");
     const primaryDocument = String(primaryDocuments[index] ?? "");
@@ -173,7 +192,9 @@ export function parseSecSubmissions(payload: unknown, company: SecCompany, limit
       documentUrl: `${archiveRoot}/${primaryDocument}`,
       indexUrl: `${archiveRoot}/${accessionNumber}-index.html`,
     }];
-  }).slice(0, Math.max(0, limit));
+  });
+
+  return sortSecFilings(filings).slice(0, Math.max(0, limit));
 }
 
 function decodeEntities(value: string): string {

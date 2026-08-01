@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   htmlToSecText,
   isBusinessFiling,
+  isSecFeedRefreshDue,
   isSummaryRetryDue,
   normalizeSecSummary,
   parseSecSubmissions,
@@ -114,4 +115,46 @@ test("parses the five newest supported filings from SEC submissions", () => {
 
   assert.deepEqual(filings.map((filing) => filing.form), ["6-K", "20-F", "6-K/A", "10-Q", "8-K"]);
   assert.match(filings[0].indexUrl, /924613\/a\/a-index\.html$/);
+});
+
+test("sorts supported filings by filing date before limiting", () => {
+  const filings = parseSecSubmissions({
+    name: "Microsoft Corp",
+    filings: {
+      recent: {
+        accessionNumber: ["old", "new", "middle", "newer"],
+        form: ["10-Q", "10-K", "8-K", "10-Q"],
+        filingDate: ["2026-04-29", "2026-07-29", "2026-06-05", "2026-07-28"],
+        reportDate: ["2026-03-31", "2026-06-30", "2026-06-05", "2026-06-30"],
+        primaryDocument: ["old.htm", "new.htm", "middle.htm", "newer.htm"],
+        primaryDocDescription: ["Quarterly report", "Annual report", "Current report", "Quarterly report"],
+        items: ["", "", "", ""],
+      },
+    },
+  }, {
+    ticker: "MSFT",
+    cik: "0000789019",
+    cikNumber: 789019,
+    name: "Microsoft Corp",
+  }, 3);
+
+  assert.deepEqual(filings.map((filing) => [filing.form, filing.filingDate]), [
+    ["10-K", "2026-07-29"],
+    ["10-Q", "2026-07-28"],
+    ["8-K", "2026-06-05"],
+  ]);
+});
+
+test("marks old SEC feeds for a background refresh", () => {
+  const feed = {
+    ticker: "MSFT",
+    company: null,
+    filings: [],
+    fetchedAt: "2026-07-31T00:00:00.000Z",
+    status: "ready" as const,
+  };
+
+  assert.equal(isSecFeedRefreshDue(feed, Date.parse("2026-07-31T11:59:59.000Z")), false);
+  assert.equal(isSecFeedRefreshDue(feed, Date.parse("2026-07-31T12:00:00.000Z")), true);
+  assert.equal(isSecFeedRefreshDue({ ...feed, status: "stale" }, Date.parse("2026-07-31T00:01:00.000Z")), true);
 });

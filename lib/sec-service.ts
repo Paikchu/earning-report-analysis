@@ -4,6 +4,7 @@ import {
   isSummaryRetryDue,
   normalizeSecSummary,
   parseSecSubmissions,
+  sortSecFilings,
   type SecCompany,
   type SecFiling,
   type SecFilingFeed,
@@ -44,7 +45,7 @@ export async function getCachedSecFeed(repository: SecRepository, rawTicker: str
   const ticker = cleanSecTicker(rawTicker);
   const cached = await repository.getCache<StoredSecFeed>(filingCacheKey(ticker));
   if (!cached) return { ticker, company: null, filings: [], fetchedAt: null, status: "pending" };
-  const filings = await Promise.all(cached.payload.filings.map(async (filing) => ({
+  const filings = await Promise.all(sortSecFilings(cached.payload.filings).map(async (filing) => ({
     ...filing,
     summary: await repository.getSummary(ticker, filing.accessionNumber),
   })));

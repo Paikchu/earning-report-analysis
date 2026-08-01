@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import type { SecFilingFeed, SecFilingWithSummary } from "@/lib/sec";
+import { isSecFeedRefreshDue, type SecFilingFeed, type SecFilingWithSummary } from "@/lib/sec";
 
 type LoadState =
   | { status: "loading" }
@@ -17,7 +17,8 @@ export function SecFilingsSection({ ticker }: { ticker: string }) {
     const controller = new AbortController();
     void (async () => {
       try {
-        const response = await fetch(`/api/sec/${encodeURIComponent(ticker)}/filings`, {
+        const feedUrl = `/api/sec/${encodeURIComponent(ticker)}/filings`;
+        const response = await fetch(feedUrl, {
           cache: "no-store",
           signal: controller.signal,
         });
@@ -25,6 +26,18 @@ export function SecFilingsSection({ ticker }: { ticker: string }) {
         const feed = await response.json() as SecFilingFeed;
         setState({ status: "ready", feed });
         setOpenAccession(feed.filings[0]?.accessionNumber ?? null);
+
+        if (!isSecFeedRefreshDue(feed)) return;
+        const refreshResponse = await fetch(`${feedUrl}/refresh`, {
+          method: "POST",
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!refreshResponse.ok) return;
+        const refreshedFeed = await refreshResponse.json() as SecFilingFeed;
+        if (controller.signal.aborted) return;
+        setState({ status: "ready", feed: refreshedFeed });
+        setOpenAccession(refreshedFeed.filings[0]?.accessionNumber ?? null);
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
           setState({ status: "error", message: error instanceof Error ? error.message : "SEC 数据读取失败。" });
