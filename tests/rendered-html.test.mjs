@@ -88,7 +88,7 @@ test("uses the approved ledger-dominant hierarchy without horizontal scrolling",
   assert.match(css, /\.position-scroll \{[\s\S]*?overflow-x: visible;/);
   assert.match(css, /\.hero \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto;/);
   assert.match(css, /\.summary-nav-value \{[\s\S]*?font-size: clamp\(48px, 5vw, 56px\);/);
-  assert.match(css, /\.header-position-summary \{[\s\S]*?grid-template-columns: repeat\(3, minmax\(120px, \.65fr\)\) minmax\(280px, 1\.8fr\);/);
+  assert.match(css, /\.header-position-summary \{[\s\S]*?grid-template-columns: repeat\(4, minmax\(110px, \.65fr\)\) minmax\(280px, 1\.8fr\);/);
   assert.match(css, /h2 \{[\s\S]*?font: 600 22px\/1\.1 var\(--serif\);/);
   assert.doesNotMatch(css, /\.portfolio-header \{[^}]*background:/);
   assert.match(css, /@media \(max-width: 620px\)[\s\S]*?\.header-position-summary \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
@@ -145,6 +145,19 @@ test("removes the portfolio history chart while keeping supporting metrics", asy
   assert.match(html, /现金/);
   assert.doesNotMatch(html, /净值走势|aria-label="净值周期"/);
   assert.doesNotMatch(dashboard, /PortfolioChart|className="portfolio-chart"|range-switch|历史净值正在积累/);
+});
+
+test("renders the current portfolio leverage in the header", async () => {
+  const [response, snapshot] = await Promise.all([
+    render(),
+    readFile(new URL("../data/portfolio-snapshot.json", import.meta.url), "utf8").then(JSON.parse),
+  ]);
+  const html = await response.text();
+  const grossPositionsValue = snapshot.positions.reduce((sum, position) => sum + Math.abs(position.marketValue), 0);
+  const leverage = grossPositionsValue / snapshot.account.netLiquidation;
+
+  assert.match(html, /杠杆率/);
+  assert.match(html, new RegExp(`${leverage.toFixed(2)}(?:<!-- -->)?x`));
 });
 
 test("renders the stock-only investment theme heatmap", async () => {
