@@ -158,3 +158,27 @@ test("marks old SEC feeds for a background refresh", () => {
   assert.equal(isSecFeedRefreshDue(feed, Date.parse("2026-07-31T12:00:00.000Z")), true);
   assert.equal(isSecFeedRefreshDue({ ...feed, status: "stale" }, Date.parse("2026-07-31T00:01:00.000Z")), true);
 });
+
+test("uses filing date only and preserves SEC order for same-day filings", () => {
+  const filings = parseSecSubmissions({
+    name: "Microsoft Corp",
+    filings: {
+      recent: {
+        accessionNumber: ["annual", "current", "prior"],
+        form: ["10-K", "8-K", "10-Q"],
+        filingDate: ["2026-07-29", "2026-07-29", "2026-04-29"],
+        reportDate: ["2026-06-30", "2026-07-29", "2026-03-31"],
+        primaryDocument: ["annual.htm", "current.htm", "prior.htm"],
+        primaryDocDescription: ["Annual report", "Current report", "Quarterly report"],
+        items: ["", "", ""],
+      },
+    },
+  }, {
+    ticker: "MSFT",
+    cik: "0000789019",
+    cikNumber: 789019,
+    name: "Microsoft Corp",
+  });
+
+  assert.deepEqual(filings.map((filing) => filing.accessionNumber), ["annual", "current", "prior"]);
+});

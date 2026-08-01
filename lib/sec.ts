@@ -95,9 +95,7 @@ export function sortSecFilings(filings: SecFiling[]): SecFiling[] {
   return [...filings].sort((left, right) => {
     const filingDate = right.filingDate.localeCompare(left.filingDate);
     if (filingDate !== 0) return filingDate;
-    const reportDate = right.reportDate.localeCompare(left.reportDate);
-    if (reportDate !== 0) return reportDate;
-    return right.accessionNumber.localeCompare(left.accessionNumber);
+    return 0;
   });
 }
 
