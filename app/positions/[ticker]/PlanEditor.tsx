@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { HoldingPlanRecord } from "@/lib/holding-plan-store";
 import type { PlanAction } from "@/lib/holding-plan";
 
@@ -18,6 +18,13 @@ const ACTION_LABELS: Record<PlanAction, string> = {
   stop: "止损",
   target: "目标",
 };
+
+function canAutoSave(draft: { holdingReason: string; levels: EditableLevel[] }): boolean {
+  return Boolean(draft.holdingReason.trim()) && draft.levels.every((level) => {
+    const price = Number(level.price);
+    return Number.isFinite(price) && price > 0;
+  });
+}
 
 export function PlanEditor({
   ticker,
@@ -40,18 +47,30 @@ export function PlanEditor({
   })) ?? []);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [message, setMessage] = useState(unavailable ? "计划数据暂时无法读取，请稍后再试。" : "");
+  const [dirty, setDirty] = useState(false);
+  const draftRef = useRef({ holdingReason, levels });
+  const editVersionRef = useRef(0);
+  const savingRef = useRef(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveRef = useRef<(automatic: boolean) => Promise<void>>();
+
+  const markDirty = () => {
+    editVersionRef.current += 1;
+    setDirty(true);
+    setStatus("idle");
+    setMessage("");
+    onDirtyChange?.(true);
+  };
 
   const addLevel = () => {
     if (levels.length >= 20) return;
     setLevels((current) => [...current, { id: crypto.randomUUID(), action: "add", price: "", sizeNote: "", triggerNote: "" }]);
-    setStatus("idle");
-    onDirtyChange?.(true);
+    markDirty();
   };
 
   const updateLevel = (id: string, patch: Partial<EditableLevel>) => {
     setLevels((current) => current.map((level) => level.id === id ? { ...level, ...patch } : level));
-    setStatus("idle");
-    onDirtyChange?.(true);
+    markDirty();
   };
 
   const moveLevel = (index: number, offset: number) => {
@@ -62,47 +81,83 @@ export function PlanEditor({
       [next[index], next[destination]] = [next[destination], next[index]];
       return next;
     });
-    setStatus("idle");
-    onDirtyChange?.(true);
+    markDirty();
   };
 
   const removeLevel = (id: string) => {
     setLevels((current) => current.filter((item) => item.id !== id));
-    setStatus("idle");
-    onDirtyChange?.(true);
+    markDirty();
   };
 
-  const save = async () => {
-    if (unavailable || status === "saving") return;
-    setStatus("saving");
-    setMessage("");
-    const payload = {
-      holdingReason,
-      levels: levels.map((level, sortOrder) => ({
-        id: level.id,
-        action: level.action,
-        priceCents: Math.round(Number(level.price) * 100),
-        sizeNote: level.sizeNote,
-        triggerNote: level.triggerNote,
-        sortOrder,
-      })),
+  useEffect(() => {
+    draftRef.current = { holdingReason, levels };
+    saveRef.current = async (automatic) => {
+      if (unavailable || savingRef.current) return;
+      const version = editVersionRef.current;
+      const draft = draftRef.current;
+      if (automatic && !canAutoSave(draft)) return;
+      savingRef.current = true;
+      setStatus("saving");
+      setMessage(automatic ? "自动保存中…" : "");
+      const payload = {
+        holdingReason: draft.holdingReason,
+        levels: draft.levels.map((level, sortOrder) => ({
+          id: level.id,
+          action: level.action,
+          priceCents: Math.round(Number(level.price) * 100),
+          sizeNote: level.sizeNote,
+          triggerNote: level.triggerNote,
+          sortOrder,
+        })),
+      };
+      try {
+        const response = await fetch(`/api/plans/${encodeURIComponent(ticker)}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json() as { error?: string };
+        if (!response.ok) throw new Error(result.error ?? "计划保存失败。");
+        if (version === editVersionRef.current) {
+          setStatus("saved");
+          setMessage(automatic ? "已自动保存" : "计划已保存");
+          setDirty(false);
+          onDirtyChange?.(false);
+        } else {
+          setStatus("idle");
+          setMessage("有新的更改待保存");
+        }
+      } catch (error) {
+        setStatus("error");
+        setMessage(error instanceof Error ? error.message : "计划保存失败。");
+      } finally {
+        savingRef.current = false;
+        if (version !== editVersionRef.current && !unavailable) {
+          saveTimerRef.current = setTimeout(() => {
+            saveTimerRef.current = null;
+            void saveRef.current?.(true);
+          }, 700);
+        }
+      }
     };
-    try {
-      const response = await fetch(`/api/plans/${encodeURIComponent(ticker)}`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const result = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(result.error ?? "计划保存失败。");
-      setStatus("saved");
-      setMessage("计划已保存");
-      onDirtyChange?.(false);
-    } catch (error) {
-      setStatus("error");
-      setMessage(error instanceof Error ? error.message : "计划保存失败。");
-    }
-  };
+  }, [holdingReason, levels, onDirtyChange, ticker, unavailable]);
+
+  useEffect(() => {
+    if (!dirty || unavailable || !canAutoSave({ holdingReason, levels })) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null;
+      void saveRef.current?.(true);
+    }, 700);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    };
+  }, [dirty, holdingReason, levels, unavailable]);
+
+  useEffect(() => () => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+  }, []);
 
   return (
     <section className="plan-editor" id="plan-editor" aria-labelledby="plan-title">
@@ -118,7 +173,7 @@ export function PlanEditor({
         <span>持仓原因</span>
         <textarea
           value={holdingReason}
-          onChange={(event) => { setHoldingReason(event.target.value); setStatus("idle"); onDirtyChange?.(true); }}
+          onChange={(event) => { setHoldingReason(event.target.value); markDirty(); }}
           placeholder="为什么持有它？什么事实支持这个判断？"
           maxLength={5_000}
           rows={6}
@@ -151,7 +206,7 @@ export function PlanEditor({
 
       <div className="plan-save-row">
         <span>{holdingReason.length.toLocaleString("zh-CN")} / 5,000</span>
-        <button className="primary-button" type="button" onClick={save} disabled={unavailable || status === "saving"}>{status === "saving" ? "保存中…" : "保存计划"}</button>
+        <button className="primary-button" type="button" onClick={() => void saveRef.current?.(false)} disabled={unavailable || status === "saving"}>{status === "saving" ? "保存中…" : "立即保存"}</button>
       </div>
     </section>
   );
