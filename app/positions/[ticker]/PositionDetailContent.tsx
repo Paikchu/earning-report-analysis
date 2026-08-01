@@ -7,6 +7,7 @@ import type { MarketQuote } from "@/lib/yahoo-quotes";
 import { useMarketQuotes, type QuoteLoadStatus } from "@/app/use-market-quotes";
 import { PlanEditor } from "./PlanEditor";
 import { SecFilingsSection } from "./SecFilingsSection";
+import { OwnershipSection } from "./OwnershipSection";
 
 export type PositionPlanStatus = "ready" | "loading" | "unavailable";
 
@@ -109,6 +110,7 @@ export function PositionDetailContent({
         />
       )}
 
+      <OwnershipSection ticker={ticker} />
       <SecFilingsSection ticker={ticker} />
     </>
   );

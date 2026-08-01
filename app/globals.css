@@ -1256,6 +1256,7 @@ td { font-size: 9px; }
 .position-summary strong { overflow: hidden; font: 600 20px/1.1 var(--serif); font-variant-numeric: tabular-nums lining-nums; text-overflow: ellipsis; white-space: nowrap; }
 
 .instrument-section,
+.ownership-section,
 .sec-filings-section,
 .plan-editor { padding-top: 46px; }
 
@@ -1283,6 +1284,56 @@ td { font-size: 9px; }
 
 .sec-filings-section,
 .plan-editor { width: 100%; max-width: none; }
+.ownership-updated { color: var(--ink-soft); font-size: 9px; }
+.ownership-state {
+  margin: 18px 0 0;
+  padding: 24px 0;
+  color: var(--ink-soft);
+  border-top: 1px solid var(--paper-deep);
+  font-size: 10px;
+}
+.ownership-state-error { color: var(--color-loss); }
+.ownership-stale {
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  color: #6c5534;
+  background: #f1ead9;
+  font-size: 9px;
+}
+.ownership-composition-bar {
+  height: 15px;
+  margin-top: 22px;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--ink);
+  background: var(--paper-deep);
+}
+.ownership-bar-segment { min-width: 2px; height: 100%; }
+.ownership-institutional { --ownership-color: #286783; }
+.ownership-insider { --ownership-color: #c06037; }
+.ownership-retail { --ownership-color: #88672b; }
+.ownership-bar-segment { background: var(--ownership-color); }
+.ownership-metrics {
+  margin-top: 15px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  border-top: 1px solid var(--paper-deep);
+  border-bottom: 1px solid var(--paper-deep);
+}
+.ownership-metric {
+  min-width: 0;
+  padding: 14px 0 15px 12px;
+  display: grid;
+  gap: 7px;
+  border-left: 4px solid var(--ownership-color);
+}
+.ownership-metric span { color: var(--ink-soft); font-size: 9px; line-height: 1.35; }
+.ownership-metric strong { font: 600 22px/1 var(--serif); font-variant-numeric: tabular-nums lining-nums; }
+.ownership-metric small { color: var(--ink-soft); font-size: 8px; }
+.ownership-meta,
+.ownership-note { margin: 12px 0 0; color: var(--ink-soft); font-size: 9px; line-height: 1.55; }
+.ownership-note { margin-top: 5px; font-size: 8px; }
 .sec-updated { color: var(--ink-soft); font-size: 9px; }
 .sec-state {
   margin: 18px 0 0;
@@ -1607,8 +1658,12 @@ td { font-size: 9px; }
   .position-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 16px; }
   .position-summary strong { font-size: 17px; }
   .instrument-section,
+  .ownership-section,
   .sec-filings-section,
   .plan-editor { padding-top: 38px; }
+  .ownership-metrics { grid-template-columns: 1fr; gap: 0; }
+  .ownership-metric { padding: 11px 0 11px 12px; border-bottom: 1px solid var(--paper-deep); }
+  .ownership-metric:last-child { border-bottom: 0; }
   .sec-filing-card > button { grid-template-columns: 50px minmax(0, 1fr) 18px; gap: 10px; }
   .sec-filing-date { display: none; }
   .sec-filing-body { padding-left: 4px; }
