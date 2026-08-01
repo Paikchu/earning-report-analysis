@@ -224,6 +224,18 @@ h2 {
 .allocation-panel h2,
 .ledger-heading h2 { font-size: inherit; }
 
+.allocation-chart-heading {
+  margin: 0 0 10px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.allocation-chart-heading h3 { margin: 0; font: 600 14px/1.1 var(--serif); }
+.allocation-chart-heading span { color: var(--ink-soft); font-size: 8px; }
+.allocation-sector-heading { margin-top: 30px; }
+
 .section-divider {
   width: 100%;
   height: 0;
@@ -260,6 +272,9 @@ h2 {
 .ring-segment:hover,
 .ring-segment:focus-visible,
 .ring-segment[data-active="true"] { stroke-width: 19; outline: none; }
+
+.sector-ring-segment { cursor: default; }
+.sector-ring-segment:hover { stroke-width: 16; }
 
 .ring-center {
   position: absolute;
@@ -317,6 +332,8 @@ h2 {
 
 .legend-row b { color: var(--ink); font-weight: 600; }
 .legend-other { color: var(--ink-soft); }
+.sector-legend-row { cursor: default; }
+.sector-legend-row:hover { color: var(--ink); background: transparent; }
 
 .other-popover {
   position: absolute;

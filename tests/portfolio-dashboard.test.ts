@@ -41,6 +41,31 @@ test("builds four leading allocations and a residual other segment", async () =>
   assert.deepEqual(allocation.other.map((item) => item.symbol), ["DRAM", "INTC"]);
 });
 
+test("groups positive portfolio weights by investment sector", async () => {
+  const { buildSectorAllocation } = await import("../lib/portfolio-dashboard.ts");
+  const allocation = buildSectorAllocation([
+    group("MSFT", 20),
+    group("ORCL", 10),
+    group("NVDA", 15),
+    group("DRAM", 5),
+    group("UNKNOWN", 3),
+    group("INTC", -2),
+  ]);
+
+  assert.deepEqual(allocation.sectors.map((sector) => [sector.domain, sector.weight]), [
+    ["AI / 企业软件", 30],
+    ["半导体", 20],
+    ["其他", 3],
+  ]);
+  assert.equal(allocation.classifiedWeight, 53);
+  assert.equal(allocation.unallocatedWeight, 47);
+});
+
+test("uses separate colors for the leading allocation segments", async () => {
+  const { allocationColor } = await import("../lib/portfolio-dashboard.ts");
+  assert.equal(new Set([0, 1, 2, 3].map(allocationColor)).size, 4);
+});
+
 test("sorts ledger rows by net weight descending by default", async () => {
   const { sortPositionGroups } = await import("../lib/portfolio-dashboard.ts");
   const groups = [group("LOW", -1), group("MID", 5), group("HIGH", 12)];

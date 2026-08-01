@@ -1,4 +1,5 @@
 import type { PositionGroupView } from "./portfolio-view-model.ts";
+import { heatmapDomain, heatmapDomainColor } from "./portfolio-heatmap.ts";
 
 export type PositionSortKey =
   | "symbol"
@@ -11,14 +12,14 @@ export type PositionSortKey =
 export type SortDirection = "asc" | "desc";
 
 const HOLDING_COLORS = [
-  "#17324d",
-  "#2f4f68",
-  "#48677d",
-  "#617f90",
-  "#7894a1",
-  "#385c72",
-  "#557487",
-  "#8199a3",
+  "#2e6fdb",
+  "#d27a1d",
+  "#c45235",
+  "#7654c6",
+  "#16888e",
+  "#a4478d",
+  "#4d9078",
+  "#8a6a3d",
 ] as const;
 
 export function holdingColor(symbol: string) {
@@ -26,6 +27,10 @@ export function holdingColor(symbol: string) {
   let hash = 0;
   for (const character of normalized) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
   return HOLDING_COLORS[hash % HOLDING_COLORS.length];
+}
+
+export function allocationColor(index: number) {
+  return HOLDING_COLORS[index % HOLDING_COLORS.length];
 }
 
 export function buildAllocation(groups: PositionGroupView[]) {
@@ -37,6 +42,24 @@ export function buildAllocation(groups: PositionGroupView[]) {
     leadingWeight,
     other: sorted.filter((group) => !leading.includes(group)),
     otherWeight: Number(Math.max(0, 100 - leadingWeight).toFixed(2)),
+  };
+}
+
+export function buildSectorAllocation(groups: PositionGroupView[]) {
+  const weights = new Map<string, number>();
+  for (const group of groups) {
+    if (group.weight <= 0) continue;
+    const domain = heatmapDomain(group.symbol);
+    weights.set(domain, (weights.get(domain) ?? 0) + group.weight);
+  }
+  const sectors = [...weights.entries()]
+    .map(([domain, weight]) => ({ domain, weight: Number(weight.toFixed(2)), color: heatmapDomainColor(domain) }))
+    .sort((left, right) => right.weight - left.weight);
+  const classifiedWeight = Number(sectors.reduce((sum, sector) => sum + sector.weight, 0).toFixed(2));
+  return {
+    sectors,
+    classifiedWeight,
+    unallocatedWeight: Number(Math.max(0, 100 - classifiedWeight).toFixed(2)),
   };
 }
 

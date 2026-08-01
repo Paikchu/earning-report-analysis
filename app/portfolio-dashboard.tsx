@@ -3,8 +3,9 @@
 import { useMemo, useState, type CSSProperties } from "react";
 
 import {
+  allocationColor,
   buildAllocation,
-  holdingColor,
+  buildSectorAllocation,
   sortPositionGroups,
   type PositionSortKey,
   type SortDirection,
@@ -112,7 +113,7 @@ function AllocationRing({
   const segments = useMemo(() => {
     let offset = 0;
     return [
-      ...allocation.leading.map((group) => ({ symbol: group.symbol, weight: group.weight, color: holdingColor(group.symbol) })),
+      ...allocation.leading.map((group, index) => ({ symbol: group.symbol, weight: group.weight, color: allocationColor(index) })),
       { symbol: "OTHER", weight: allocation.otherWeight, color: "#c8c0b3" },
     ].map((segment) => {
       const result = { ...segment, offset };
@@ -155,7 +156,7 @@ function AllocationRing({
         <span className="ring-center">{allocation.leadingWeight.toFixed(1)}%<small>前四大持仓</small></span>
       </div>
       <div className="legend">
-        {allocation.leading.map((group) => (
+        {allocation.leading.map((group, index) => (
           <button
             className="legend-row"
             data-active={activeSymbol === group.symbol}
@@ -163,7 +164,7 @@ function AllocationRing({
             onFocus={() => onActiveSymbolChange(group.symbol)}
             onMouseEnter={() => onActiveSymbolChange(group.symbol)}
             onMouseLeave={() => onActiveSymbolChange(null)}
-            style={{ "--holding-color": holdingColor(group.symbol) } as CSSProperties}
+            style={{ "--holding-color": allocationColor(index) } as CSSProperties}
             type="button"
           >
             <span><i aria-hidden="true" />{group.symbol}</span><b>{group.weight.toFixed(2)}%</b>
@@ -187,6 +188,61 @@ function AllocationRing({
             {allocation.other.map((group) => (
               <span key={group.symbol}><b>{group.symbol}</b><i>{group.weight > 0 ? "+" : "−"}{Math.abs(group.weight).toFixed(2)}%</i></span>
             ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SectorAllocationRing({ groups }: { groups: PositionGroupView[] }) {
+  const allocation = useMemo(() => buildSectorAllocation(groups), [groups]);
+  const segments = useMemo(() => {
+    const total = allocation.classifiedWeight + allocation.unallocatedWeight;
+    const scale = total > 100 ? 100 / total : 1;
+    const rawSegments = [
+      ...allocation.sectors.map((sector) => ({ label: sector.domain, weight: sector.weight, color: sector.color })),
+      ...(allocation.unallocatedWeight > 0 ? [{ label: "现金与对冲", weight: allocation.unallocatedWeight, color: "#c8c0b3" }] : []),
+    ];
+    let offset = 0;
+    return rawSegments.map((segment) => {
+      const result = { ...segment, weight: segment.weight * scale, offset };
+      offset += result.weight;
+      return result;
+    });
+  }, [allocation]);
+
+  return (
+    <div className="allocation-wrap sector-allocation-wrap">
+      <div className="allocation-ring">
+        <svg className="allocation-ring-svg" viewBox="0 0 100 100" role="img" aria-label={`板块占比，已归类板块 ${allocation.classifiedWeight.toFixed(2)}%`}>
+          <circle className="ring-track" cx="50" cy="50" r="42" pathLength="100" />
+          {segments.map((segment) => (
+            <circle
+              className="ring-segment sector-ring-segment"
+              cx="50"
+              cy="50"
+              key={segment.label}
+              pathLength="100"
+              r="42"
+              stroke={segment.color}
+              strokeDasharray={`${segment.weight} ${100 - segment.weight}`}
+              strokeDashoffset={-segment.offset}
+              transform="rotate(-90 50 50)"
+            />
+          ))}
+        </svg>
+        <span className="ring-center">{allocation.classifiedWeight.toFixed(1)}%<small>已归类板块</small></span>
+      </div>
+      <div className="legend sector-legend" aria-label="板块占比图例">
+        {allocation.sectors.map((sector) => (
+          <div className="legend-row sector-legend-row" key={sector.domain}>
+            <span><i aria-hidden="true" style={{ "--holding-color": sector.color } as CSSProperties} />{sector.domain}</span><b>{sector.weight.toFixed(2)}%</b>
+          </div>
+        ))}
+        {allocation.unallocatedWeight > 0 && (
+          <div className="legend-row sector-legend-row legend-other">
+            <span><i aria-hidden="true" />现金与对冲</span><b>{allocation.unallocatedWeight.toFixed(2)}%</b>
           </div>
         )}
       </div>
@@ -404,7 +460,10 @@ export function PortfolioDashboard({
         <aside className="allocation-panel">
           <h2>仓位构成</h2>
           <div className="section-divider" aria-hidden="true" />
+          <div className="allocation-chart-heading"><h3>个股占比</h3><span>前四大 + 其他</span></div>
           <AllocationRing groups={positionGroups} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
+          <div className="allocation-chart-heading allocation-sector-heading"><h3>板块占比</h3><span>按净权重归类</span></div>
+          <SectorAllocationRing groups={positionGroups} />
           <PortfolioHeatmap holdings={heatmapHoldings} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
         </aside>
 

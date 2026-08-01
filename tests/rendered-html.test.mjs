@@ -166,6 +166,22 @@ test("renders the stock-only investment theme heatmap", async () => {
   }
 });
 
+test("renders individual and sector allocation charts with distinct palettes", async () => {
+  const [response, dashboard, css] = await Promise.all([
+    render(),
+    readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  const html = await response.text();
+
+  assert.match(html, /个股占比/);
+  assert.match(html, /板块占比/);
+  assert.match(html, /AI \/ 企业软件/);
+  assert.match(dashboard, /SectorAllocationRing/);
+  assert.match(dashboard, /allocationColor\(index\)/);
+  assert.match(css, /\.allocation-chart-heading/);
+});
+
 test("keeps domain headers outside the holding tile area", async () => {
   const [component, css] = await Promise.all([
     readFile(new URL("../app/portfolio-heatmap.tsx", import.meta.url), "utf8"),
@@ -250,7 +266,7 @@ test("uses semantic color tokens, stable holding marks, and a filled plan button
   assert.match(css, /--color-profit:/);
   assert.match(css, /--color-loss:/);
   assert.match(css, /\.add-plan-button[^]*?background: var\(--ink\);/);
-  assert.match(dashboard, /holdingColor/);
+  assert.match(dashboard, /allocationColor/);
   assert.match(dashboard, /otherWeight/);
   assert.match(dashboard, /data-active=\{segment\.symbol === activeSymbol/);
   assert.match(dashboard, /data-active=\{activeSymbol === group\.symbol\}/);
