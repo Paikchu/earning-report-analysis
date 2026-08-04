@@ -21,14 +21,12 @@ type R2BucketLike = {
 export type SecPipelineEnv = SecCronEnv & {
   SEC_FILINGS: R2BucketLike;
   SEC_USER_AGENT: string;
+  DEEPSEEK_API_KEY?: string;
+  SEC_ANALYSIS_MODEL?: string;
 };
 
 export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof fetch = fetch): SecPipelineOperations {
-  const model: SecModelCall = async (stage, system, payload) => {
-    const result = await sitePost<{ value?: Record<string, unknown> }>(env, fetcher, "/api/internal/sec/model", { stage, system, payload });
-    if (!result.value) throw new Error(`SEC model stage ${stage} returned no value`);
-    return result.value;
-  };
+  const model: SecModelCall = (stage, system, payload) => callWorkerSecModel(env, fetcher, stage, system, payload);
   return {
     discover: (ticker) => discoverSecTicker(ticker, { userAgent: env.SEC_USER_AGENT, fetcher }),
     publishFeed: (feed) => sitePost(env, fetcher, "/api/internal/sec/feed", { feed }).then(() => undefined),
@@ -99,4 +97,45 @@ function preparedKey(ticker: string, accessionNumber: string) {
 
 function modulePreparedKey(reference: PreparedFilingReference, moduleKey: string) {
   return `${reference.key.replace(/\.json$/, "")}/modules/${moduleKey}.json`;
+}
+
+async function callWorkerSecModel(
+  env: SecPipelineEnv,
+  fetcher: typeof fetch,
+  stage: string,
+  system: string,
+  payload: unknown,
+): Promise<Record<string, unknown>> {
+  if (!env.DEEPSEEK_API_KEY) throw new Error("DEEPSEEK_API_KEY not set in SEC workflow worker");
+  const response = await fetcher("https://api.deepseek.com/chat/completions", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${env.DEEPSEEK_API_KEY}` },
+    body: JSON.stringify({
+      model: env.SEC_ANALYSIS_MODEL || "deepseek-v4-flash",
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: JSON.stringify(payload) },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0,
+    }),
+    signal: AbortSignal.timeout(180_000),
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`DeepSeek ${stage} HTTP ${response.status}: ${detail.slice(0, 300)}`);
+  }
+  const data = await response.json() as { choices?: Array<{ message?: { content?: unknown } }> };
+  const content = data.choices?.[0]?.message?.content;
+  if (typeof content !== "string" || !content) throw new Error(`DeepSeek ${stage} returned empty content`);
+  return parseModelJson(content);
+}
+
+function parseModelJson(content: string): Record<string, unknown> {
+  const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced?.[1] ?? content;
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
+  if (start < 0 || end <= start) throw new Error("DeepSeek did not return a JSON object");
+  return JSON.parse(candidate.slice(start, end + 1)) as Record<string, unknown>;
 }

@@ -5,7 +5,8 @@
   "compatibility_date": "2026-07-25",
   "vars": {
     "MAX_SITE_ORIGIN": "https://max-investment-record.max-zhangyuchen.chatgpt.site",
-    "SEC_USER_AGENT": "max-investment-record/1.0 max.zhangyuchen@gmail.com"
+    "SEC_USER_AGENT": "max-investment-record/1.0 max.zhangyuchen@gmail.com",
+    "SEC_ANALYSIS_MODEL": "deepseek-v4-flash"
   },
   "workflows": [
     {

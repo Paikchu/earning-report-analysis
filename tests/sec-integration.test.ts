@@ -70,7 +70,6 @@ test("exposes only short authenticated bridge routes to the independent SEC work
   const routeUrls = [
     "../app/api/internal/sec/feed/route.ts",
     "../app/api/internal/sec/context/route.ts",
-    "../app/api/internal/sec/model/route.ts",
     "../app/api/internal/sec/publish/route.ts",
     "../app/api/internal/sec/jobs/route.ts",
   ];
@@ -80,8 +79,7 @@ test("exposes only short authenticated bridge routes to the independent SEC work
   }));
 
   for (const source of sources) assert.match(source, /hasInternalSecAccess/);
-  assert.match(sources[2], /callSecModel/);
-  assert.match(sources[3], /saveAnalysis/);
+  assert.match(sources[2], /saveAnalysis/);
   assert.doesNotMatch(sources.join("\n"), /refreshSecTicker/);
 });
 

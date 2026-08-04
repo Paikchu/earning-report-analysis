@@ -28,20 +28,23 @@ test("module stages read compact R2 slices after routing instead of reparsing th
     MAX_SITE_BYPASS_TOKEN: "sites-token",
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
+    DEEPSEEK_API_KEY: "worker-model-secret",
     SEC_FILINGS: bucket,
   } as SecPipelineEnv;
+  let modelCalls = 0;
   const fetcher: typeof fetch = async (input, init) => {
     const request = new Request(input, init);
     if (request.url === filing.documentUrl) {
       return new Response("<h1>Item 8. Financial Statements</h1><p>Revenue was 120 USDm.</p>");
     }
-    const body = JSON.parse(String(init?.body ?? "{}")) as { stage?: string; payload?: { current?: { evidence?: Array<{ evidenceId: string }> } } };
-    if (body.stage === "router") {
+    const body = JSON.parse(String(init?.body ?? "{}")) as { messages?: Array<{ content?: string }> };
+    const payload = JSON.parse(body.messages?.[1]?.content ?? "{}") as { current?: { evidence?: Array<{ evidenceId: string }> } };
+    if (modelCalls++ === 0) {
       const full = JSON.parse(objects.get("filings/MSFT/annual.json") ?? "{}") as { blocks?: Array<{ blockId: string }> };
-      return Response.json({ value: { selections: [{ moduleKey: "performance", blockIds: [full.blocks?.[0]?.blockId], confidence: 1 }] } });
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ selections: [{ moduleKey: "performance", blockIds: [full.blocks?.[0]?.blockId], confidence: 1 }] }) } }] });
     }
-    const evidenceId = body.payload?.current?.evidence?.[0]?.evidenceId;
-    return Response.json({ value: { facts: [{ metricKey: "revenue", value: "120", unit: "USDm", evidenceIds: [evidenceId] }], evidenceCoverage: 1 } });
+    const evidenceId = payload.current?.evidence?.[0]?.evidenceId;
+    return Response.json({ choices: [{ message: { content: JSON.stringify({ facts: [{ metricKey: "revenue", value: "120", unit: "USDm", evidenceIds: [evidenceId] }], evidenceCoverage: 1 }) } }] });
   };
   const operations = createSecPipelineOperations(env, fetcher);
   const context: SecAnalysisContext = { currentPeriodId: "MSFT:2026-06-30:annual", qoqPeriodId: null, yoyPeriodId: null, qoq: {}, yoy: {}, activeMemory: [] };
@@ -67,4 +70,45 @@ test("scheduled analysis does not overlap an already running filing job", async 
 
   assert.equal(await operations.shouldAnalyze(filing, "scheduled"), false);
   assert.equal(await operations.shouldAnalyze(filing, "manual"), true);
+});
+
+test("calls DeepSeek from the workflow worker when its model secret is configured", async () => {
+  const objects = new Map<string, string>();
+  const requests: string[] = [];
+  const env = {
+    MAX_SITE_ORIGIN: "https://site.test",
+    MAX_SITE_BYPASS_TOKEN: "sites-token",
+    SEC_REFRESH_KEY: "refresh-key",
+    SEC_USER_AGENT: "test@example.com",
+    DEEPSEEK_API_KEY: "worker-model-secret",
+    SEC_ANALYSIS_MODEL: "deepseek-v4-flash",
+    SEC_FILINGS: {
+      async get(key: string) {
+        const value = objects.get(key);
+        return value === undefined ? null : { async text() { return value; } };
+      },
+      async put(key: string, value: string) {
+        objects.set(key, value);
+        return {};
+      },
+    },
+  } as SecPipelineEnv;
+  const fetcher: typeof fetch = async (input) => {
+    const url = String(input);
+    requests.push(url);
+    if (url === filing.documentUrl) return new Response("<h1>Revenue</h1><p>Revenue was 120 USDm.</p>");
+    if (url === "https://api.deepseek.com/chat/completions") {
+      const full = JSON.parse(objects.get("filings/MSFT/annual.json") ?? "{}") as { blocks?: Array<{ blockId: string }> };
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ selections: [{ moduleKey: "performance", blockIds: [full.blocks?.[0]?.blockId], confidence: 1 }] }) } }] });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  };
+  const operations = createSecPipelineOperations(env, fetcher);
+  const context: SecAnalysisContext = { currentPeriodId: "MSFT:2026-06-30:annual", qoqPeriodId: null, yoyPeriodId: null, qoq: {}, yoy: {}, activeMemory: [] };
+  const reference = await operations.prepare(filing);
+
+  await operations.route(filing, reference, context);
+
+  assert.ok(requests.includes("https://api.deepseek.com/chat/completions"));
+  assert.equal(requests.some((url) => url.includes("/api/internal/sec/model")), false);
 });
