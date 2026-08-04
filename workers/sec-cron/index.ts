@@ -15,7 +15,7 @@ export class SecAnalysisWorkflow extends WorkflowEntrypoint<SecPipelineEnv, SecW
 const worker = {
   async fetch(request: Request, env: SecPipelineEnv) {
     if (new URL(request.url).pathname === "/health") {
-      return Response.json({ status: "ok", executor: "workflow", modelConfigured: Boolean(env.DEEPSEEK_API_KEY) }, { headers: { "cache-control": "no-store" } });
+      return Response.json({ status: "ok", executor: "workflow", modelConfigured: Boolean(env.DEEPSEEK_API_KEY || env.SEC_BOOTSTRAP_PRIVATE_KEY) }, { headers: { "cache-control": "no-store" } });
     }
     return handleSecAnalysisRequest(request, env);
   },

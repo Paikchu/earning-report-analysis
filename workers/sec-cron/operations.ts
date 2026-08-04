@@ -9,6 +9,7 @@ import {
 } from "../../lib/sec-pipeline.ts";
 import type { SecAnalysisArtifact } from "../../lib/sec-service.ts";
 import { SEC_ANALYSIS_MODULES, SEC_ANALYSIS_SCHEMA_VERSION } from "../../lib/sec-analysis.ts";
+import { decryptSecModelKey } from "../../lib/sec-key-bootstrap.ts";
 import { siteHeaders, type SecCronEnv } from "./core.ts";
 import type { PreparedFilingReference, SecPipelineOperations } from "./workflow-core.ts";
 
@@ -23,7 +24,10 @@ export type SecPipelineEnv = SecCronEnv & {
   SEC_USER_AGENT: string;
   DEEPSEEK_API_KEY?: string;
   SEC_ANALYSIS_MODEL?: string;
+  SEC_BOOTSTRAP_PRIVATE_KEY?: string;
 };
+
+const modelKeyCache = new WeakMap<object, Promise<string>>();
 
 export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof fetch = fetch): SecPipelineOperations {
   const model: SecModelCall = (stage, system, payload) => callWorkerSecModel(env, fetcher, stage, system, payload);
@@ -106,10 +110,10 @@ async function callWorkerSecModel(
   system: string,
   payload: unknown,
 ): Promise<Record<string, unknown>> {
-  if (!env.DEEPSEEK_API_KEY) throw new Error("DEEPSEEK_API_KEY not set in SEC workflow worker");
+  const apiKey = await resolveWorkerModelKey(env, fetcher);
   const response = await fetcher("https://api.deepseek.com/chat/completions", {
     method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${env.DEEPSEEK_API_KEY}` },
+    headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: env.SEC_ANALYSIS_MODEL || "deepseek-v4-flash",
       messages: [
@@ -129,6 +133,21 @@ async function callWorkerSecModel(
   const content = data.choices?.[0]?.message?.content;
   if (typeof content !== "string" || !content) throw new Error(`DeepSeek ${stage} returned empty content`);
   return parseModelJson(content);
+}
+
+export async function resolveWorkerModelKey(env: SecPipelineEnv, fetcher: typeof fetch = fetch): Promise<string> {
+  if (env.DEEPSEEK_API_KEY) return env.DEEPSEEK_API_KEY;
+  if (!env.SEC_BOOTSTRAP_PRIVATE_KEY) throw new Error("SEC workflow model key is not configured");
+  const cached = modelKeyCache.get(env);
+  if (cached) return cached;
+  const pending = sitePost<{ ciphertext?: string }>(env, fetcher, "/api/internal/sec/model-key", {})
+    .then(async ({ ciphertext }) => {
+      if (!ciphertext) throw new Error("Sites SEC model-key bootstrap returned no ciphertext");
+      return decryptSecModelKey(ciphertext, env.SEC_BOOTSTRAP_PRIVATE_KEY as string);
+    });
+  modelKeyCache.set(env, pending);
+  pending.catch(() => modelKeyCache.delete(env));
+  return pending;
 }
 
 function parseModelJson(content: string): Record<string, unknown> {
