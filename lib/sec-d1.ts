@@ -306,14 +306,15 @@ export class D1SecRepository implements SecRepository {
 
       for (const fact of snapshot.facts) {
         const factId = `${snapshot.periodId}:${fact.metricKey}:${hashJson(fact)}`;
-        const dimensionsHash = fact.definitionHash ?? "";
+        const dimensions = { periodScope: fact.periodScope ?? "", definitionHash: fact.definitionHash ?? "" };
+        const dimensionsHash = hashJson(dimensions);
         await this.database.prepare(`
           INSERT INTO sec_facts (
             fact_id, filing_id, period_id, metric_key, series_id,
             dimensions_hash, dimensions, value_decimal, raw_value, unit,
             currency, basis, evidence_label, xbrl_concept, context_ref,
             derivation_formula, evidence_id, quality_status
-          ) VALUES (?, ?, ?, ?, ?, ?, '{}', ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?)
           ON CONFLICT(fact_id) DO UPDATE SET
             value_decimal = excluded.value_decimal,
             unit = excluded.unit,
@@ -325,6 +326,7 @@ export class D1SecRepository implements SecRepository {
           fact.metricKey,
           fact.metricKey,
           dimensionsHash,
+          JSON.stringify(dimensions),
           fact.value,
           fact.value,
           fact.unit,

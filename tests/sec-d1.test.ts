@@ -194,6 +194,57 @@ test("does not publish an analysis artifact that failed verification", async () 
   assert.equal(sql.some((statement) => /INSERT INTO sec_published_reports/.test(statement)), false);
 });
 
+test("stores same-metric filing facts under distinct reporting-period dimensions", async () => {
+  const factWrites: unknown[][] = [];
+  const database = {
+    prepare(sql: string) {
+      return {
+        bind(...values: unknown[]) {
+          return {
+            async run() {
+              if (/INSERT INTO sec_facts/.test(sql)) factWrites.push(values);
+              return {};
+            },
+          };
+        },
+      };
+    },
+  };
+  const filing = {
+    ticker: "MSFT", cik: "0000789019", cikNumber: 789019, companyName: "Microsoft Corp", form: "10-K",
+    filingDate: "2026-07-30", reportDate: "2026-06-30", accessionNumber: "acc-1", primaryDocument: "msft.htm",
+    description: "Annual report", items: "", documentUrl: "https://sec.test/msft.htm", indexUrl: "https://sec.test/index.htm",
+  };
+  const factBase = {
+    metricKey: "revenue", unit: "USD millions", currency: "USD", basis: "gaap" as const,
+    evidenceIds: ["ev:block-1"], confidence: "high" as const, sourceLabel: "fact_source_reported" as const,
+  };
+  const snapshot = {
+    ticker: "MSFT", periodId: "MSFT:2026-06-30:annual", filingId: "acc-1", moduleKey: "performance" as const,
+    facts: [
+      { ...factBase, value: "331839", periodScope: "FY2026" },
+      { ...factBase, value: "281724", periodScope: "FY2025" },
+    ],
+    claims: [], memoryCandidates: [], missingFields: [], evidenceCoverage: 1, verificationStatus: "verified" as const,
+  };
+  const artifact = {
+    filing, periodId: snapshot.periodId, periodScope: "annual" as const, blocks: [],
+    moduleAnalyses: [snapshot], snapshots: [snapshot], comparisons: [], memoryCandidates: [],
+    router: { selections: [], source: "fallback" as const, status: "failed" as const, missingModules: [] },
+    report: {
+      ticker: "MSFT", periodId: snapshot.periodId, reportVersion: "v1", headline: "", keyMetrics: [],
+      changes: { qoq: [], yoy: [], guidance: [], risks: [] },
+      dataQuality: { coverage: 0, verificationStatus: "failed" as const, warnings: [] },
+    },
+  } satisfies SecAnalysisArtifact;
+
+  await new D1SecRepository(database).saveAnalysis(artifact);
+
+  assert.equal(factWrites.length, 2);
+  assert.notEqual(factWrites[0][5], factWrites[1][5]);
+  assert.deepEqual(factWrites.map((values) => JSON.parse(String(values[6])).periodScope), ["FY2026", "FY2025"]);
+});
+
 test("never reads a previously stored failed report as the published report", async () => {
   let selectedSql = "";
   const database = {
