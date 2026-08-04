@@ -28,6 +28,9 @@ export type SecPipelineEnv = SecCronEnv & {
 };
 
 const modelKeyCache = new WeakMap<object, Promise<string>>();
+const PUBLISH_BLOCK_CHUNK_SIZE = 15;
+const PUBLISH_MEMORY_CHUNK_SIZE = 15;
+const PUBLISH_COMPARISON_CHUNK_SIZE = 30;
 
 export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof fetch = fetch): SecPipelineOperations {
   const model: SecModelCall = (stage, system, payload) => callWorkerSecModel(env, fetcher, stage, system, payload);
@@ -70,7 +73,36 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
     publish: async (artifact, summary) => {
       const reference = { key: preparedKey(artifact.filing.ticker, artifact.filing.accessionNumber), filing: artifact.filing };
       const prepared = await readPrepared(env.SEC_FILINGS, reference);
-      await sitePost(env, fetcher, "/api/internal/sec/publish", { artifact: { ...artifact, blocks: prepared.blocks } satisfies SecAnalysisArtifact, summary });
+      const citedBlockIds = collectReferencedBlockIds(artifact);
+      const citedBlocks = prepared.blocks.filter((block) => citedBlockIds.has(block.blockId));
+      const deferredArtifact: SecAnalysisArtifact = {
+        ...artifact,
+        blocks: [],
+        moduleAnalyses: [],
+        snapshots: [],
+        comparisons: [],
+        memoryCandidates: [],
+        report: {
+          ...artifact.report,
+          dataQuality: { ...artifact.report.dataQuality, verificationStatus: "failed" },
+        },
+      };
+      for (const blocks of chunks(citedBlocks, PUBLISH_BLOCK_CHUNK_SIZE)) {
+        await sitePost(env, fetcher, "/api/internal/sec/publish", { artifact: { ...deferredArtifact, blocks }, summary: null });
+      }
+      for (const snapshot of artifact.snapshots) {
+        await sitePost(env, fetcher, "/api/internal/sec/publish", { artifact: { ...deferredArtifact, snapshots: [snapshot] }, summary: null });
+      }
+      for (const comparisons of chunks(artifact.comparisons, PUBLISH_COMPARISON_CHUNK_SIZE)) {
+        await sitePost(env, fetcher, "/api/internal/sec/publish", { artifact: { ...deferredArtifact, comparisons }, summary: null });
+      }
+      for (const memoryCandidates of chunks(artifact.memoryCandidates, PUBLISH_MEMORY_CHUNK_SIZE)) {
+        await sitePost(env, fetcher, "/api/internal/sec/publish", { artifact: { ...deferredArtifact, memoryCandidates }, summary: null });
+      }
+      await sitePost(env, fetcher, "/api/internal/sec/publish", {
+        artifact: { ...artifact, blocks: [], snapshots: [], comparisons: [], memoryCandidates: [] } satisfies SecAnalysisArtifact,
+        summary,
+      });
     },
     updateJob: (job) => sitePost(env, fetcher, "/api/internal/sec/jobs", { job }).then(() => undefined),
   };
@@ -101,6 +133,34 @@ function preparedKey(ticker: string, accessionNumber: string) {
 
 function modulePreparedKey(reference: PreparedFilingReference, moduleKey: string) {
   return `${reference.key.replace(/\.json$/, "")}/modules/${moduleKey}.json`;
+}
+
+function collectReferencedBlockIds(artifact: SecAnalysisArtifact): Set<string> {
+  const blockIds = new Set<string>();
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    for (const [key, child] of Object.entries(value)) {
+      if (key === "evidenceIds" && Array.isArray(child)) {
+        child.forEach((evidenceId) => {
+          if (typeof evidenceId === "string" && evidenceId.startsWith("ev:")) blockIds.add(evidenceId.slice(3));
+        });
+      } else {
+        visit(child);
+      }
+    }
+  };
+  visit(artifact);
+  return blockIds;
+}
+
+function chunks<T>(values: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let index = 0; index < values.length; index += size) result.push(values.slice(index, index + size));
+  return result;
 }
 
 async function callWorkerSecModel(

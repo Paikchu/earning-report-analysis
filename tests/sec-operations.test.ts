@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { SecAnalysisContext } from "../lib/sec-service.ts";
+import type { SecAnalysisArtifact, SecAnalysisContext } from "../lib/sec-service.ts";
 import type { SecFiling } from "../lib/sec.ts";
 import { createSecPipelineOperations, type SecPipelineEnv } from "../workers/sec-cron/operations.ts";
 
@@ -111,4 +111,93 @@ test("calls DeepSeek from the workflow worker when its model secret is configure
 
   assert.ok(requests.includes("https://api.deepseek.com/chat/completions"));
   assert.equal(requests.some((url) => url.includes("/api/internal/sec/model")), false);
+});
+
+test("publishes cited evidence in bounded D1 bridge calls", async () => {
+  const blocks = Array.from({ length: 20 }, (_, ordinal) => ({
+    blockId: `block-${ordinal}`,
+    ordinal,
+    heading: "Financial Statements",
+    headingPath: "Item 8",
+    elementType: "paragraph" as const,
+    preview: `Block ${ordinal}`,
+    body: `Revenue evidence ${ordinal}`,
+    tokenCount: 3,
+    numericDensity: 0.2,
+    tableCount: 0,
+    contentHash: `hash-${ordinal}`,
+  }));
+  const citedBlocks = blocks.slice(0, 18);
+  const prepared = {
+    filing,
+    periodId: "MSFT:2026-06-30:annual",
+    periodScope: "annual" as const,
+    blocks,
+  };
+  const env = {
+    MAX_SITE_ORIGIN: "https://site.test",
+    MAX_SITE_BYPASS_TOKEN: "sites-token",
+    SEC_REFRESH_KEY: "refresh-key",
+    SEC_USER_AGENT: "test@example.com",
+    SEC_FILINGS: {
+      async get(key: string) {
+        return key === "filings/MSFT/annual.json" ? { async text() { return JSON.stringify(prepared); } } : null;
+      },
+      async put() { return {}; },
+    },
+  } as SecPipelineEnv;
+  const facts = citedBlocks.map((block, index) => ({
+    metricKey: `metric_${index}`,
+    value: String(index),
+    unit: "USDm",
+    basis: "gaap" as const,
+    evidenceIds: [`ev:${block.blockId}`],
+    confidence: "high" as const,
+    sourceLabel: "fact_source_reported" as const,
+  }));
+  const snapshot = {
+    ticker: "MSFT",
+    periodId: prepared.periodId,
+    filingId: filing.accessionNumber,
+    moduleKey: "performance" as const,
+    facts,
+    claims: [],
+    memoryCandidates: [],
+    missingFields: [],
+    evidenceCoverage: 1,
+    verificationStatus: "verified" as const,
+  };
+  const artifact = {
+    filing,
+    periodId: prepared.periodId,
+    periodScope: prepared.periodScope,
+    blocks: [],
+    moduleAnalyses: [snapshot],
+    snapshots: [snapshot],
+    comparisons: [],
+    memoryCandidates: [],
+    router: { selections: [], source: "fallback" as const, status: "complete" as const, missingModules: [] },
+    report: {
+      ticker: "MSFT",
+      periodId: prepared.periodId,
+      reportVersion: "v1",
+      headline: "verified",
+      keyMetrics: [{ metricKey: "revenue", currentValue: "331839", status: "verified" as const, evidenceIds: citedBlocks.map((block) => `ev:${block.blockId}`) }],
+      changes: { qoq: [], yoy: [], guidance: [], risks: [] },
+      dataQuality: { coverage: 1, verificationStatus: "verified" as const, warnings: [] },
+    },
+  } satisfies SecAnalysisArtifact;
+  const published: Array<{ artifact: SecAnalysisArtifact; summary: unknown }> = [];
+  const fetcher: typeof fetch = async (_input, init) => {
+    published.push(JSON.parse(String(init?.body)) as { artifact: SecAnalysisArtifact; summary: unknown });
+    return Response.json({ status: "ok" });
+  };
+
+  await createSecPipelineOperations(env, fetcher).publish(artifact, null);
+
+  assert.equal(published.length, 4);
+  assert.deepEqual(published.flatMap((body) => body.artifact.blocks.map((block) => block.blockId)), citedBlocks.map((block) => block.blockId));
+  assert.ok(published.slice(0, -1).every((body) => body.artifact.report.dataQuality.verificationStatus === "failed"));
+  assert.equal(published.at(-1)?.artifact.report.dataQuality.verificationStatus, "verified");
+  assert.ok(published.every((body) => body.artifact.blocks.length <= 15));
 });
