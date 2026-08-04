@@ -5,6 +5,7 @@ import {
   buildSecWatchlist,
   handleSecFeedRequest,
   hasInternalSecAccess,
+  requestSecAnalysis,
 } from "../lib/sec-api.ts";
 import type { SecRepository } from "../lib/sec-service.ts";
 
@@ -35,6 +36,24 @@ test("deduplicates stock underlyings and excludes ETFs from the watchlist", () =
   );
 
   assert.deepEqual(watchlist, ["MSFT", "NOK"]);
+});
+
+test("queues analysis through the independent worker and returns immediately", async () => {
+  let captured: Request | null = null;
+  const response = await requestSecAnalysis({
+    ticker: "MSFT",
+    pipelineOrigin: "https://sec-worker.example/",
+    refreshKey: "secret",
+    fetcher: async (input, init) => {
+      captured = new Request(input, init);
+      return Response.json({ status: "queued", jobId: "manual-MSFT-1" }, { status: 202 });
+    },
+  });
+
+  assert.equal(response.status, 202);
+  assert.equal(captured?.url, "https://sec-worker.example/jobs/MSFT");
+  assert.equal(captured?.method, "POST");
+  assert.equal(captured?.headers.get("x-sec-refresh-key"), "secret");
 });
 
 test("protects filing feeds and returns a specific ETF state", async () => {

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const holdingPlans = sqliteTable("holding_plans", {
   id: text("id").primaryKey(),
@@ -189,6 +189,23 @@ export const secAnalysisRuns = sqliteTable("sec_analysis_runs", {
   startedAt: text("started_at").notNull(),
   completedAt: text("completed_at"),
 });
+
+export const secAnalysisJobs = sqliteTable("sec_analysis_jobs", {
+  jobId: text("job_id").primaryKey(),
+  ticker: text("ticker").notNull(),
+  accessionNumber: text("accession_number").notNull(),
+  analysisVersion: text("analysis_version").notNull(),
+  status: text("status").notNull(),
+  currentStage: text("current_stage").notNull(),
+  attempt: integer("attempt").notNull().default(1),
+  errorCode: text("error_code"),
+  errorDetail: text("error_detail"),
+  requestedBy: text("requested_by").notNull(),
+  workflowInstanceId: text("workflow_instance_id").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+}, (table) => [index("sec_analysis_jobs_filing_version_idx").on(table.ticker, table.accessionNumber, table.analysisVersion)]);
 
 export const secPublishedReports = sqliteTable("sec_published_reports", {
   ticker: text("ticker").notNull(),

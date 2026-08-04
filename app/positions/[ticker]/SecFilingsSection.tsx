@@ -34,10 +34,6 @@ export function SecFilingsSection({ ticker }: { ticker: string }) {
           signal: controller.signal,
         });
         if (!refreshResponse.ok) return;
-        const refreshedFeed = await refreshResponse.json() as SecFilingFeed;
-        if (controller.signal.aborted) return;
-        setState({ status: "ready", feed: refreshedFeed });
-        setOpenAccession(refreshedFeed.filings[0]?.accessionNumber ?? null);
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
           setState({ status: "error", message: error instanceof Error ? error.message : "SEC 数据读取失败。" });

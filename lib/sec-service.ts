@@ -208,7 +208,7 @@ async function analyzeFiling(
 
     let router: RouterResult;
     try {
-      const routerValue = await callDeepSeek(runtime, routerSystemPrompt(), buildRouterPayload(filing, blocks, priorModules));
+      const routerValue = await callSecModel(runtime, routerSystemPrompt(), buildRouterPayload(filing, blocks, priorModules));
       router = normalizeRouterResult(routerValue, blocks);
       if (!router.selections.length) router = fallbackRouterResult(blocks);
     } catch {
@@ -236,7 +236,7 @@ async function analyzeFiling(
         precomputedDeltas: [],
       });
       try {
-        const value = await callDeepSeek(runtime, moduleSystemPrompt(module.key), payload);
+        const value = await callSecModel(runtime, moduleSystemPrompt(module.key), payload);
         return normalizeModuleAnalysis(value, module.key, evidenceIds);
       } catch {
         return { moduleKey: module.key, facts: [], claims: [], memoryCandidates: [], missingFields: [...module.fields], evidenceCoverage: 0, verificationStatus: "failed" };
@@ -269,7 +269,7 @@ async function analyzeFiling(
     const fallbackReport = fallbackPublishedReport(filing.ticker, periodId, snapshots, qoq, yoy);
     let report = fallbackReport;
     try {
-      const summaryValue = await callDeepSeek(runtime, structuredSummarySystemPrompt(), summaryPayload);
+      const summaryValue = await callSecModel(runtime, structuredSummarySystemPrompt(), summaryPayload);
       report = normalizePublishedReport(summaryValue, {
         ticker: filing.ticker,
         periodId,
@@ -326,7 +326,7 @@ function structuredSummarySystemPrompt(): string {
   ].join("\n");
 }
 
-async function callDeepSeek(runtime: SecServiceRuntime, system: string, payload: unknown): Promise<Record<string, unknown>> {
+export async function callSecModel(runtime: SecServiceRuntime, system: string, payload: unknown): Promise<Record<string, unknown>> {
   if (!runtime.apiKey) throw new Error("DEEPSEEK_API_KEY not set");
   const response = await (runtime.fetcher ?? fetch)(DEEPSEEK_URL, {
     method: "POST",

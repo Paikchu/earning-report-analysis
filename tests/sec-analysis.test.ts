@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildFilingBlocks,
+  buildRouterPayload,
   compareSnapshots,
   normalizeModuleAnalysis,
   normalizeRouterResult,
@@ -39,6 +40,26 @@ test("router discards hallucinated block IDs before persistence", () => {
   assert.equal(result.status, "partial");
 });
 
+test("bounds the dynamic router inventory for large annual filings", () => {
+  const largeBlocks = Array.from({ length: 700 }, (_, index) => ({
+    ...blocks[0],
+    blockId: `block-${index}`,
+    ordinal: index,
+    numericDensity: index % 17,
+  }));
+  const payload = buildRouterPayload({
+    ticker: "MSFT",
+    form: "10-K",
+    filingDate: "2026-07-30",
+    reportDate: "2026-06-30",
+    accessionNumber: "annual",
+  }, largeBlocks, []);
+
+  assert.ok(payload.inventory.length <= 240);
+  assert.equal(payload.inventory.some((item) => item.blockId === "block-0"), true);
+  assert.equal(payload.inventory.some((item) => item.blockId === "block-699"), true);
+});
+
 test("module output cannot cite evidence outside the selected filing", () => {
   const evidenceId = `ev:${blocks[2].blockId}`;
   const result = normalizeModuleAnalysis({
@@ -51,6 +72,16 @@ test("module output cannot cite evidence outside the selected filing", () => {
   assert.equal(result.facts.length, 1);
   assert.deepEqual(result.facts[0].evidenceIds, [evidenceId]);
   assert.equal(result.claims.length, 0);
+});
+
+test("normalizes a valid raw block ID into its evidence ID", () => {
+  const evidenceId = `ev:${blocks[2].blockId}`;
+  const result = normalizeModuleAnalysis({
+    facts: [{ metricKey: "revenue", value: "76400", unit: "USDm", basis: "gaap", evidenceIds: [blocks[2].blockId], confidence: "high" }],
+    evidenceCoverage: 1,
+  }, "performance", new Set([evidenceId]));
+
+  assert.deepEqual(result.facts[0].evidenceIds, [evidenceId]);
 });
 
 test("comparison keeps qoq and yoy separate and marks narrative omission explicitly", () => {

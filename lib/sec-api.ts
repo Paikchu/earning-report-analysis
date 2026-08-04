@@ -17,6 +17,38 @@ export async function hasInternalSecAccess(request: Request, expectedSecret: str
   return difference === 0;
 }
 
+export async function requestSecAnalysis({
+  ticker,
+  pipelineOrigin,
+  refreshKey,
+  fetcher = fetch,
+}: {
+  ticker: string;
+  pipelineOrigin: string;
+  refreshKey: string;
+  fetcher?: typeof fetch;
+}): Promise<Response> {
+  const symbol = cleanSecTicker(ticker);
+  const origin = pipelineOrigin.replace(/\/+$/, "");
+  if (!symbol || !origin || !refreshKey) {
+    return Response.json({ error: "SEC 后台分析服务尚未配置。" }, { status: 503 });
+  }
+  try {
+    const response = await fetcher(`${origin}/jobs/${encodeURIComponent(symbol)}`, {
+      method: "POST",
+      headers: { "x-sec-refresh-key": refreshKey },
+      signal: AbortSignal.timeout(15_000),
+    });
+    const payload = await response.text();
+    return new Response(payload, {
+      status: response.status,
+      headers: { "cache-control": "no-store", "content-type": response.headers.get("content-type") ?? "application/json" },
+    });
+  } catch {
+    return Response.json({ error: "SEC 后台分析任务暂时无法创建。" }, { status: 502 });
+  }
+}
+
 export function buildSecWatchlist(
   positionTickers: string[],
   planTickers: string[],

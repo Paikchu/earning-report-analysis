@@ -279,9 +279,9 @@ export function buildRouterPayload(
   blocks: FilingBlock[],
   priorModules: Array<{ moduleKey: SecAnalysisModuleKey; periodId: string }>,
 ) {
-  const inventoryBlocks = blocks.length <= 600
+  const inventoryBlocks = blocks.length <= 240
     ? blocks
-    : [...blocks.slice(0, 120), ...[...blocks].sort((left, right) => right.numericDensity - left.numericDensity).slice(0, 400), ...blocks.slice(-80)]
+    : [...blocks.slice(0, 60), ...[...blocks].sort((left, right) => right.numericDensity - left.numericDensity).slice(0, 140), ...blocks.slice(-40)]
       .filter((block, index, all) => all.findIndex((item) => item.blockId === block.blockId) === index);
   return {
     task: "Select filing blocks for financial analysis. Choose only block IDs from this filing.",
@@ -519,7 +519,7 @@ export function normalizePublishedReport(
   const risks = Array.isArray(changes?.risks) ? changes.risks.flatMap((item) => normalizeClaim(item, validEvidenceIds)) : [];
   const dataQuality = asRecord(root?.dataQuality);
   const coverage = clamp(Number(dataQuality?.coverage ?? 0), 0, 1);
-  const verificationStatus = coverage >= 0.9 && keyMetrics.every((metric) => metric.evidenceIds.length) ? "verified" : coverage > 0 ? "partial" : "failed";
+  const verificationStatus = keyMetrics.length && coverage >= 0.9 && keyMetrics.every((metric) => metric.evidenceIds.length) ? "verified" : keyMetrics.length && coverage > 0 ? "partial" : "failed";
   return {
     ...fallback,
     headline: String(root?.headline ?? "").slice(0, 240),
@@ -573,7 +573,11 @@ function compactPriorContext(value: PriorSnapshotContext | undefined) {
 function evidenceList(value: unknown, validEvidenceIds: Set<string>): string[] {
   if (!Array.isArray(value)) return [];
   const ids = value.map(String).filter(Boolean);
-  return validEvidenceIds.size ? ids.filter((id) => validEvidenceIds.has(id)).slice(0, 10) : ids.slice(0, 10);
+  if (!validEvidenceIds.size) return ids.slice(0, 10);
+  return ids
+    .map((id) => validEvidenceIds.has(id) ? id : `ev:${id}`)
+    .filter((id) => validEvidenceIds.has(id))
+    .slice(0, 10);
 }
 
 function isStructuralHeading(line: string): boolean {

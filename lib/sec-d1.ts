@@ -14,6 +14,24 @@ type D1Like = {
   };
 };
 
+export type SecAnalysisJobUpdate = {
+  jobId: string;
+  ticker: string;
+  accessionNumber: string;
+  analysisVersion: string;
+  status: "queued" | "running" | "complete" | "failed";
+  currentStage: string;
+  attempt: number;
+  errorCode?: string;
+  errorDetail?: string;
+  requestedBy: "scheduled" | "manual";
+  workflowInstanceId: string;
+  updatedAt: string;
+  completedAt?: string;
+};
+
+export type SecAnalysisJobStatus = SecAnalysisJobUpdate["status"];
+
 export class D1SecRepository implements SecRepository {
   private readonly database: D1Like;
 
@@ -69,12 +87,58 @@ export class D1SecRepository implements SecRepository {
     `).bind(summary.ticker, summary.accessionNumber, summary.generatedAt, JSON.stringify(summary)).run();
   }
 
+  async upsertAnalysisJob(job: SecAnalysisJobUpdate): Promise<void> {
+    await this.database.prepare(`
+      INSERT INTO sec_analysis_jobs (
+        job_id, ticker, accession_number, analysis_version, status, current_stage,
+        attempt, error_code, error_detail, requested_by, workflow_instance_id,
+        updated_at, completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(job_id) DO UPDATE SET
+        status = excluded.status,
+        current_stage = excluded.current_stage,
+        attempt = excluded.attempt,
+        error_code = excluded.error_code,
+        error_detail = excluded.error_detail,
+        requested_by = excluded.requested_by,
+        workflow_instance_id = excluded.workflow_instance_id,
+        updated_at = excluded.updated_at,
+        completed_at = excluded.completed_at
+    `).bind(
+      job.jobId,
+      job.ticker,
+      job.accessionNumber,
+      job.analysisVersion,
+      job.status,
+      job.currentStage,
+      job.attempt,
+      job.errorCode ?? null,
+      job.errorDetail ?? null,
+      job.requestedBy,
+      job.workflowInstanceId,
+      job.updatedAt,
+      job.completedAt ?? null,
+    ).run();
+  }
+
+  async getAnalysisJobStatus(ticker: string, accessionNumber: string, analysisVersion: string): Promise<SecAnalysisJobStatus | null> {
+    const row = await this.database.prepare(`
+      SELECT status
+      FROM sec_analysis_jobs
+      WHERE ticker = ? AND accession_number = ? AND analysis_version = ?
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `).bind(ticker, accessionNumber, analysisVersion).first<{ status: SecAnalysisJobStatus }>();
+    return row?.status ?? null;
+  }
+
   async getPublishedReport(ticker: string, periodId: string): Promise<PublishedSecReport | null> {
     try {
       const row = await this.database.prepare(`
         SELECT payload
         FROM sec_published_reports
         WHERE ticker = ? AND period_id = ?
+          AND verification_status IN ('verified', 'partial')
         ORDER BY generated_at DESC
         LIMIT 1
       `).bind(ticker, periodId).first<{ payload: string }>();
@@ -332,12 +396,14 @@ export class D1SecRepository implements SecRepository {
       ).run();
     }
 
-    await this.database.prepare(`
-      INSERT INTO sec_published_reports (ticker, period_id, report_version, payload, verification_status)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(ticker, period_id, report_version) DO UPDATE SET
-        payload = excluded.payload, verification_status = excluded.verification_status
-    `).bind(filing.ticker, artifact.periodId, artifact.report.reportVersion, JSON.stringify(artifact.report), artifact.report.dataQuality.verificationStatus).run();
+    if (artifact.report.dataQuality.verificationStatus !== "failed") {
+      await this.database.prepare(`
+        INSERT INTO sec_published_reports (ticker, period_id, report_version, payload, verification_status)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(ticker, period_id, report_version) DO UPDATE SET
+          payload = excluded.payload, verification_status = excluded.verification_status
+      `).bind(filing.ticker, artifact.periodId, artifact.report.reportVersion, JSON.stringify(artifact.report), artifact.report.dataQuality.verificationStatus).run();
+    }
 
     const runTime = new Date().toISOString();
     const stages = [

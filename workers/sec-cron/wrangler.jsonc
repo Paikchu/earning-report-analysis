@@ -4,8 +4,22 @@
   "main": "index.ts",
   "compatibility_date": "2026-07-25",
   "vars": {
-    "MAX_SITE_ORIGIN": "https://max-investment-record.max-zhangyuchen.chatgpt.site"
+    "MAX_SITE_ORIGIN": "https://max-investment-record.max-zhangyuchen.chatgpt.site",
+    "SEC_USER_AGENT": "max-investment-record/1.0 max.zhangyuchen@gmail.com"
   },
+  "workflows": [
+    {
+      "name": "max-investment-record-sec-analysis",
+      "binding": "SEC_ANALYSIS_WORKFLOW",
+      "class_name": "SecAnalysisWorkflow"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "SEC_FILINGS",
+      "bucket_name": "max-investment-record-sec-filings"
+    }
+  ],
   "triggers": {
     "crons": [
       "0 13-23 * * 1-5",

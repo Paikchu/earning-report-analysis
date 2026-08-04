@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { D1SecRepository, listHoldingPlanTickers } from "../lib/sec-d1.ts";
+import { D1SecRepository, listHoldingPlanTickers, type SecAnalysisJobUpdate } from "../lib/sec-d1.ts";
 import type { SecFilingSummary } from "../lib/sec.ts";
+import type { SecAnalysisArtifact } from "../lib/sec-service.ts";
 
 test("reads and upserts SEC cache records through prepared D1 statements", async () => {
   const calls: Array<{ sql: string; values: unknown[]; action: string }> = [];
@@ -88,4 +89,127 @@ test("returns distinct plan tickers for the background watchlist", async () => {
   };
 
   assert.deepEqual(await listHoldingPlanTickers(database), ["MSFT", "NVDA"]);
+});
+
+test("upserts independent SEC workflow job state", async () => {
+  const calls: Array<{ sql: string; values: unknown[] }> = [];
+  const database = {
+    prepare(sql: string) {
+      return {
+        bind(...values: unknown[]) {
+          return {
+            async run() {
+              calls.push({ sql, values });
+              return {};
+            },
+          };
+        },
+      };
+    },
+  };
+  const update: SecAnalysisJobUpdate = {
+    jobId: "MSFT:acc-1:sec-analysis.v2",
+    ticker: "MSFT",
+    accessionNumber: "acc-1",
+    analysisVersion: "sec-analysis.v2",
+    status: "running",
+    currentStage: "router",
+    attempt: 1,
+    requestedBy: "scheduled",
+    workflowInstanceId: "workflow-1",
+    updatedAt: "2026-08-05T00:00:00.000Z",
+  };
+
+  await new D1SecRepository(database).upsertAnalysisJob(update);
+
+  assert.match(calls[0].sql, /INSERT INTO sec_analysis_jobs/);
+  assert.match(calls[0].sql, /ON CONFLICT\(job_id\)/);
+  assert.deepEqual(calls[0].values.slice(0, 6), [update.jobId, "MSFT", "acc-1", "sec-analysis.v2", "running", "router"]);
+});
+
+test("reads the latest status for an analysis version", async () => {
+  let selectedSql = "";
+  let selectedValues: unknown[] = [];
+  const database = {
+    prepare(sql: string) {
+      selectedSql = sql;
+      return {
+        bind(...values: unknown[]) {
+          selectedValues = values;
+          return {
+            async first<T>() { return { status: "complete" } as T; },
+          };
+        },
+      };
+    },
+  };
+
+  const status = await new D1SecRepository(database).getAnalysisJobStatus("MSFT", "acc-1", "sec-analysis.v2");
+
+  assert.equal(status, "complete");
+  assert.match(selectedSql, /FROM sec_analysis_jobs/);
+  assert.deepEqual(selectedValues, ["MSFT", "acc-1", "sec-analysis.v2"]);
+});
+
+test("does not publish an analysis artifact that failed verification", async () => {
+  const sql: string[] = [];
+  const database = {
+    prepare(statement: string) {
+      sql.push(statement);
+      return {
+        bind() {
+          return {
+            async run() { return {}; },
+            async all<T>() { return { results: [] as T[] }; },
+            async first<T>() { return null as T | null; },
+          };
+        },
+      };
+    },
+  };
+  const filing = {
+    ticker: "MSFT", cik: "0000789019", cikNumber: 789019, companyName: "Microsoft Corp", form: "10-K",
+    filingDate: "2026-07-30", reportDate: "2026-06-30", accessionNumber: "acc-1", primaryDocument: "msft.htm",
+    description: "Annual report", items: "", documentUrl: "https://sec.test/msft.htm", indexUrl: "https://sec.test/index.htm",
+  };
+  const artifact = {
+    filing,
+    periodId: "MSFT:2026-06-30:annual",
+    periodScope: "annual",
+    blocks: [],
+    moduleAnalyses: [],
+    snapshots: [],
+    comparisons: [],
+    memoryCandidates: [],
+    router: { selections: [], source: "fallback", status: "failed", missingModules: [] },
+    report: {
+      ticker: "MSFT", periodId: "MSFT:2026-06-30:annual", reportVersion: "v1", headline: "failed", keyMetrics: [],
+      changes: { qoq: [], yoy: [], guidance: [], risks: [] },
+      dataQuality: { coverage: 0, verificationStatus: "failed", warnings: ["failed"] },
+    },
+  } satisfies SecAnalysisArtifact;
+
+  await new D1SecRepository(database).saveAnalysis(artifact);
+
+  assert.equal(sql.some((statement) => /INSERT INTO sec_published_reports/.test(statement)), false);
+});
+
+test("never reads a previously stored failed report as the published report", async () => {
+  let selectedSql = "";
+  const database = {
+    prepare(sql: string) {
+      selectedSql = sql;
+      return {
+        bind() {
+          return {
+            async first<T>() { return null as T | null; },
+          };
+        },
+      };
+    },
+  };
+
+  await new D1SecRepository(database).getPublishedReport("MSFT", "MSFT:2026-06-30:annual");
+
+  assert.match(selectedSql, /verification_status IN \('verified', 'partial'\)/);
 });

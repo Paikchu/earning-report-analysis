@@ -48,9 +48,41 @@ test("provides authenticated feed and protected background refresh routes", asyn
   assert.match(feedRoute, /getChatGPTUser/);
   assert.match(watchlistRoute, /hasInternalSecAccess/);
   assert.match(refreshRoute, /hasInternalSecAccess/);
-  assert.match(refreshRoute, /refreshSecTicker/);
+  assert.match(refreshRoute, /requestSecAnalysis/);
+  assert.doesNotMatch(refreshRoute, /refreshSecTicker/);
   assert.match(clientSection, /const feedUrl = `\/api\/sec\/\$\{encodeURIComponent\(ticker\)\}\/filings`/);
   assert.match(clientSection, /fetch\(`\$\{feedUrl\}\/refresh`/);
+});
+
+test("ships SEC analysis as a durable worker workflow instead of a page request", async () => {
+  const [workerSource, workerConfig] = await Promise.all([
+    readFile(new URL("../workers/sec-cron/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../workers/sec-cron/wrangler.jsonc", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(workerSource, /WorkflowEntrypoint/);
+  assert.match(workerSource, /class SecAnalysisWorkflow/);
+  assert.match(workerConfig, /"workflows"/);
+  assert.match(workerConfig, /"r2_buckets"/);
+});
+
+test("exposes only short authenticated bridge routes to the independent SEC worker", async () => {
+  const routeUrls = [
+    "../app/api/internal/sec/feed/route.ts",
+    "../app/api/internal/sec/context/route.ts",
+    "../app/api/internal/sec/model/route.ts",
+    "../app/api/internal/sec/publish/route.ts",
+    "../app/api/internal/sec/jobs/route.ts",
+  ];
+  const sources = await Promise.all(routeUrls.map(async (url) => {
+    await access(new URL(url, import.meta.url));
+    return readFile(new URL(url, import.meta.url), "utf8");
+  }));
+
+  for (const source of sources) assert.match(source, /hasInternalSecAccess/);
+  assert.match(sources[2], /callSecModel/);
+  assert.match(sources[3], /saveAnalysis/);
+  assert.doesNotMatch(sources.join("\n"), /refreshSecTicker/);
 });
 
 test("defaults new DeepSeek credentials to the supported v4 flash model", async () => {
