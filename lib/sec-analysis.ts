@@ -312,7 +312,7 @@ export function normalizeRouterResult(value: unknown, blocks: FilingBlock[]): Ro
   const validIds = new Set(blocks.map((block) => block.blockId));
   const moduleKeys = new Set<SecAnalysisModuleKey>(SEC_ANALYSIS_MODULES.map((module) => module.key));
   const rawSelections = Array.isArray(root?.selections) ? root.selections : [];
-  const selections = rawSelections.flatMap((raw): RouterSelection[] => {
+  const normalizedSelections = rawSelections.flatMap((raw): RouterSelection[] => {
     const item = asRecord(raw);
     const moduleKey = String(item?.moduleKey ?? "") as SecAnalysisModuleKey;
     if (!moduleKeys.has(moduleKey)) return [];
@@ -331,6 +331,25 @@ export function normalizeRouterResult(value: unknown, blocks: FilingBlock[]): Ro
       confidence,
     }];
   });
+  const selections = [...normalizedSelections.reduce((grouped, selection) => {
+    const existing = grouped.get(selection.moduleKey);
+    if (!existing) {
+      grouped.set(selection.moduleKey, selection);
+      return grouped;
+    }
+    const priority = existing.priority === "high" || selection.priority === "high"
+      ? "high"
+      : existing.priority === "medium" || selection.priority === "medium" ? "medium" : "low";
+    grouped.set(selection.moduleKey, {
+      moduleKey: selection.moduleKey,
+      blockIds: [...new Set([...existing.blockIds, ...selection.blockIds])].slice(0, 16),
+      expectedFields: [...new Set([...existing.expectedFields, ...selection.expectedFields])].slice(0, 20),
+      priority,
+      needFullText: existing.needFullText || selection.needFullText,
+      confidence: Math.max(existing.confidence, selection.confidence),
+    });
+    return grouped;
+  }, new Map<SecAnalysisModuleKey, RouterSelection>()).values()];
   const selectedModules = new Set(selections.map((selection) => selection.moduleKey));
   const missingModules = SEC_ANALYSIS_MODULES.map((module) => module.key).filter((key) => !selectedModules.has(key));
   return {
@@ -389,9 +408,37 @@ export function buildModulePayload(args: {
       precomputedDeltas: args.precomputedDeltas,
     },
     activeMemory: args.activeMemory.slice(0, 5),
+    outputSchema: {
+      facts: [{
+        metricKey: "string",
+        value: "string",
+        unit: "string",
+        currency: "string",
+        periodScope: "string",
+        basis: "gaap|non_gaap|management_kpi|derived|unknown",
+        evidenceIds: ["ev:<supplied blockId>"],
+        confidence: "high|medium|low",
+        sourceLabel: "fact_source_reported|management_adjusted|derived_calculation|unknown",
+      }],
+      claims: [{
+        topicKey: "string",
+        claimType: "driver|guidance|risk|one_off|accounting|commitment|tone",
+        statement: "string",
+        direction: "positive|negative|mixed|neutral|unknown",
+        horizon: "current|next_period|longer_term|unknown",
+        materialityScore: "number 0-100",
+        confidence: "high|medium|low",
+        evidenceIds: ["ev:<supplied blockId>"],
+      }],
+      memoryCandidates: [],
+      missingFields: ["string"],
+      evidenceCoverage: "number 0-1",
+    },
     rules: [
+      "Use the exact outputSchema keys and value types.",
+      "Copy evidenceId values exactly from current.evidence; do not return quotes or evidence objects.",
       "Every fact and claim must cite evidence IDs.",
-      "Use not_disclosed when the selected evidence does not disclose a field.",
+      "Put undisclosed field names in missingFields; do not create not_disclosed facts.",
       "Do not calculate numeric deltas; use precomputed deltas.",
       "Do not treat not_mentioned as withdrawn.",
     ],

@@ -214,7 +214,7 @@ function moduleSystemPrompt(moduleKey: SecAnalysisModuleKey) {
     `Module: ${moduleKey}.`,
     "Use only the supplied evidence. Preserve GAAP, non-GAAP, management KPI, units, periods, and definitions.",
     "Every fact and claim must cite one or more evidence IDs.",
-    "Return JSON with facts, claims, memoryCandidates, missingFields, and evidenceCoverage.",
+    "Return one JSON object using the exact outputSchema keys and types in the user payload.",
   ].join("\n");
 }
 

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildFilingBlocks,
+  buildModulePayload,
   buildRouterPayload,
   compareSnapshots,
   normalizeModuleAnalysis,
@@ -38,6 +39,42 @@ test("router discards hallucinated block IDs before persistence", () => {
   assert.deepEqual(result.selections[0].blockIds, [blocks[2].blockId]);
   assert.equal(result.source, "model");
   assert.equal(result.status, "partial");
+});
+
+test("router merges repeated selections for the same analysis module", () => {
+  const result = normalizeRouterResult({
+    selections: [
+      { moduleKey: "performance", blockIds: [blocks[1].blockId], expectedFields: ["revenue"], priority: "high", confidence: 0.9 },
+      { moduleKey: "performance", blockIds: [blocks[2].blockId], expectedFields: ["operating_income"], priority: "medium", confidence: 0.8 },
+    ],
+  }, blocks);
+
+  assert.equal(result.selections.length, 1);
+  assert.deepEqual(result.selections[0].blockIds, [blocks[1].blockId, blocks[2].blockId]);
+  assert.deepEqual(result.selections[0].expectedFields, ["revenue", "operating_income"]);
+});
+
+test("module payload gives the model the exact persisted JSON contract", () => {
+  const payload = buildModulePayload({
+    moduleKey: "performance",
+    filing: { ticker: "MSFT", form: "10-K", reportDate: "2026-06-30", accessionNumber: "acc-1" },
+    currentBlocks: [blocks[2]],
+    currentFacts: [],
+    activeMemory: [],
+    precomputedDeltas: [],
+  });
+
+  assert.deepEqual(payload.outputSchema.facts, [{
+    metricKey: "string",
+    value: "string",
+    unit: "string",
+    currency: "string",
+    periodScope: "string",
+    basis: "gaap|non_gaap|management_kpi|derived|unknown",
+    evidenceIds: ["ev:<supplied blockId>"],
+    confidence: "high|medium|low",
+    sourceLabel: "fact_source_reported|management_adjusted|derived_calculation|unknown",
+  }]);
 });
 
 test("bounds the dynamic router inventory for large annual filings", () => {
