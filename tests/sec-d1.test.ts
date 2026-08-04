@@ -196,13 +196,17 @@ test("does not publish an analysis artifact that failed verification", async () 
 
 test("stores same-metric filing facts under distinct reporting-period dimensions", async () => {
   const factWrites: unknown[][] = [];
+  const factStatements: string[] = [];
   const database = {
     prepare(sql: string) {
       return {
         bind(...values: unknown[]) {
           return {
             async run() {
-              if (/INSERT INTO sec_facts/.test(sql)) factWrites.push(values);
+              if (/INSERT INTO sec_facts/.test(sql)) {
+                factWrites.push(values);
+                factStatements.push(sql);
+              }
               return {};
             },
           };
@@ -243,6 +247,7 @@ test("stores same-metric filing facts under distinct reporting-period dimensions
   assert.equal(factWrites.length, 2);
   assert.notEqual(factWrites[0][5], factWrites[1][5]);
   assert.deepEqual(factWrites.map((values) => JSON.parse(String(values[6])).periodScope), ["FY2026", "FY2025"]);
+  assert.ok(factStatements.every((sql) => /ON CONFLICT\(period_id, series_id, dimensions_hash, basis\)/.test(sql)));
 });
 
 test("never reads a previously stored failed report as the published report", async () => {

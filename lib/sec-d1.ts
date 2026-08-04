@@ -315,9 +315,15 @@ export class D1SecRepository implements SecRepository {
             currency, basis, evidence_label, xbrl_concept, context_ref,
             derivation_formula, evidence_id, quality_status
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?)
-          ON CONFLICT(fact_id) DO UPDATE SET
+          ON CONFLICT(period_id, series_id, dimensions_hash, basis) DO UPDATE SET
+            filing_id = excluded.filing_id,
             value_decimal = excluded.value_decimal,
+            raw_value = excluded.raw_value,
             unit = excluded.unit,
+            currency = excluded.currency,
+            evidence_label = excluded.evidence_label,
+            derivation_formula = excluded.derivation_formula,
+            evidence_id = excluded.evidence_id,
             quality_status = excluded.quality_status
         `).bind(
           factId,
