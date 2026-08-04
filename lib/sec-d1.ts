@@ -253,7 +253,10 @@ export class D1SecRepository implements SecRepository {
           block_id, filing_id, ordinal, heading, heading_path, element_type,
           preview, body, token_count, numeric_density, table_count, content_hash
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(block_id) DO UPDATE SET
+        ON CONFLICT(filing_id, ordinal) DO UPDATE SET
+          block_id = excluded.block_id,
+          heading = excluded.heading, heading_path = excluded.heading_path,
+          element_type = excluded.element_type,
           preview = excluded.preview, body = excluded.body,
           token_count = excluded.token_count, numeric_density = excluded.numeric_density,
           table_count = excluded.table_count, content_hash = excluded.content_hash
