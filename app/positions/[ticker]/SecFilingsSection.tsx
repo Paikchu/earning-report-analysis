@@ -118,6 +118,7 @@ function SecFilingCard({
 }
 
 function FilingSummary({ filing }: { filing: SecFilingWithSummary }) {
+  if (filing.analysis) return <StructuredAnalysis report={filing.analysis} generatedAt={filing.summary?.generatedAt ?? null} />;
   const summary = filing.summary;
   if (!summary) return <p className="sec-summary-pending">AI 解读正在后台生成。</p>;
   if (!summary.headline && !summary.bullets.length && !summary.analystView) {
@@ -138,6 +139,50 @@ function FilingSummary({ filing }: { filing: SecFilingWithSummary }) {
       )}
       {summary.analystView && <p className="sec-analyst-view"><span>投资含义</span>{summary.analystView}</p>}
       <small className="sec-ai-note">AI 基于 filing 原文生成 · {formatDateTime(summary.generatedAt)}</small>
+    </div>
+  );
+}
+
+function StructuredAnalysis({
+  report,
+  generatedAt,
+}: {
+  report: NonNullable<SecFilingWithSummary["analysis"]>;
+  generatedAt: string | null;
+}) {
+  const changes = [
+    ...report.changes.qoq.map((change) => ({ ...change, label: "环比" })),
+    ...report.changes.yoy.map((change) => ({ ...change, label: "同比" })),
+  ].filter((change) => change.changeType !== "not_mentioned").slice(0, 8);
+  return (
+    <div className="sec-summary sec-analysis">
+      {report.headline && <p className="sec-summary-headline">{report.headline}</p>}
+      {report.keyMetrics.length > 0 && (
+        <div className="sec-analysis-metrics" aria-label="关键财务数据">
+          {report.keyMetrics.slice(0, 6).map((metric) => (
+            <div className="sec-analysis-metric" key={metric.metricKey}>
+              <span>{metric.metricKey}</span>
+              <strong>{metric.currentValue}</strong>
+              <small>
+                {metric.qoq ? `环比 ${metric.qoq}` : "环比暂无可比数据"}
+                {metric.yoy ? ` · 同比 ${metric.yoy}` : " · 同比暂无可比数据"}
+              </small>
+            </div>
+          ))}
+        </div>
+      )}
+      {changes.length > 0 && (
+        <ul className="sec-analysis-changes">
+          {changes.map((change, index) => (
+            <li key={`${change.label}-${change.topicKey}-${index}`}>
+              <i aria-hidden="true" />
+              <span><strong>{change.label} · {change.topicKey}</strong>{change.currentStatement ?? change.priorStatement ?? ""}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {report.dataQuality.warnings.map((warning) => <p className="sec-analysis-warning" key={warning}>{warning}</p>)}
+      <small className="sec-ai-note">结构化财报解读 · {formatDateTime(generatedAt ?? new Date().toISOString())}</small>
     </div>
   );
 }

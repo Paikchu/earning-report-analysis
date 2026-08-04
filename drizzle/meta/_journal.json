@@ -15,6 +15,20 @@
       "when": 1784913616386,
       "tag": "0001_normal_doctor_strange",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785815741703,
+      "tag": "0002_flat_blockbuster",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1785816193589,
+      "tag": "0003_neat_toro",
+      "breakpoints": true
     }
   ]
 }

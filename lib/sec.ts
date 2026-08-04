@@ -1,3 +1,5 @@
+import type { PublishedSecReport } from "./sec-analysis.ts";
+
 export const BUSINESS_FILING_FORMS = new Set([
   "10-K",
   "10-Q",
@@ -50,6 +52,7 @@ export type SecFilingSummary = {
 
 export type SecFilingWithSummary = SecFiling & {
   summary: SecFilingSummary | null;
+  analysis?: PublishedSecReport | null;
 };
 
 export type SecFilingFeed = {
@@ -101,6 +104,9 @@ export function sortSecFilings(filings: SecFiling[]): SecFiling[] {
 
 export function htmlToSecText(html: string): string {
   return decodeEntities(String(html ?? "")
+    .replace(/<ix:header[\s\S]*?<\/ix:header>/gi, " ")
+    .replace(/<xbrli:context[\s\S]*?<\/xbrli:context>/gi, " ")
+    .replace(/<xbrli:unit[\s\S]*?<\/xbrli:unit>/gi, " ")
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<\/(p|div|tr|table|section|article|h[1-6])>/gi, "\n")

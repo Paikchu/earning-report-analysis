@@ -35,3 +35,166 @@ export const secFilingSummaries = sqliteTable("sec_filing_summaries", {
 }, (table) => [
   primaryKey({ columns: [table.ticker, table.accessionNumber] }),
 ]);
+
+export const secFilings = sqliteTable("sec_filings", {
+  filingId: text("filing_id").primaryKey(),
+  ticker: text("ticker").notNull(),
+  accessionNumber: text("accession_number").notNull(),
+  cik: text("cik").notNull(),
+  form: text("form").notNull(),
+  filingDate: text("filing_date").notNull(),
+  reportDate: text("report_date").notNull(),
+  documentUrl: text("document_url").notNull(),
+  indexUrl: text("index_url").notNull(),
+  contentHash: text("content_hash").notNull().default(""),
+  parserVersion: text("parser_version").notNull().default("sec-structure.v1"),
+  ingestStatus: text("ingest_status").notNull().default("indexed"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("sec_filings_ticker_accession_idx").on(table.ticker, table.accessionNumber)]);
+
+export const secPeriods = sqliteTable("sec_periods", {
+  periodId: text("period_id").primaryKey(),
+  ticker: text("ticker").notNull(),
+  fiscalYear: integer("fiscal_year"),
+  fiscalQuarter: text("fiscal_quarter"),
+  periodScope: text("period_scope").notNull(),
+  startDate: text("start_date"),
+  endDate: text("end_date").notNull(),
+  durationDays: integer("duration_days"),
+  qoqPeriodId: text("qoq_period_id"),
+  yoyPeriodId: text("yoy_period_id"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("sec_periods_identity_idx").on(table.ticker, table.fiscalYear, table.fiscalQuarter, table.periodScope)]);
+
+export const secFilingPeriods = sqliteTable("sec_filing_periods", {
+  filingId: text("filing_id").notNull(),
+  periodId: text("period_id").notNull(),
+  role: text("role").notNull(),
+}, (table) => [primaryKey({ columns: [table.filingId, table.periodId, table.role] })]);
+
+export const secFilingBlocks = sqliteTable("sec_filing_blocks", {
+  blockId: text("block_id").primaryKey(),
+  filingId: text("filing_id").notNull(),
+  parentBlockId: text("parent_block_id"),
+  ordinal: integer("ordinal").notNull(),
+  heading: text("heading").notNull(),
+  headingPath: text("heading_path").notNull(),
+  elementType: text("element_type").notNull(),
+  preview: text("preview").notNull(),
+  body: text("body").notNull(),
+  tokenCount: integer("token_count").notNull(),
+  numericDensity: integer("numeric_density").notNull(),
+  tableCount: integer("table_count").notNull(),
+  contentHash: text("content_hash").notNull(),
+}, (table) => [uniqueIndex("sec_filing_blocks_filing_ordinal_idx").on(table.filingId, table.ordinal)]);
+
+export const secEvidence = sqliteTable("sec_evidence", {
+  evidenceId: text("evidence_id").primaryKey(),
+  filingId: text("filing_id").notNull(),
+  blockId: text("block_id").notNull(),
+  locator: text("locator").notNull().default(""),
+  excerpt: text("excerpt").notNull(),
+  sourceRank: integer("source_rank").notNull().default(1),
+  excerptHash: text("excerpt_hash").notNull(),
+});
+
+export const secFacts = sqliteTable("sec_facts", {
+  factId: text("fact_id").primaryKey(),
+  filingId: text("filing_id").notNull(),
+  periodId: text("period_id").notNull(),
+  metricKey: text("metric_key").notNull(),
+  seriesId: text("series_id").notNull(),
+  dimensionsHash: text("dimensions_hash").notNull().default(""),
+  dimensions: text("dimensions").notNull().default("{}"),
+  valueDecimal: text("value_decimal").notNull(),
+  rawValue: text("raw_value").notNull().default(""),
+  unit: text("unit").notNull(),
+  currency: text("currency").notNull().default(""),
+  basis: text("basis").notNull(),
+  evidenceLabel: text("evidence_label").notNull(),
+  xbrlConcept: text("xbrl_concept").notNull().default(""),
+  contextRef: text("context_ref").notNull().default(""),
+  derivationFormula: text("derivation_formula").notNull().default(""),
+  evidenceId: text("evidence_id").notNull(),
+  qualityStatus: text("quality_status").notNull().default("unverified"),
+}, (table) => [uniqueIndex("sec_facts_period_series_idx").on(table.periodId, table.seriesId, table.dimensionsHash, table.basis)]);
+
+export const secModuleSnapshots = sqliteTable("sec_module_snapshots", {
+  snapshotId: text("snapshot_id").primaryKey(),
+  ticker: text("ticker").notNull(),
+  periodId: text("period_id").notNull(),
+  filingId: text("filing_id").notNull(),
+  moduleKey: text("module_key").notNull(),
+  inputHash: text("input_hash").notNull(),
+  schemaVersion: text("schema_version").notNull(),
+  modelVersion: text("model_version").notNull(),
+  promptVersion: text("prompt_version").notNull(),
+  payload: text("payload").notNull(),
+  evidenceCoverage: integer("evidence_coverage").notNull().default(0),
+  verificationStatus: text("verification_status").notNull().default("pending"),
+  generatedAt: text("generated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("sec_module_snapshots_identity_idx").on(table.periodId, table.moduleKey, table.inputHash)]);
+
+export const secMemoryItems = sqliteTable("sec_memory_items", {
+  memoryId: text("memory_id").primaryKey(),
+  ticker: text("ticker").notNull(),
+  moduleKey: text("module_key").notNull(),
+  topicKey: text("topic_key").notNull(),
+  memoryType: text("memory_type").notNull(),
+  statement: text("statement").notNull(),
+  normalizedValue: text("normalized_value").notNull().default("{}"),
+  firstSeenPeriod: text("first_seen_period").notNull(),
+  lastConfirmedPeriod: text("last_confirmed_period").notNull(),
+  expectedResolutionPeriod: text("expected_resolution_period"),
+  status: text("status").notNull().default("active"),
+  materialityScore: integer("materiality_score").notNull().default(0),
+  confidence: text("confidence").notNull().default("medium"),
+  evidenceIds: text("evidence_ids").notNull().default("[]"),
+});
+
+export const secMemoryEvents = sqliteTable("sec_memory_events", {
+  eventId: text("event_id").primaryKey(),
+  memoryId: text("memory_id").notNull(),
+  ticker: text("ticker").notNull(),
+  periodId: text("period_id").notNull(),
+  eventType: text("event_type").notNull(),
+  currentStatement: text("current_statement"),
+  priorStatement: text("prior_statement"),
+  evidenceIds: text("evidence_ids").notNull().default("[]"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const secComparisons = sqliteTable("sec_comparisons", {
+  comparisonId: text("comparison_id").primaryKey(),
+  ticker: text("ticker").notNull(),
+  currentPeriodId: text("current_period_id").notNull(),
+  priorPeriodId: text("prior_period_id").notNull(),
+  comparisonType: text("comparison_type").notNull(),
+  comparability: text("comparability").notNull(),
+  payload: text("payload").notNull(),
+  generatedAt: text("generated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("sec_comparisons_identity_idx").on(table.currentPeriodId, table.priorPeriodId, table.comparisonType)]);
+
+export const secAnalysisRuns = sqliteTable("sec_analysis_runs", {
+  runId: text("run_id").primaryKey(),
+  ticker: text("ticker").notNull(),
+  filingId: text("filing_id").notNull(),
+  stage: text("stage").notNull(),
+  inputHash: text("input_hash").notNull(),
+  modelVersion: text("model_version").notNull(),
+  promptVersion: text("prompt_version").notNull(),
+  status: text("status").notNull(),
+  error: text("error"),
+  tokenUsage: text("token_usage").notNull().default("{}"),
+  startedAt: text("started_at").notNull(),
+  completedAt: text("completed_at"),
+});
+
+export const secPublishedReports = sqliteTable("sec_published_reports", {
+  ticker: text("ticker").notNull(),
+  periodId: text("period_id").notNull(),
+  reportVersion: text("report_version").notNull(),
+  payload: text("payload").notNull(),
+  verificationStatus: text("verification_status").notNull(),
+  generatedAt: text("generated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [primaryKey({ columns: [table.ticker, table.periodId, table.reportVersion] })]);
