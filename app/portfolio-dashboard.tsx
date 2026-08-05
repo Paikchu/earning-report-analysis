@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type CSSProperties } from "react";
+import Link from "next/link";
 
 import {
   allocationColor,
@@ -16,9 +17,11 @@ import { heatmapThemeColor, type HeatmapHolding } from "@/lib/portfolio-heatmap"
 import type { PositionGroupView } from "@/lib/portfolio-view-model";
 import { AddPlanDialog } from "./AddPlanDialog";
 import { PortfolioHeatmap } from "./portfolio-heatmap";
-import { PositionDetailDialog, type PositionDetailTarget } from "./PositionDetailDialog";
 import { useMarketQuotes, type QuoteLoadStatus } from "./use-market-quotes";
 import type { MarketQuoteMap } from "@/lib/yahoo-quotes";
+
+type AllocationMode = "holding" | "sector";
+const allocationModes: AllocationMode[] = ["holding", "sector"];
 
 function Pnl({ value }: { value: number }) {
   const className = value < 0 ? "loss" : value > 0 ? "gain" : "muted";
@@ -59,21 +62,22 @@ function PortfolioHeader({
           <h1 id="portfolio-title">投资组合</h1>
           <span className="summary-nav-label">当前净值</span>
           <strong className="summary-nav-value">{money(netLiquidation)}</strong>
-          <span className={`pnl-pill ${totalPnl < 0 ? "loss" : totalPnl > 0 ? "gain" : "muted"}`}>
-            {money(totalPnl, true)}（{percent(totalPnlRate, true)}）
-          </span>
+          <span className="summary-pnl-label">累计盈亏</span>
+          <strong className={`summary-pnl ${totalPnl < 0 ? "loss" : totalPnl > 0 ? "gain" : "muted"}`}>
+            {money(totalPnl, true)} <i>{percent(totalPnlRate, true)}</i>
+          </strong>
         </div>
         <div className="summary-support" aria-label="组合摘要">
-          <article><span>剔除期权浮盈亏</span><strong>{money(netLiquidationWithoutOptionPnl)}</strong></article>
-          <article><span>净入金</span><strong>{money(netDeposits)}</strong></article>
+          <article><span>持仓净市值</span><strong>{money(netPositionsValue)}</strong></article>
           <article><span>现金</span><strong>{money(cashBalance)}</strong></article>
+          <article><span>杠杆率</span><strong>{number(portfolioLeverage, 2, 2)}x</strong></article>
+          <article><span>净入金</span><strong>{money(netDeposits)}</strong></article>
         </div>
       </div>
       <section className="header-position-summary" aria-label="持仓摘要">
-        <article><span>持仓净市值</span><strong>{money(netPositionsValue)}</strong></article>
         <article><span>正股</span><strong>{money(stockMarketValue)}</strong></article>
         <article><span>期权</span><strong>{money(optionMarketValue)}</strong></article>
-        <article><span>杠杆率</span><strong>{number(portfolioLeverage, 2, 2)}x</strong></article>
+        <article><span>剔除期权浮盈亏</span><strong>{money(netLiquidationWithoutOptionPnl)}</strong></article>
         {nextEarnings && nextEarningsReminder && (
           <article className="header-next-earnings">
             <span>即将财报</span>
@@ -253,25 +257,73 @@ function SectorAllocationRing({ groups }: { groups: PositionGroupView[] }) {
   );
 }
 
-const columns: Array<{ className?: string; key?: PositionSortKey; label: string }> = [
+function AllocationPanel({
+  groups,
+  activeSymbol,
+  onActiveSymbolChange,
+}: {
+  groups: PositionGroupView[];
+  activeSymbol: string | null;
+  onActiveSymbolChange: (symbol: string | null) => void;
+}) {
+  const [mode, setMode] = useState<AllocationMode>("holding");
+
+  return (
+    <>
+      <div className="allocation-tabs" role="tablist" aria-label="仓位占比口径">
+        {allocationModes.map((value) => (
+          <button
+            aria-controls="allocation-panel"
+            aria-selected={mode === value}
+            id={`allocation-tab-${value}`}
+            key={value}
+            onClick={() => setMode(value)}
+            onKeyDown={(event) => {
+              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+              event.preventDefault();
+              const currentIndex = allocationModes.indexOf(value);
+              const direction = event.key === "ArrowLeft" ? -1 : 1;
+              const nextMode = event.key === "Home"
+                ? allocationModes[0]
+                : event.key === "End"
+                  ? allocationModes.at(-1)!
+                  : allocationModes[(currentIndex + direction + allocationModes.length) % allocationModes.length];
+              setMode(nextMode);
+              requestAnimationFrame(() => document.getElementById(`allocation-tab-${nextMode}`)?.focus());
+            }}
+            role="tab"
+            tabIndex={mode === value ? 0 : -1}
+            type="button"
+          >
+            {value === "holding" ? "个股" : "板块"}
+          </button>
+        ))}
+      </div>
+      <div aria-labelledby={`allocation-tab-${mode}`} className="allocation-tabpanel" id="allocation-panel" role="tabpanel">
+        {mode === "holding"
+          ? <AllocationRing groups={groups} activeSymbol={activeSymbol} onActiveSymbolChange={onActiveSymbolChange} />
+          : <SectorAllocationRing groups={groups} />}
+      </div>
+    </>
+  );
+}
+
+const columns = ["标的", "行情", "仓位", "成本", "未实现", "年内"];
+
+const sortOptions: Array<{ key: PositionSortKey; label: string }> = [
   { key: "symbol", label: "标的" },
-  { label: "股价" },
-  { label: "实际成本" },
-  { label: "当日涨跌" },
   { key: "value", label: "净市值" },
   { key: "weight", label: "净权重" },
   { key: "cost", label: "持仓成本" },
   { key: "unrealized", label: "未实现盈亏" },
   { key: "realized", label: "年内已实现" },
   { key: "netPnl", label: "年内净盈亏" },
-  { label: "" },
 ];
 
 function PositionLedger({
   groups,
   activeSymbol,
   onActiveSymbolChange,
-  onOpenPosition,
   quotes,
   quoteStatus,
   earningsBySymbol,
@@ -280,7 +332,6 @@ function PositionLedger({
   groups: PositionGroupView[];
   activeSymbol: string | null;
   onActiveSymbolChange: (symbol: string | null) => void;
-  onOpenPosition: (group: PositionGroupView) => void;
   quotes: MarketQuoteMap;
   quoteStatus: QuoteLoadStatus;
   earningsBySymbol: Map<string, EarningsEvent>;
@@ -290,22 +341,13 @@ function PositionLedger({
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const sortedGroups = useMemo(() => sortPositionGroups(groups, sortKey, sortDirection), [groups, sortDirection, sortKey]);
 
-  const updateSort = (key: PositionSortKey) => {
-    if (key === sortKey) {
-      setSortDirection((current) => current === "desc" ? "asc" : "desc");
-      return;
-    }
-    setSortKey(key);
-    setSortDirection(key === "symbol" ? "asc" : "desc");
-  };
-
   return (
     <div className="position-scroll" aria-label="按 Ticker 分类的持仓">
-      <div className="mobile-sort">
+      <div className="ledger-sort" aria-label="账本排序">
         <label>
           <span>排序</span>
           <select value={sortKey} onChange={(event) => setSortKey(event.target.value as PositionSortKey)}>
-            {columns.filter((column) => column.key).map((column) => <option key={column.key} value={column.key}>{column.label}</option>)}
+            {sortOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
           </select>
         </label>
         <button onClick={() => setSortDirection((current) => current === "desc" ? "asc" : "desc")} type="button">
@@ -313,17 +355,7 @@ function PositionLedger({
         </button>
       </div>
       <div className="position-columns">
-        {columns.map((column, index) => column.key ? (
-          <button
-            aria-label={`按${column.label}${column.key === sortKey && sortDirection === "desc" ? "升序" : "降序"}排列`}
-            className={[column.className, column.key === sortKey ? "is-sorted" : ""].filter(Boolean).join(" ")}
-            key={column.label}
-            onClick={() => updateSort(column.key!)}
-            type="button"
-          >
-            {column.label}<i>{column.key === sortKey ? sortDirection === "desc" ? "↓" : "↑" : "↕"}</i>
-          </button>
-        ) : <span className={column.className} key={`${column.label}-${index}`}>{column.label}</span>)}
+        {columns.map((column) => <span key={column}>{column}</span>)}
       </div>
       <div className="position-list">
         {sortedGroups.map((group) => (
@@ -332,47 +364,38 @@ function PositionLedger({
             key={group.symbol}
             style={{ "--holding-color": heatmapThemeColor(group.symbol) } as CSSProperties}
           >
-            <button
-              aria-label={`查看 ${group.symbol} 持仓详情`}
-              className="position-row position-row-button"
+            <Link
+              className="position-row"
               data-active={activeSymbol === group.symbol}
+              href={`/positions/${encodeURIComponent(group.symbol)}`}
               onFocus={() => onActiveSymbolChange(group.symbol)}
               onMouseEnter={() => onActiveSymbolChange(group.symbol)}
               onMouseLeave={() => onActiveSymbolChange(null)}
-              onClick={() => onOpenPosition(group)}
-              type="button"
             >
               <span className="position-identity">
                 <i className="holding-mark" aria-hidden="true" />
                 <strong className="symbol">{group.symbol}</strong>
                 <PositionReminder event={earningsBySymbol.get(group.symbol)} asOf={earningsUpdatedAt} />
               </span>
-              <span data-label="股价">
-                {quotes[group.symbol] ? money(quotes[group.symbol].price) : <i className="quote-muted">{quoteStatus === "loading" ? "读取中" : "—"}</i>}
-              </span>
-              <span data-label="实际成本">
-                {group.stock ? money(group.stock.actualCost) : <i className="quote-muted">—</i>}
-              </span>
-              <span data-label="当日涨跌">
+              <span className="position-market-cell" data-label="行情">
+                <strong>{quotes[group.symbol] ? money(quotes[group.symbol].price) : <i className="quote-muted">{quoteStatus === "loading" ? "读取中" : "—"}</i>}</strong>
                 {quotes[group.symbol]
                   ? (
-                    <span
+                    <small
                       className="daily-change-value"
                       data-direction={quotes[group.symbol].changePercent < 0 ? "loss" : quotes[group.symbol].changePercent > 0 ? "gain" : "neutral"}
                     >
                       {percent(quotes[group.symbol].changePercent, true)}
-                    </span>
+                    </small>
                   )
-                  : <i className="quote-muted">{quoteStatus === "loading" ? "读取中" : "—"}</i>}
+                  : <small className="quote-muted">当日 —</small>}
               </span>
-              <span data-label="净市值">{money(group.value)}</span>
-              <span data-label="净权重">{percent(group.weight)}</span>
-              <span data-label="持仓成本">{money(group.cost)}</span>
-              <span data-label="未实现盈亏"><Pnl value={group.unrealized} /></span>
-              <span data-label="年内已实现"><Pnl value={group.realized} /></span>
-              <span data-label="年内净盈亏"><Pnl value={group.netPnl} /></span>
-              <span className="row-arrow" aria-hidden="true">→</span>
-            </button>
+              <span className="position-value-cell" data-label="仓位"><strong>{money(group.value)}</strong><small>{percent(group.weight)}</small></span>
+              <span className="position-cost-cell" data-label="成本"><strong>{group.stock ? money(group.stock.actualCost) : <i className="quote-muted">—</i>}</strong><small>持仓 {money(group.cost)}</small></span>
+              <span className="position-unrealized-cell" data-label="未实现"><Pnl value={group.unrealized} /></span>
+              <span className="position-year-cell" data-label="年内"><strong><Pnl value={group.netPnl} /></strong><small>已实现 <Pnl value={group.realized} /></small></span>
+              <span className="sr-only">，查看持仓详情</span>
+            </Link>
             {group.options.length > 0 && (
               <div className="position-submenu" aria-label={`${group.symbol} 期权持仓`}>
                 {group.options.map((option) => (
@@ -399,7 +422,6 @@ export function PortfolioDashboard({
   stockMarketValue,
   optionMarketValue,
   netPositionsValue,
-  snapshotTime,
   earningsEvents,
   netLiquidation,
   totalPnl,
@@ -414,7 +436,6 @@ export function PortfolioDashboard({
   stockMarketValue: number;
   optionMarketValue: number;
   netPositionsValue: number;
-  snapshotTime: string;
   earningsEvents: EarningsEvent[];
   netLiquidation: number;
   totalPnl: number;
@@ -425,7 +446,6 @@ export function PortfolioDashboard({
   cashBalance: number;
 }) {
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
-  const [selectedPosition, setSelectedPosition] = useState<PositionDetailTarget | null>(null);
   const quoteSymbols = useMemo(() => positionGroups.map((group) => group.symbol).join(","), [positionGroups]);
   const quoteState = useMarketQuotes(quoteSymbols);
   const [earningsAsOf] = useState(() => new Date().toISOString());
@@ -466,20 +486,14 @@ export function PortfolioDashboard({
         <aside className="allocation-panel">
           <h2>仓位构成</h2>
           <div className="section-divider" aria-hidden="true" />
-          <div className="allocation-chart-heading"><h3>个股占比</h3><span>前四大 + 其他</span></div>
-          <AllocationRing groups={positionGroups} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
-          <div className="allocation-chart-heading allocation-sector-heading"><h3>板块占比</h3><span>按净权重归类</span></div>
-          <SectorAllocationRing groups={positionGroups} />
+          <AllocationPanel groups={positionGroups} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
           <PortfolioHeatmap holdings={heatmapHoldings} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
         </aside>
 
         <section className="ledger-panel" aria-labelledby="ledger-title">
           <div className="ledger-heading">
             <h2 id="ledger-title">投资账本</h2>
-            <AddPlanDialog onSelect={(result) => {
-              const position = positionGroups.find((group) => group.symbol === result.symbol);
-              setSelectedPosition({ symbol: result.symbol, name: result.name, position });
-            }} />
+            <AddPlanDialog />
           </div>
           <div className="section-divider" aria-hidden="true" />
           <div className="ledger-content">
@@ -487,7 +501,6 @@ export function PortfolioDashboard({
               groups={positionGroups}
               activeSymbol={activeSymbol}
               onActiveSymbolChange={setActiveSymbol}
-              onOpenPosition={(group) => setSelectedPosition({ symbol: group.symbol, name: group.name, position: group })}
               quotes={quoteState.quotes}
               quoteStatus={quoteState.status}
               earningsBySymbol={earningsBySymbol}
@@ -496,15 +509,6 @@ export function PortfolioDashboard({
           </div>
         </section>
       </section>
-      {selectedPosition && (
-        <PositionDetailDialog
-          onClose={() => setSelectedPosition(null)}
-          quote={quoteState.quotes[selectedPosition.symbol]}
-          quoteStatus={selectedPosition.position ? quoteState.status : undefined}
-          snapshotTime={snapshotTime}
-          target={selectedPosition}
-        />
-      )}
     </>
   );
 }

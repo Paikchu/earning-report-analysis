@@ -162,10 +162,7 @@ export function PlanEditor({
   return (
     <section className="plan-editor" id="plan-editor" aria-labelledby="plan-title">
       <div className="detail-section-heading">
-        <div>
-          <p className="section-kicker">Investment thesis</p>
-          <h2 id="plan-title">持仓计划</h2>
-        </div>
+        <h2 id="plan-title">持仓计划</h2>
         {message && <p className={`save-status ${status}`} role="status">{message}</p>}
       </div>
 

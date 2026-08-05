@@ -88,7 +88,7 @@ test("uses the approved ledger-dominant hierarchy without horizontal scrolling",
   assert.match(css, /\.position-scroll \{[\s\S]*?overflow-x: visible;/);
   assert.match(css, /\.hero \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto;/);
   assert.match(css, /\.summary-nav-value \{[\s\S]*?font-size: clamp\(48px, 5vw, 56px\);/);
-  assert.match(css, /\.header-position-summary \{[\s\S]*?grid-template-columns: repeat\(4, minmax\(110px, \.65fr\)\) minmax\(280px, 1\.8fr\);/);
+  assert.match(css, /\.header-position-summary \{[\s\S]*?grid-template-columns: minmax\(110px, \.65fr\) minmax\(110px, \.65fr\) minmax\(190px, 1fr\) minmax\(280px, 1\.8fr\);/);
   assert.match(css, /h2 \{[\s\S]*?font: 600 22px\/1\.1 var\(--serif\);/);
   assert.doesNotMatch(css, /\.portfolio-header \{[^}]*background:/);
   assert.match(css, /@media \(max-width: 620px\)[\s\S]*?\.header-position-summary \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
@@ -179,7 +179,7 @@ test("renders the stock-only investment theme heatmap", async () => {
   }
 });
 
-test("renders individual and sector allocation charts with distinct palettes", async () => {
+test("switches one allocation chart between holding and sector modes", async () => {
   const [response, dashboard, css] = await Promise.all([
     render(),
     readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
@@ -187,12 +187,14 @@ test("renders individual and sector allocation charts with distinct palettes", a
   ]);
   const html = await response.text();
 
-  assert.match(html, /个股占比/);
-  assert.match(html, /板块占比/);
-  assert.match(html, /AI \/ 企业软件/);
+  assert.match(html, /role="tablist"/);
+  assert.match(html, /aria-selected="true"[^>]*role="tab"[^>]*>个股</);
+  assert.match(html, /role="tabpanel"/);
+  assert.match(dashboard, /type AllocationMode = "holding" \| "sector"/);
+  assert.match(dashboard, /\(currentIndex \+ direction \+ allocationModes\.length\) % allocationModes\.length/);
   assert.match(dashboard, /SectorAllocationRing/);
   assert.match(dashboard, /allocationColor\(index\)/);
-  assert.match(css, /\.allocation-chart-heading/);
+  assert.match(css, /\.allocation-tabs/);
 });
 
 test("keeps domain headers outside the holding tile area", async () => {
@@ -201,12 +203,12 @@ test("keeps domain headers outside the holding tile area", async () => {
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(css, /\.heatmap-domain-tiles \{[^]*?inset: 22px 0 0;/);
+  assert.match(css, /\.heatmap-domain-tiles \{[^]*?inset: 26px 0 0;/);
   assert.doesNotMatch(css, /\.heatmap-domain-compact \.heatmap-domain-heading \{ display: none; \}/);
   assert.match(css, /\.heatmap-domain-compact \.heatmap-domain-heading \{[^]*?display: flex;/);
-  assert.match(css, /\.heatmap-domain-compact \.heatmap-domain-tiles \{ inset: 16px 0 0; \}/);
-  assert.match(css, /\.heatmap-domain-narrow \.heatmap-domain-heading \{[^]*?height: 18px;[^]*?writing-mode: horizontal-tb;/);
-  assert.match(css, /\.heatmap-domain-narrow \.heatmap-domain-tiles \{ inset: 18px 0 0; \}/);
+  assert.match(css, /\.heatmap-domain-compact \.heatmap-domain-tiles \{ inset: 24px 0 0; \}/);
+  assert.match(css, /\.heatmap-domain-narrow \.heatmap-domain-heading \{[^]*?height: 24px;[^]*?writing-mode: horizontal-tb;/);
+  assert.match(css, /\.heatmap-domain-narrow \.heatmap-domain-tiles \{ inset: 24px 0 0; \}/);
   assert.match(component, /heatmapDomainDensity/);
   assert.match(component, /insetTreemapRectangle/);
 });
@@ -248,11 +250,12 @@ test("groups stock and option positions by ticker", async () => {
   const response = await render();
   const html = await response.text();
   const expectedTickerCount = new Set(snapshot.positions.map((position) => position.symbol)).size;
-  const renderedTickerCount = html.match(/class="position-row position-row-button"/g)?.length ?? 0;
+  const renderedTickerCount = html.match(/class="position-row"/g)?.length ?? 0;
 
   assert.equal(renderedTickerCount, expectedTickerCount);
-  assert.match(html, /aria-label="查看 INTC 持仓详情"/);
-  assert.doesNotMatch(html, /href="\/positions\/INTC"/);
+  assert.doesNotMatch(html, /aria-label="查看 INTC 持仓详情"/);
+  assert.match(html, /，查看持仓详情/);
+  assert.match(html, /href="\/positions\/INTC"/);
   assert.doesNotMatch(html, /<details class="position-row"/);
   assert.match(html, /INTC/);
   assert.match(html, /正股/);
@@ -317,7 +320,7 @@ test("keeps small text high-contrast and visibly weighted", async () => {
   assert.match(css, /-webkit-font-smoothing:\s*auto/);
 });
 
-test("enlarges and center-aligns holding row text", async () => {
+test("keeps ledger labels and values above the minimum readable sizes", async () => {
   const [dashboard, css] = await Promise.all([
     readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
@@ -326,21 +329,24 @@ test("enlarges and center-aligns holding row text", async () => {
   assert.match(dashboard, /className="daily-change-value/);
   assert.match(css, /--daily-gain:\s*#315b3d/);
   assert.match(css, /--daily-loss:\s*#8f2f25/);
-  assert.match(css, /\.position-row\s*\{[^}]*font-size:\s*12px;[^}]*line-height:\s*1\.15;[^}]*font-weight:\s*500;/s);
+  assert.match(css, /--ink-muted:\s*#596572/);
+  assert.match(css, /\.position-row\s*\{[^}]*font-size:\s*14px;/s);
   assert.match(css, /\.position-identity\s*\{[^}]*align-items:\s*center;/s);
   assert.match(css, /\.position-reminder\s*\{[^}]*align-content:\s*center;/s);
   assert.match(css, /\.symbol\s*\{[^}]*font:\s*600 15px\/1 var\(--serif\);/s);
-  assert.match(css, /\.position-reminder strong\s*\{[^}]*font-size:\s*10px;/s);
-  assert.match(css, /\.position-reminder small\s*\{[^}]*font-size:\s*8px;/s);
-  assert.match(css, /\.daily-change-value\s*\{[^}]*font-size:\s*12px;[^}]*font-weight:\s*650;/s);
-  assert.match(css, /@media \(max-width: 620px\)[^]*?\.daily-change-value \{ font-size: 13px; \}/);
+  assert.match(css, /\.position-reminder strong\s*\{[^}]*font-size:\s*12px;/s);
+  assert.match(css, /\.position-reminder small\s*\{[^}]*font-size:\s*12px;/s);
+  assert.match(css, /\.daily-change-value\s*\{[^}]*font-size:\s*14px;/s);
 });
 
-test("places actual cost in the third ledger column", async () => {
+test("compresses the desktop ledger into six paired data groups", async () => {
   const dashboard = await readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8");
 
-  assert.match(dashboard, /\{ label: "股价" \},\s*\{ label: "实际成本" \},\s*\{ label: "当日涨跌" \}/);
-  assert.match(dashboard, /data-label="股价"[\s\S]*data-label="实际成本"[\s\S]*data-label="当日涨跌"/);
+  assert.match(dashboard, /const columns = \["标的", "行情", "仓位", "成本", "未实现", "年内"\]/);
+  assert.match(dashboard, /className="position-market-cell"/);
+  assert.match(dashboard, /className="position-value-cell"/);
+  assert.match(dashboard, /className="position-cost-cell"/);
+  assert.match(dashboard, /className="position-year-cell"/);
   assert.match(dashboard, /group\.stock \? money\(group\.stock\.actualCost\)/);
 });
 
@@ -353,7 +359,7 @@ test("keeps full ticker symbols visible before heatmap metrics", async () => {
   assert.match(component, /heatmapTileDensity/);
   assert.match(component, /heatmap-tile-symbol-only/);
   assert.match(css, /\.heatmap-tile-symbol-only \.heatmap-tile-metrics \{ display: none; \}/);
-  assert.match(css, /\.heatmap-tile-symbol-only strong\s*\{[^}]*font-size:\s*clamp\(6px,\s*25cqw,\s*9px\);/s);
+  assert.match(css, /\.heatmap-tile-symbol-only strong\s*\{[^}]*font-size:\s*12px;/s);
 });
 
 test("renders option-only submenus below every ticker with options", async () => {
@@ -380,43 +386,38 @@ test("renders option-only submenus below every ticker with options", async () =>
   assert.match(dashboard, /option\.marketValue/);
   assert.doesNotMatch(dashboard, /className="submenu-type">正股/);
   assert.doesNotMatch(dashboard, /data-label="构成"|label: "构成"|className="position-kinds"/);
-  assert.match(dashboard, /onOpenPosition\(group\)/);
-  assert.doesNotMatch(dashboard, /href=\{`\/positions\//);
+  assert.doesNotMatch(dashboard, /onOpenPosition/);
+  assert.match(dashboard, /href=\{`\/positions\/\$\{encodeURIComponent\(group\.symbol\)\}`\}/);
   assert.doesNotMatch(dashboard, /breakdownSymbol|breakdown-trigger|position-breakdown|持仓拆分/);
   assert.match(css, /\.position-submenu \{[^]*?display: grid;/);
   assert.match(css, /\.position-submenu-row \{[^]*?grid-template-columns:/);
   assert.doesNotMatch(css, /\.position-kinds/);
   const mobileCss = css.match(/@media \(max-width: 620px\) \{([\s\S]*)\}\s*$/)?.[1] ?? "";
   assert.match(mobileCss, /\.position-submenu \{[^}]*width: min\(calc\(100% - 8px\), 620px\);[^}]*margin: 0 auto 10px;/);
-  assert.match(mobileCss, /\.position-submenu-row \{[^}]*min-height: 38px;[^}]*grid-template-columns: 32px minmax\(0, 1fr\) auto 76px;[^}]*font-size: 11px;[^}]*text-align: center;/);
+  assert.match(mobileCss, /\.position-submenu-row \{[^}]*min-height: 44px;[^}]*grid-template-columns: 32px minmax\(0, 1fr\) auto 76px;[^}]*font-size: 12px;[^}]*text-align: center;/);
   assert.match(mobileCss, /\.position-submenu-row \.submenu-value \{ text-align: center; \}/);
   assert.doesNotMatch(mobileCss, /\.position-submenu-row \.(?:submenu-type|submenu-quantity|submenu-value) \{[^}]*grid-row:/);
 });
 
-test("opens position details in a homepage workspace dialog without navigation", async () => {
-  const [dashboard, dialog, addPlanDialog, css] = await Promise.all([
+test("uses independent position routes and removes the workspace dialog", async () => {
+  const [dashboard, addPlanDialog, detail, css] = await Promise.all([
     readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/PositionDetailDialog.tsx", import.meta.url), "utf8").catch(() => ""),
     readFile(new URL("../app/AddPlanDialog.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/positions/[ticker]/PositionDetailContent.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(dashboard, /PositionDetailDialog/);
-  assert.match(dashboard, /selectedPosition/);
-  assert.doesNotMatch(dashboard, /import Link from "next\/link"/);
-  assert.match(dialog, /<dialog/);
-  assert.match(dialog, /\.showModal\(\)/);
-  assert.match(dialog, /fetch\(`\/api\/plans\/\$\{encodeURIComponent\(target\.symbol\)\}`/);
-  assert.match(dialog, /onPlanDirtyChange/);
-  assert.match(dialog, /window\.confirm\("放弃未保存的更改？"\)/);
-  assert.match(dialog, /addEventListener\("keydown"/);
-  assert.match(dialog, /event\.key === "Escape"/);
-  assert.match(addPlanDialog, /onSelect/);
-  assert.doesNotMatch(addPlanDialog, /href=\{`\/positions\//);
-  assert.match(css, /\.position-detail-dialog \{[^]*?width: min\(1180px, calc\(100vw - 48px\)\);[^]*?height: calc\(100dvh - 48px\);/);
-  assert.match(css, /\.position-detail-dialog-body \{[^]*?width: min\(1360px, calc\(100% - 48px\)\);/);
-  assert.match(css, /\.sec-filings-section,\s*\.plan-editor \{ width: 100%; max-width: none; \}/);
-  assert.match(css, /@media \(max-width: 620px\)[^]*?\.position-detail-dialog \{[^]*?width: 100vw;[^]*?height: 100dvh;/);
+  assert.match(dashboard, /import Link from "next\/link"/);
+  assert.doesNotMatch(dashboard, /PositionDetailDialog|selectedPosition/);
+  assert.doesNotMatch(dashboard, /aria-label=\{`查看 \$\{group\.symbol\} 持仓详情`\}/);
+  assert.match(dashboard, /className="sr-only">，查看持仓详情/);
+  assert.match(addPlanDialog, /router\.push\(`\/positions\/\$\{encodeURIComponent\(result\.symbol\)\}`\)/);
+  assert.match(detail, /className="detail-section-nav"/);
+  for (const id of ["position-structure", "plan-editor", "ownership-structure", "sec-filings"]) {
+    assert.match(detail, new RegExp(`href="#${id}"`));
+  }
+  assert.match(css, /\.detail-section-nav \{[^]*?position: sticky;/);
+  await assert.rejects(access(new URL("app/PositionDetailDialog.tsx", projectRoot)));
 });
 
 test("renders Yahoo price and daily change surfaces without changing ledger calculations", async () => {
@@ -426,8 +427,8 @@ test("renders Yahoo price and daily change surfaces without changing ledger calc
   ]);
   const html = await response.text();
 
-  assert.match(html, /股价/);
-  assert.match(html, /当日涨跌/);
+  assert.match(html, /行情/);
+  assert.match(detail, /activeQuote\.changePercent/);
   assert.match(detail, /Yahoo Finance/);
   assert.match(detail, /行情暂不可用/);
   assert.doesNotMatch(detail, /position\.value\s*=\s*quote|position\.unrealized\s*=\s*quote/);
@@ -450,13 +451,13 @@ test("renders the holding summary in the header without the market pulse", async
   assert.match(dashboard, /useMarketQuotes\(quoteSymbols\)/);
 });
 
-test("reuses homepage quotes for holdings and fetches unheld plan tickers separately", async () => {
+test("fetches homepage and independent detail quotes without modal state", async () => {
   const [dashboard, detail] = await Promise.all([
     readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/positions/[ticker]/PositionDetailContent.tsx", import.meta.url), "utf8"),
   ]);
 
-  assert.match(dashboard, /quoteStatus=\{selectedPosition\.position \? quoteState\.status : undefined\}/);
+  assert.doesNotMatch(dashboard, /selectedPosition|PositionDetailDialog/);
   assert.match(detail, /useMarketQuotes\(ticker, quoteStatus === undefined\)/);
 });
 
@@ -474,7 +475,7 @@ test("protects the Yahoo quote endpoint with ChatGPT authentication", async () =
   assert.deepEqual(await response.json(), { error: "未登录。" });
 });
 
-test("exposes authenticated plan reads for the workspace dialog", async () => {
+test("exposes authenticated plan reads for the independent detail page", async () => {
   const route = await readFile(new URL("../app/api/plans/[ticker]/route.ts", import.meta.url), "utf8");
 
   assert.match(route, /export async function GET/);
@@ -490,22 +491,30 @@ test("uses page-scrolling cards for mobile position details", async () => {
   ]);
 
   assert.match(detailPage, /PositionDetailContent/);
+  assert.match(detailContent, /id="position-structure"/);
   assert.match(detailContent, /data-label="平均成本"/);
   assert.match(detailContent, /data-label="未实现盈亏"/);
   assert.doesNotMatch(detailContent, /持仓，可横向滚动|持仓明细，可横向滚动/);
   assert.match(css, /\.position-detail\.table-wrap \{\s*overflow: visible;\s*overscroll-behavior: auto;/);
   assert.match(css, /\.instrument-table thead \{ display: none; \}/);
   assert.match(css, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
-  assert.match(css, /\.row-arrow \{\s*position: absolute;/);
   assert.match(css, /\.position-identity\s*\{[^}]*grid-column: 1 \/ -1;/);
 });
 
-test("centers the add-plan dialog and hides its scrollbar", async () => {
-  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+test("keeps the add-plan dialog content-sized with useful idle and loading states", async () => {
+  const [dialog, css] = await Promise.all([
+    readFile(new URL("../app/AddPlanDialog.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
 
   assert.match(css, /\.plan-dialog \{[^]*?position: fixed;[^]*?inset: 50% auto auto 50%;[^]*?transform: translate\(-50%, -50%\);/);
-  assert.match(css, /\.dialog-card \{[^]*?overflow-y: auto;[^]*?scrollbar-width: none;/);
-  assert.match(css, /\.dialog-card::-webkit-scrollbar \{ display: none; \}/);
+  assert.doesNotMatch(dialog, /NEW INVESTMENT PLAN|New investment plan/);
+  assert.match(dialog, /className="search-help"/);
+  assert.match(dialog, /className="search-skeleton"/);
+  assert.match(dialog, /const hasQuery = Boolean\(value\.trim\(\)\);[\s\S]*setResults\(\[\]\);[\s\S]*setLoading\(hasQuery\)/);
+  assert.match(dialog, /const open = \(\) => \{[\s\S]*setDirectoryUpdatedAt\(""\);[\s\S]*setLoading\(false\);[\s\S]*showModal\(\)/);
+  assert.match(dialog, /没有找到匹配的标的/);
+  assert.doesNotMatch(css, /\.search-results \{[^}]*min-height:/s);
 });
 
 test("calculates actual holding cost from cost, realized P&L, and quantity", () => {

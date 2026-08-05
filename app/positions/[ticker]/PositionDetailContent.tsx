@@ -43,7 +43,7 @@ export function PositionDetailContent({
     <>
       <header className="detail-hero">
         <div>
-          <p className="detail-eyebrow">{position ? "当前持仓" : "未持有 · 预先规划"}</p>
+          <p className="detail-status">{position ? "当前持仓" : "未持有 · 预先规划"}</p>
           <h1 id="position-detail-title">{ticker}</h1>
           <p className="detail-company">{companyName}</p>
         </div>
@@ -66,6 +66,13 @@ export function PositionDetailContent({
         </div>
       </header>
 
+      <nav className="detail-section-nav" aria-label="详情章节">
+        <a href="#position-structure">持仓构成</a>
+        <a href="#plan-editor">持仓计划</a>
+        <a href="#ownership-structure">股权结构</a>
+        <a href="#sec-filings">SEC 文件</a>
+      </nav>
+
       {position ? (
         <>
           <section className="position-summary" aria-label={`${ticker} 持仓摘要`}>
@@ -76,8 +83,8 @@ export function PositionDetailContent({
             <article><span>年内净盈亏</span><strong className={position.netPnl < 0 ? "loss" : "gain"}>{money(position.netPnl)}</strong></article>
           </section>
 
-          <section className="instrument-section" aria-labelledby="instrument-title">
-            <div className="detail-section-heading"><div><p className="section-kicker">Position structure</p><h2 id="instrument-title">持仓构成</h2></div></div>
+          <section className="instrument-section" id="position-structure" aria-labelledby="instrument-title">
+            <div className="detail-section-heading"><h2 id="instrument-title">持仓构成</h2></div>
             <div className="table-wrap">
               <table className="instrument-table" aria-label={`${ticker} 正股与期权明细`}>
                 <thead><tr><th>类型</th><th>资产 / 合约</th><th>数量</th><th>现价</th><th>平均成本</th><th>实际成本</th><th>持仓成本</th><th>市值</th><th>权重</th><th>未实现盈亏</th></tr></thead>
@@ -90,13 +97,13 @@ export function PositionDetailContent({
           </section>
         </>
       ) : (
-        <section className="no-position"><strong>暂无持仓数据</strong><span>这份计划不会写入 IBKR 账本；建立持仓后，快照数据会自动出现在这里。</span></section>
+        <section className="no-position" id="position-structure"><strong>暂无持仓数据</strong><span>这份计划不会写入 IBKR 账本；建立持仓后，快照数据会自动出现在这里。</span></section>
       )}
 
       {planStatus === "loading" ? (
-        <section className="plan-editor plan-loading" aria-labelledby="plan-loading-title">
+        <section className="plan-editor plan-loading" id="plan-editor" aria-labelledby="plan-loading-title">
           <div className="detail-section-heading">
-            <div><p className="section-kicker">Investment thesis</p><h2 id="plan-loading-title">持仓计划</h2></div>
+            <h2 id="plan-loading-title">持仓计划</h2>
           </div>
           <p role="status">正在读取计划…</p>
         </section>

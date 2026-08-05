@@ -44,12 +44,9 @@ export function SecFilingsSection({ ticker }: { ticker: string }) {
   }, [ticker]);
 
   return (
-    <section className="sec-filings-section" aria-labelledby="sec-filings-title">
+    <section className="sec-filings-section" id="sec-filings" aria-labelledby="sec-filings-title">
       <div className="detail-section-heading">
-        <div>
-          <p className="section-kicker">Regulatory filings</p>
-          <h2 id="sec-filings-title">SEC 文件与 AI 解读</h2>
-        </div>
+        <h2 id="sec-filings-title">SEC 文件与 AI 解读</h2>
         {state.status === "ready" && state.feed.fetchedAt && (
           <span className="sec-updated">最近检查 {formatDateTime(state.feed.fetchedAt)}</span>
         )}

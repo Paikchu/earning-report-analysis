@@ -33,12 +33,9 @@ export function OwnershipSection({ ticker }: { ticker: string }) {
   }, [ticker]);
 
   return (
-    <section className="ownership-section" aria-labelledby="ownership-title">
+    <section className="ownership-section" id="ownership-structure" aria-labelledby="ownership-title">
       <div className="detail-section-heading">
-        <div>
-          <p className="section-kicker">Ownership structure</p>
-          <h2 id="ownership-title">持仓结构</h2>
-        </div>
+        <h2 id="ownership-title">股权结构</h2>
         {state.status === "ready" && state.feed.fetchedAt && <span className="ownership-updated">本次扫描 {formatDateTime(state.feed.fetchedAt)}</span>}
       </div>
 
