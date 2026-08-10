@@ -94,13 +94,21 @@ export async function getCachedSecFeed(repository: SecRepository, rawTicker: str
   const ticker = cleanSecTicker(rawTicker);
   const cached = await repository.getCache<StoredSecFeed>(filingCacheKey(ticker));
   if (!cached) return { ticker, company: null, filings: [], fetchedAt: null, status: "pending" };
-  const filings = await Promise.all(sortSecFilings(cached.payload.filings).map(async (filing) => ({
-    ...filing,
-    summary: await repository.getSummary(ticker, filing.accessionNumber),
-    analysis: repository.getPublishedReport
-      ? await repository.getPublishedReport(ticker, buildPeriodIdentity(ticker, filing.form, filing.reportDate).periodId).catch(() => null)
-      : null,
-  })));
+  const filings: SecFilingFeed["filings"] = [];
+  const structuredPeriods = new Set<string>();
+  for (const filing of sortSecFilings(cached.payload.filings)) {
+    const periodId = buildPeriodIdentity(ticker, filing.form, filing.reportDate).periodId;
+    const periodic = /^(10-Q|10-K|20-F)(\/A)?$/.test(filing.form);
+    const attachStructuredReport = periodic && !structuredPeriods.has(periodId);
+    if (periodic) structuredPeriods.add(periodId);
+    filings.push({
+      ...filing,
+      summary: await repository.getSummary(ticker, filing.accessionNumber),
+      analysis: attachStructuredReport && repository.getPublishedReport
+        ? await repository.getPublishedReport(ticker, periodId).catch(() => null)
+        : null,
+    });
+  }
   return { ...cached.payload, filings };
 }
 

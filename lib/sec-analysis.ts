@@ -1,4 +1,4 @@
-export const SEC_ANALYSIS_SCHEMA_VERSION = "sec-analysis.v1";
+export const SEC_ANALYSIS_SCHEMA_VERSION = "sec-analysis.v2";
 export const SEC_ANALYSIS_PROMPT_VERSION = "sec-analysis-prompt.v1";
 
 export const SEC_DATA_NEEDS = {

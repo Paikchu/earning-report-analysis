@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
-import { isSecFeedRefreshDue, type SecFilingFeed, type SecFilingWithSummary } from "@/lib/sec";
+import { isSecFeedRefreshDue, SEC_SUMMARY_VERSION, type SecFilingFeed, type SecFilingWithSummary } from "@/lib/sec";
 
 type LoadState =
   | { status: "loading" }
@@ -63,9 +64,10 @@ export function SecFilingsSection({ ticker }: { ticker: string }) {
           {state.feed.status === "stale" && <p className="sec-stale">{state.feed.error}</p>}
           {state.feed.filings.length > 0 && (
             <div className="sec-filing-list">
-              {state.feed.filings.map((filing) => (
+              {state.feed.filings.map((filing, index) => (
                 <SecFilingCard
                   filing={filing}
+                  isLatestPeriodic={isPeriodicFiling(filing.form) && !state.feed.filings.slice(0, index).some((candidate) => isPeriodicFiling(candidate.form))}
                   isOpen={openAccession === filing.accessionNumber}
                   key={filing.accessionNumber}
                   onToggle={() => setOpenAccession((current) => current === filing.accessionNumber ? null : filing.accessionNumber)}
@@ -81,10 +83,12 @@ export function SecFilingsSection({ ticker }: { ticker: string }) {
 
 function SecFilingCard({
   filing,
+  isLatestPeriodic,
   isOpen,
   onToggle,
 }: {
   filing: SecFilingWithSummary;
+  isLatestPeriodic: boolean;
   isOpen: boolean;
   onToggle: () => void;
 }) {
@@ -102,7 +106,7 @@ function SecFilingCard({
       </button>
       {isOpen && (
         <div className="sec-filing-body" id={panelId}>
-          <FilingSummary filing={filing} />
+          <FilingSummary filing={filing} isLatestPeriodic={isLatestPeriodic} />
           <a href={filing.indexUrl} rel="noopener noreferrer" target="_blank">查看 SEC EDGAR 原文 ↗</a>
         </div>
       )}
@@ -110,8 +114,29 @@ function SecFilingCard({
   );
 }
 
-function FilingSummary({ filing }: { filing: SecFilingWithSummary }) {
+function FilingSummary({ filing, isLatestPeriodic }: { filing: SecFilingWithSummary; isLatestPeriodic: boolean }) {
+  if (isLatestPeriodic && filing.summary?.version === SEC_SUMMARY_VERSION && filing.summary.report) {
+    return (
+      <div className="sec-summary sec-full-report-ready">
+        <p className="sec-summary-headline">{filing.summary.headline || filing.analysis?.headline}</p>
+        <Link href={`/positions/${encodeURIComponent(filing.ticker)}/sec/${encodeURIComponent(filing.accessionNumber)}`}>阅读完整报告 →</Link>
+        <small className="sec-ai-note">基于 SEC 原始申报 · {formatDateTime(filing.summary.generatedAt)}</small>
+      </div>
+    );
+  }
+  if (isLatestPeriodic) {
+    return (
+      <div className="sec-summary">
+        {filing.analysis ? <StructuredAnalysis report={filing.analysis} generatedAt={filing.summary?.generatedAt ?? null} /> : <CompactSummary filing={filing} />}
+        <p className="sec-summary-pending">完整报告正在生成，当前保留上一份可用简析。</p>
+      </div>
+    );
+  }
   if (filing.analysis) return <StructuredAnalysis report={filing.analysis} generatedAt={filing.summary?.generatedAt ?? null} />;
+  return <CompactSummary filing={filing} />;
+}
+
+function CompactSummary({ filing }: { filing: SecFilingWithSummary }) {
   const summary = filing.summary;
   if (!summary) return <p className="sec-summary-pending">AI 解读正在后台生成。</p>;
   if (!summary.headline && !summary.bullets.length && !summary.analystView) {
@@ -134,6 +159,10 @@ function FilingSummary({ filing }: { filing: SecFilingWithSummary }) {
       <small className="sec-ai-note">AI 基于 filing 原文生成 · {formatDateTime(summary.generatedAt)}</small>
     </div>
   );
+}
+
+function isPeriodicFiling(form: string): boolean {
+  return /^(10-K|10-Q|20-F)(\/A)?$/.test(form);
 }
 
 function StructuredAnalysis({

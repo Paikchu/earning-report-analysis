@@ -27,8 +27,34 @@ test("adds the SEC section to the shared position detail flow", async () => {
   assert.match(section, /target="_blank"/);
   assert.match(css, /\.sec-filings-section/);
   assert.match(css, /\.sec-filing-card/);
+  assert.match(section, /阅读完整报告/);
+  assert.match(section, /isLatestPeriodic/);
   assert.match(css, /\.sec-filings-section,\s*\.plan-editor \{ width: 100%; max-width: none; \}/);
   assert.doesNotMatch(css, /\.position-detail-dialog \.plan-editor \{[^}]*max-width:/);
+});
+
+test("provides a private full-report route with complete report sections", async () => {
+  const [page, document, css] = await Promise.all([
+    readFile(new URL("../app/positions/[ticker]/sec/[accession]/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/positions/[ticker]/sec/[accession]/SecReportDocument.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /requireChatGPTUser/);
+  assert.match(page, /cleanSecAccession/);
+  assert.match(page, /getCachedSecFeed/);
+  assert.match(page, /filing\.accessionNumber === accession/);
+  assert.match(page, /notFound\(\)/);
+  assert.match(document, /核心结论/);
+  assert.match(document, /验证指标/);
+  assert.match(document, /完整正文/);
+  assert.match(document, /动态分段分析/);
+  assert.match(document, /数据质量/);
+  assert.match(document, /Workflow/);
+  assert.match(document, /SEC 原文/);
+  assert.match(document, /<details/);
+  assert.match(css, /\.sec-report-shell/);
+  assert.match(css, /\.sec-report-body/);
 });
 
 test("provides authenticated feed and protected background refresh routes", async () => {
@@ -82,6 +108,8 @@ test("exposes only short authenticated bridge routes to the independent SEC work
   for (const source of sources) assert.match(source, /hasInternalSecAccess/);
   assert.match(sources[2], /encryptSecModelKey/);
   assert.match(sources[3], /saveAnalysis/);
+  assert.match(sources[3], /\^\(8-K\|6-K\)/);
+  assert.match(sources[3], /body\.summary\.accessionNumber === eventAccession/);
   assert.doesNotMatch(sources.join("\n"), /refreshSecTicker/);
 });
 

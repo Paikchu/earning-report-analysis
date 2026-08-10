@@ -19,7 +19,29 @@ import {
   type SecAnalysisModuleKey,
   type SnapshotSummary,
 } from "./sec-analysis.ts";
-import { cleanSecTicker, htmlToSecText, parseSecSubmissions, type SecCompany, type SecFiling, type SecFilingFeed, type SecFilingSummary } from "./sec.ts";
+import {
+  buildSecNodeInput,
+  buildSecOutline,
+  describeSecOutline,
+  normalizeSecNodePlan,
+  normalizeSecNodeResult,
+  type SecOutlineSection,
+} from "./sec-report.ts";
+import {
+  cleanSecTicker,
+  htmlToSecDocument,
+  normalizeSecSummary,
+  parseSecSubmissions,
+  SEC_SUMMARY_VERSION,
+  type SecCompany,
+  type SecDocument,
+  type SecFiling,
+  type SecFilingFeed,
+  type SecFilingSummary,
+  type SecNodePlan,
+  type SecNodeResult,
+  type SecNodeSpec,
+} from "./sec.ts";
 import type { SecAnalysisArtifact, SecAnalysisContext } from "./sec-service.ts";
 
 export type SecModelCall = (stage: string, system: string, payload: unknown) => Promise<Record<string, unknown>>;
@@ -40,6 +62,8 @@ export type PreparedSecFiling = {
   periodId: string;
   periodScope: "quarter" | "annual";
   blocks: FilingBlock[];
+  document: SecDocument;
+  outline: SecOutlineSection[];
 };
 
 export async function discoverSecTicker(rawTicker: string, runtime: SecDiscoveryRuntime): Promise<{ feed: SecFilingFeed; filings: SecFiling[] }> {
@@ -76,7 +100,9 @@ export async function discoverSecTicker(rawTicker: string, runtime: SecDiscovery
 
 export function selectWorkflowFilings(filings: SecFiling[]): SecFiling[] {
   const primary = filings.find((filing) => /^(10-Q|10-K|20-F)(\/A)?$/.test(filing.form));
-  return primary ? [primary] : [];
+  const events = filings.slice(0, 5).filter((filing) => /^(8-K|6-K)(\/A)?$/.test(filing.form));
+  return [...(primary ? [primary] : []), ...events]
+    .filter((filing, index, selected) => selected.findIndex((candidate) => candidate.accessionNumber === filing.accessionNumber) === index);
 }
 
 export async function prepareSecFiling(filing: SecFiling, runtime: SecPreparationRuntime): Promise<PreparedSecFiling> {
@@ -86,12 +112,82 @@ export async function prepareSecFiling(filing: SecFiling, runtime: SecPreparatio
     signal: AbortSignal.timeout(30_000),
   });
   if (!response.ok) throw new Error(`SEC filing HTTP ${response.status}`);
-  const text = htmlToSecText(await response.text());
-  if (!text) throw new Error("SEC filing document did not contain readable text");
-  const blocks = buildFilingBlocks(text, filing.accessionNumber);
+  const document = htmlToSecDocument(await response.text());
+  if (!document.text) throw new Error("SEC filing document did not contain readable text");
+  const blocks = buildFilingBlocks(document.text, filing.accessionNumber);
   if (!blocks.length) throw new Error("SEC filing did not produce analysis blocks");
   const { periodId, periodScope } = buildPeriodIdentity(filing.ticker, filing.form, filing.reportDate);
-  return { filing, periodId, periodScope, blocks };
+  return { filing, periodId, periodScope, blocks, document, outline: buildSecOutline(document) };
+}
+
+export async function planPreparedSecFiling(prepared: PreparedSecFiling, model: SecModelCall): Promise<SecNodePlan> {
+  if (!prepared.outline.length) return { nodes: [], outlineSections: 0 };
+  const value = await model("manager", managerSystemPrompt(), {
+    ticker: prepared.filing.ticker,
+    companyName: prepared.filing.companyName,
+    form: prepared.filing.form,
+    reportDate: prepared.filing.reportDate,
+    filingDate: prepared.filing.filingDate,
+    sections: describeSecOutline(prepared.outline),
+  });
+  return normalizeSecNodePlan(value, prepared.outline);
+}
+
+export async function analyzePreparedSecNode(
+  prepared: PreparedSecFiling,
+  spec: SecNodeSpec,
+  model: SecModelCall,
+): Promise<SecNodeResult> {
+  const input = buildSecNodeInput(spec, prepared.outline, prepared.document.text);
+  if (!input.sections.length) {
+    return { id: spec.id, title: spec.title, status: "empty", findings: [], narrative: "", evidence: [] };
+  }
+  try {
+    const value = await model(`node:${spec.id}`, nodeSystemPrompt(), {
+      ticker: prepared.filing.ticker,
+      companyName: prepared.filing.companyName,
+      form: prepared.filing.form,
+      reportDate: prepared.filing.reportDate,
+      task: { title: spec.title, question: spec.question },
+      sections: input.sections.map(({ id, title, text, compressed }) => ({ id, title, text, compressed })),
+    });
+    return normalizeSecNodeResult(value, spec, input.evidence);
+  } catch (error) {
+    return {
+      id: spec.id,
+      title: spec.title,
+      status: "error",
+      findings: [],
+      narrative: "",
+      evidence: input.evidence,
+      error: error instanceof Error ? error.message : "node failed",
+    };
+  }
+}
+
+export async function summarizePreparedSecEvent(
+  prepared: PreparedSecFiling,
+  model: SecModelCall,
+  now = new Date(),
+): Promise<SecFilingSummary> {
+  const value = await model("event-summary", eventSummarySystemPrompt(), {
+    ticker: prepared.filing.ticker,
+    companyName: prepared.filing.companyName,
+    form: prepared.filing.form,
+    filingDate: prepared.filing.filingDate,
+    reportDate: prepared.filing.reportDate,
+    accessionNumber: prepared.filing.accessionNumber,
+    items: prepared.filing.items,
+    sections: prepared.blocks.slice(0, 12).map((block) => ({
+      heading: block.heading,
+      text: block.body.slice(0, 2_400),
+    })),
+  });
+  const summary = normalizeSecSummary({ ...value, source: "deepseek" }, prepared.filing, now);
+  if (!summary.headline || !summary.bullets.length || !summary.analystView) {
+    throw new Error("Event summary returned incomplete analysis");
+  }
+  return summary;
 }
 
 export async function routePreparedSecFiling(prepared: PreparedSecFiling, context: SecAnalysisContext, model: SecModelCall): Promise<RouterResult> {
@@ -140,6 +236,8 @@ export async function summarizePreparedSecFiling(
   moduleAnalyses: ModuleAnalysis[],
   model: SecModelCall,
   now = new Date(),
+  plan?: SecNodePlan,
+  nodes: SecNodeResult[] = [],
 ): Promise<{ artifact: SecAnalysisArtifact; summary: SecFilingSummary }> {
   const snapshots = moduleAnalyses.map((analysis): SnapshotSummary => ({
     ticker: prepared.filing.ticker,
@@ -157,8 +255,22 @@ export async function summarizePreparedSecFiling(
   const yoyResults = snapshots.flatMap((snapshot) => context.yoy[snapshot.moduleKey] ? [compareSnapshots("yoy", snapshot, context.yoy[snapshot.moduleKey]!)] : []);
   const qoq = mergeComparisons("qoq", qoqResults, prepared.periodId, context.qoqPeriodId);
   const yoy = mergeComparisons("yoy", yoyResults, prepared.periodId, context.yoyPeriodId);
-  const summaryPayload = buildSummaryPayload({ ticker: prepared.filing.ticker, periodId: prepared.periodId, moduleSnapshots: snapshots, qoq, yoy });
-  const summaryValue = await model("summary", summarySystemPrompt(), summaryPayload);
+  const usableNodes = nodes.filter((node) => node.status === "complete" && (node.narrative || node.findings.length));
+  if (!plan?.nodes.length || !usableNodes.length) throw new Error("Manager produced no usable analysis nodes");
+  const summaryPayload = {
+    ...buildSummaryPayload({ ticker: prepared.filing.ticker, periodId: prepared.periodId, moduleSnapshots: snapshots, qoq, yoy }),
+    nodeAnalyses: usableNodes.map(({ id, title, findings, narrative }) => ({ id, title, findings, narrative })),
+    outputSchema: {
+      headline: "string",
+      bullets: "[{label, detail, importance}]",
+      analystView: "string",
+      report: "string",
+      keyMetrics: "[{metricKey, currentValue, qoq?, yoy?, status, evidenceIds}]",
+      changes: "{qoq, yoy, guidance, risks}",
+      dataQuality: "{coverage, verificationStatus, warnings}",
+    },
+  };
+  const summaryValue = await model("synthesis", synthesisSystemPrompt(), summaryPayload);
   let report = normalizePublishedReport(summaryValue, {
     ticker: prepared.filing.ticker,
     periodId: prepared.periodId,
@@ -178,7 +290,19 @@ export async function summarizePreparedSecFiling(
     report,
     router,
   };
-  return { artifact, summary: toLegacySummary(artifact, now) };
+  const normalizedSummary = normalizeSecSummary({ ...summaryValue, source: "deepseek", version: SEC_SUMMARY_VERSION }, prepared.filing, now);
+  if (!normalizedSummary.report || normalizedSummary.report.length < 900 || normalizedSummary.report.length > 1_600) {
+    throw new Error("Synthesis report must contain 900–1,600 characters");
+  }
+  if (normalizedSummary.bullets.length < 3 || normalizedSummary.bullets.length > 5 || !normalizedSummary.analystView) {
+    throw new Error("Synthesis must contain 3–5 core conclusions and an investment view");
+  }
+  const summary = {
+    ...normalizedSummary,
+    nodes,
+    plan,
+  };
+  return { artifact, summary };
 }
 
 function parseTickerMap(payload: unknown): Record<string, SecCompany> {
@@ -208,6 +332,38 @@ function routerSystemPrompt() {
   ].join("\n");
 }
 
+function managerSystemPrompt() {
+  return [
+    "你是负责美股财报研究的主编，正在为一份 SEC filing 编排分析任务。",
+    "输入只有章节标题清单，不含正文。主题数量和内容必须由本期 filing 的实际结构决定，不要套用固定模板。",
+    "并购、减值、重大诉讼、分部重组、会计政策变更等特殊事项应独立成节点。",
+    "每个节点只能使用清单内的 sectionIds，至少绑定一个章节，不要让两个节点承担同一问题。",
+    "title 和 question 使用简体中文；id 使用小写英文短横线 slug；keywords 使用英文原文术语。",
+    "输出 JSON：{\"nodes\":[{\"id\":\"\",\"title\":\"\",\"question\":\"\",\"sectionIds\":[\"\"],\"keywords\":[\"\"]}]}",
+  ].join("\n");
+}
+
+function nodeSystemPrompt() {
+  return [
+    "你是美股基本面研究团队的分段分析师，只处理主编交给你的一个任务。",
+    "只使用给定的英文 SEC 原文章节，不引入外部信息，不编造数字。",
+    "回答 question；数字必须带口径和比较期间，并说明变化方向及驱动原因。",
+    "原文无法回答时将 narrative 留空，不要输出空泛措辞。",
+    "findings 输出 2 至 6 条具体事实；narrative 输出 300 至 700 字简体中文，可用空行分段，不要使用 Markdown。",
+    "输出 JSON：{\"findings\":[{\"label\":\"\",\"detail\":\"\",\"importance\":\"high|medium|low\"}],\"narrative\":\"\"}",
+  ].join("\n");
+}
+
+function eventSummarySystemPrompt() {
+  return [
+    "你是负责美股基本面研究的资深金融分析师，只处理 8-K 或 6-K 事件简析。",
+    "只根据给定 SEC filing 内容输出简体中文，不使用外部信息，不编造数字。",
+    "说明事件本身、发生原因，以及对盈利、现金流或资产负债表的具体影响；没有证据的维度直接省略。",
+    "headline 是一句有方向性的结论；bullets 输出 3 至 5 条具体事实；analystView 说明投资含义但不给买卖建议。",
+    "输出 JSON：{\"headline\":\"\",\"bullets\":[{\"label\":\"\",\"detail\":\"\",\"importance\":\"high|medium|low\"}],\"analystView\":\"\"}",
+  ].join("\n");
+}
+
 function moduleSystemPrompt(moduleKey: SecAnalysisModuleKey) {
   return [
     "You are a financial filing module analyst.",
@@ -218,12 +374,14 @@ function moduleSystemPrompt(moduleKey: SecAnalysisModuleKey) {
   ].join("\n");
 }
 
-function summarySystemPrompt() {
+function synthesisSystemPrompt() {
   return [
-    "You are the final filing summary composer.",
-    "Use only verified module snapshots and deterministic comparison results.",
-    "Do not invent numbers, evidence, or changes. Keep qoq and yoy separate.",
-    "Return simplified Chinese JSON with headline, keyMetrics, changes, and dataQuality.",
+    "你是美股基本面研究团队的总编。输入只有分段分析、已验证模块快照和确定性比较结果，不含 filing 原文。",
+    "完整研报的章节逻辑必须来自 nodeAnalyses，不要重新套用固定主题模板。",
+    "数字、同比、环比和证据只能使用结构化输入中已有的值；不得编造或把 qoq 与 yoy 混写。",
+    "report 输出 900 至 1,600 字简体中文正文，按投资者阅读逻辑用空行分段，不要使用 Markdown 标题或项目符号。",
+    "headline 给出有方向性的结论；bullets 输出 3 至 5 条核心结论；analystView 说明投资含义但不给买卖建议。",
+    "同时输出 keyMetrics、changes 和 dataQuality，字段严格遵循 outputSchema。",
   ].join("\n");
 }
 
@@ -282,24 +440,6 @@ function enforceDeterministicReportQuality(report: SecAnalysisArtifact["report"]
       verificationStatus,
       warnings: [...new Set(warnings)].slice(0, 20),
     },
-  };
-}
-
-function toLegacySummary(artifact: SecAnalysisArtifact, now: Date): SecFilingSummary {
-  return {
-    ticker: artifact.filing.ticker,
-    form: artifact.filing.form,
-    filingDate: artifact.filing.filingDate,
-    accessionNumber: artifact.filing.accessionNumber,
-    headline: artifact.report.headline,
-    bullets: artifact.report.keyMetrics.slice(0, 5).map((metric) => ({
-      label: metric.metricKey.slice(0, 24),
-      detail: `${metric.currentValue}${metric.yoy ? `，同比 ${metric.yoy}` : ""}${metric.qoq ? `，环比 ${metric.qoq}` : ""}`,
-      importance: metric.status === "verified" ? "high" as const : "medium" as const,
-    })),
-    analystView: artifact.report.dataQuality.warnings.join("；"),
-    source: "deepseek",
-    generatedAt: now.toISOString(),
   };
 }
 

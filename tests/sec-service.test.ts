@@ -12,6 +12,7 @@ import {
 class MemorySecRepository implements SecRepository {
   caches = new Map<string, SecCacheRecord<unknown>>();
   summaries = new Map<string, SecFilingSummary>();
+  publishedReports = new Map<string, Awaited<ReturnType<NonNullable<SecRepository["getPublishedReport"]>>>>();
 
   async getCache<T>(key: string): Promise<SecCacheRecord<T> | null> {
     return this.caches.get(key) as SecCacheRecord<T> | undefined ?? null;
@@ -27,6 +28,10 @@ class MemorySecRepository implements SecRepository {
 
   async setSummary(summary: SecFilingSummary): Promise<void> {
     this.summaries.set(`${summary.ticker}:${summary.accessionNumber}`, summary);
+  }
+
+  async getPublishedReport(ticker: string, periodId: string) {
+    return this.publishedReports.get(`${ticker}:${periodId}`) ?? null;
   }
 }
 
@@ -72,6 +77,7 @@ test("refreshes a ticker and never regenerates a cached useful summary", async (
         choices: [{
           message: {
             content: JSON.stringify({
+              version: 5,
               headline: "云业务继续推动增长",
               bullets: [
                 { label: "收入", detail: "云业务收入增长 22%。", importance: "high" },
@@ -79,6 +85,7 @@ test("refreshes a ticker and never regenerates a cached useful summary", async (
                 { label: "现金流", detail: "经营现金流保持增长。", importance: "medium" },
               ],
               analystView: "增长质量保持稳健。",
+              report: "云业务继续推动收入扩张，经营杠杆和现金流共同支撑增长质量。",
             }),
           },
         }],
@@ -187,4 +194,34 @@ test("orders an existing cached feed by filing date", async () => {
   const feed = await getCachedSecFeed(repository, "MSFT");
 
   assert.deepEqual(feed.filings.map((filing) => filing.accessionNumber), ["new", "old"]);
+});
+
+test("attaches one structured report only to the latest accession for a reporting period", async () => {
+  const repository = new MemorySecRepository();
+  const baseFiling = {
+    ticker: "MSFT", cik: "0000789019", cikNumber: 789019, companyName: "Microsoft Corp",
+    filingDate: "2026-07-29", reportDate: "2026-06-30", primaryDocument: "report.htm",
+    description: "Annual report", items: "", documentUrl: "https://example.com/report.htm", indexUrl: "https://example.com/index.html",
+  };
+  await repository.setCache("sec:filings:MSFT", {
+    ticker: "MSFT",
+    company: { ticker: "MSFT", cik: "0000789019", name: "Microsoft Corp" },
+    filings: [
+      { ...baseFiling, form: "10-K", accessionNumber: "original" },
+      { ...baseFiling, form: "10-K/A", filingDate: "2026-08-05", accessionNumber: "amendment" },
+      { ...baseFiling, form: "8-K", filingDate: "2026-08-06", accessionNumber: "event" },
+    ],
+    fetchedAt: "2026-08-06T00:00:00.000Z",
+    status: "ready",
+  }, "2026-08-06T00:00:00.000Z");
+  repository.publishedReports.set("MSFT:MSFT:2026-06-30:annual", {
+    ticker: "MSFT", periodId: "MSFT:2026-06-30:annual", reportVersion: "sec-analysis.v2:test", headline: "amended",
+    keyMetrics: [], changes: { qoq: [], yoy: [], guidance: [], risks: [] }, dataQuality: { coverage: 1, verificationStatus: "verified", warnings: [] },
+  });
+
+  const feed = await getCachedSecFeed(repository, "MSFT");
+
+  assert.equal(feed.filings.find((filing) => filing.accessionNumber === "amendment")?.analysis?.headline, "amended");
+  assert.equal(feed.filings.find((filing) => filing.accessionNumber === "original")?.analysis, null);
+  assert.equal(feed.filings.find((filing) => filing.accessionNumber === "event")?.analysis, null);
 });

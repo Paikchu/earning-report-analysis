@@ -1,5 +1,11 @@
 import type { PublishedSecReport } from "./sec-analysis.ts";
 
+export const SEC_SUMMARY_VERSION = 5;
+
+const MAX_HEADING_CHARACTERS = 120;
+const ITEM_HEADING_LEVEL = 2;
+const BOLD_HEADING_LEVEL = 7;
+
 export const BUSINESS_FILING_FORMS = new Set([
   "10-K",
   "10-Q",
@@ -19,6 +25,82 @@ export type SecSummaryBullet = {
   label: string;
   detail: string;
   importance: SecSummaryImportance;
+};
+
+export type SecHeadingCandidate = {
+  title: string;
+  level: number;
+  start: number;
+};
+
+export type SecDocument = {
+  text: string;
+  headings: SecHeadingCandidate[];
+};
+
+export type SecNodeSpec = {
+  id: string;
+  title: string;
+  question: string;
+  sectionIds: string[];
+  keywords?: string[];
+};
+
+export type SecNodePlan = {
+  nodes: SecNodeSpec[];
+  outlineSections: number;
+  clamped?: number;
+};
+
+export type SecWorkflowEvidence = {
+  start: number;
+  end: number;
+  score: number;
+  reasons: string[];
+  excerpt: string;
+};
+
+export type SecNodeResult = {
+  id: string;
+  title: string;
+  status: "complete" | "empty" | "error";
+  findings: SecSummaryBullet[];
+  narrative: string;
+  evidence: SecWorkflowEvidence[];
+  error?: string;
+};
+
+export type SecWorkflowMetric = {
+  label: string;
+  value: string;
+};
+
+export type SecWorkflowSection = {
+  name: string;
+  characters: number;
+  excerpt: string;
+  candidates?: number;
+  selected?: number;
+  topScore?: number;
+  evidence?: SecWorkflowEvidence[];
+};
+
+export type SecWorkflowNode = {
+  id: string;
+  label: string;
+  status: "complete" | "error";
+  output: {
+    summary: string;
+    metrics?: SecWorkflowMetric[];
+    excerpt?: string;
+    sections?: SecWorkflowSection[];
+  };
+};
+
+export type SecWorkflowTrace = {
+  version: 1;
+  generatedAt: string;
+  nodes: SecWorkflowNode[];
 };
 
 export type SecFiling = {
@@ -45,6 +127,11 @@ export type SecFilingSummary = {
   headline: string;
   bullets: SecSummaryBullet[];
   analystView: string;
+  report?: string;
+  version?: number;
+  nodes?: SecNodeResult[];
+  plan?: SecNodePlan;
+  workflow?: SecWorkflowTrace;
   source: "deepseek" | "error";
   generatedAt: string;
   error?: string;
@@ -103,12 +190,37 @@ export function sortSecFilings(filings: SecFiling[]): SecFiling[] {
 }
 
 export function htmlToSecText(html: string): string {
-  return decodeEntities(String(html ?? "")
+  return flattenSecHtml(stripSecNonContent(String(html ?? "")));
+}
+
+export function htmlToSecDocument(html: string): SecDocument {
+  const source = stripSecNonContent(String(html ?? ""));
+  const text = flattenSecHtml(source);
+  const emphasis = collectSecEmphasis(source);
+  const headings: SecHeadingCandidate[] = [];
+  let cursor = 0;
+  for (const line of text.split("\n")) {
+    const title = line.trim();
+    if (title) {
+      const level = emphasis.get(title) ?? (isSecItemHeading(title) ? ITEM_HEADING_LEVEL : 0);
+      if (level) headings.push({ title, level, start: cursor + line.length - line.trimStart().length });
+    }
+    cursor += line.length + 1;
+  }
+  return { text, headings };
+}
+
+function stripSecNonContent(html: string): string {
+  return html
     .replace(/<ix:header[\s\S]*?<\/ix:header>/gi, " ")
     .replace(/<xbrli:context[\s\S]*?<\/xbrli:context>/gi, " ")
     .replace(/<xbrli:unit[\s\S]*?<\/xbrli:unit>/gi, " ")
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ");
+}
+
+function flattenSecHtml(html: string): string {
+  return decodeEntities(html
     .replace(/<\/(p|div|tr|table|section|article|h[1-6])>/gi, "\n")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
@@ -116,6 +228,32 @@ export function htmlToSecText(html: string): string {
     .replace(/\n\s+/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim());
+}
+
+function collectSecEmphasis(html: string): Map<string, number> {
+  const levels = new Map<string, number>();
+  const record = (raw: string, level: number) => {
+    const title = flattenSecHtml(raw).replace(/\s+/g, " ").trim();
+    if (!title || title.length > MAX_HEADING_CHARACTERS) return;
+    levels.set(title, Math.min(levels.get(title) ?? level, level));
+  };
+  for (const match of html.matchAll(/<h([1-6])\b[^>]*>([\s\S]{0,400}?)<\/h\1\s*>/gi)) record(match[2], Number(match[1]));
+  for (const match of html.matchAll(/<(b|strong)\b[^>]*>([\s\S]{0,400}?)<\/\1\s*>/gi)) record(match[2], BOLD_HEADING_LEVEL);
+  for (const match of html.matchAll(/<([a-z]+)\b[^>]*font-weight\s*:\s*(?:bold(?:er)?|[6-9]00)[^>]*>([\s\S]{0,400}?)<\/\1\s*>/gi)) record(match[2], BOLD_HEADING_LEVEL);
+  return levels;
+}
+
+function isSecItemHeading(value: string): boolean {
+  return /^(?:part\s+[ivx]+|items?\s+\d{1,2}[a-z]?)\b/i.test(value.trim());
+}
+
+export function cleanSecNodeId(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
 }
 
 export function normalizeSecSummary(
@@ -138,6 +276,13 @@ export function normalizeSecSummary(
   }).slice(0, 5);
   const headline = clean(input.headline, 180);
   const analystView = clean(input.analystView, 260);
+  const report = String(input.report ?? "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t\f\v]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, 6_000);
 
   return {
     ticker: cleanSecTicker(filing.ticker),
@@ -147,6 +292,8 @@ export function normalizeSecSummary(
     headline: useful(headline) ? headline : "",
     bullets,
     analystView: useful(analystView) ? analystView : "",
+    ...(useful(report) ? { report } : {}),
+    ...(Number.isInteger(input.version) ? { version: Number(input.version) } : {}),
     source: input.source === "error" ? "error" : "deepseek",
     generatedAt: typeof input.generatedAt === "string" ? input.generatedAt : now.toISOString(),
     ...(typeof input.error === "string" && input.error ? { error: clean(input.error, 240) } : {}),
@@ -154,6 +301,8 @@ export function normalizeSecSummary(
 }
 
 export function isSummaryRetryDue(summary: SecFilingSummary, nowMs = Date.now()): boolean {
+  const fullReportForm = /^(10-K|10-Q|20-F)(\/A)?$/.test(summary.form);
+  if (fullReportForm && summary.source !== "error" && (summary.version !== SEC_SUMMARY_VERSION || !summary.report)) return true;
   if (summary.headline || summary.bullets.length || summary.analystView) return false;
   if (summary.source !== "error") return true;
   if (summary.error === "DeepSeek HTTP 400") return true;

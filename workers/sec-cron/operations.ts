@@ -1,13 +1,17 @@
 import {
+  analyzePreparedSecNode,
   analyzePreparedSecModule,
   discoverSecTicker,
+  planPreparedSecFiling,
   prepareSecFiling,
   routePreparedSecFiling,
+  summarizePreparedSecEvent,
   summarizePreparedSecFiling,
   type PreparedSecFiling,
   type SecModelCall,
 } from "../../lib/sec-pipeline.ts";
 import type { SecAnalysisArtifact } from "../../lib/sec-service.ts";
+import type { SecFilingSummary, SecNodePlan, SecNodeResult, SecNodeSpec } from "../../lib/sec.ts";
 import { SEC_ANALYSIS_MODULES, SEC_ANALYSIS_SCHEMA_VERSION } from "../../lib/sec-analysis.ts";
 import { decryptSecModelKey } from "../../lib/sec-key-bootstrap.ts";
 import { siteHeaders, type SecCronEnv } from "./core.ts";
@@ -60,14 +64,22 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       const router = await routePreparedSecFiling(prepared, context, model);
       await Promise.all(SEC_ANALYSIS_MODULES.map(async (module) => {
         const selected = new Set(router.selections.find((selection) => selection.moduleKey === module.key)?.blockIds ?? []);
-        const slice = { ...prepared, blocks: prepared.blocks.filter((block) => selected.has(block.blockId)).slice(0, 8) };
+        const slice: PreparedSecFiling = {
+          ...prepared,
+          blocks: prepared.blocks.filter((block) => selected.has(block.blockId)).slice(0, 8),
+          document: { text: "", headings: [] },
+          outline: [],
+        };
         await env.SEC_FILINGS.put(modulePreparedKey(reference, module.key), JSON.stringify(slice), { httpMetadata: { contentType: "application/json" } });
       }));
       return router;
     },
     analyzeModule: async (moduleKey, _filing, reference, context, router) => analyzePreparedSecModule(moduleKey, await readPrepared(env.SEC_FILINGS, { ...reference, key: modulePreparedKey(reference, moduleKey) }), context, router, model),
-    summarize: async (_filing, reference, context, router, modules) => {
-      const result = await summarizePreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), context, router, modules, model);
+    plan: async (_filing, reference): Promise<SecNodePlan> => planPreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), model),
+    analyzeNode: async (spec: SecNodeSpec, _filing, reference): Promise<SecNodeResult> => analyzePreparedSecNode(await readPrepared(env.SEC_FILINGS, reference), spec, model),
+    summarizeEvent: async (_filing, reference) => summarizePreparedSecEvent(await readPrepared(env.SEC_FILINGS, reference), model),
+    summarize: async (_filing, reference, context, router, modules, plan, nodes) => {
+      const result = await summarizePreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), context, router, modules, model, new Date(), plan, nodes);
       return { ...result, artifact: { ...result.artifact, blocks: [] } };
     },
     publish: async (artifact, summary) => {
@@ -104,6 +116,7 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
         summary,
       });
     },
+    publishEvent: async (summary) => sitePost(env, fetcher, "/api/internal/sec/publish", { filing: summaryIdentity(summary), summary }).then(() => undefined),
     updateJob: (job) => sitePost(env, fetcher, "/api/internal/sec/jobs", { job }).then(() => undefined),
   };
 }
@@ -155,6 +168,15 @@ function collectReferencedBlockIds(artifact: SecAnalysisArtifact): Set<string> {
   };
   visit(artifact);
   return blockIds;
+}
+
+function summaryIdentity(summary: SecFilingSummary) {
+  return {
+    ticker: summary.ticker,
+    form: summary.form,
+    filingDate: summary.filingDate,
+    accessionNumber: summary.accessionNumber,
+  };
 }
 
 function chunks<T>(values: T[], size: number): T[][] {

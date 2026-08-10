@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  htmlToSecDocument,
   htmlToSecText,
   isBusinessFiling,
   isSecFeedRefreshDue,
   isSummaryRetryDue,
   normalizeSecSummary,
   parseSecSubmissions,
+  SEC_SUMMARY_VERSION,
 } from "../lib/sec.ts";
 
 test("accepts domestic and foreign issuer business filings", () => {
@@ -29,6 +31,28 @@ test("extracts readable filing text without scripts or markup", () => {
   assert.match(text, /Sales increased 18%/);
   assert.match(text, /Cash flow improved/);
   assert.doesNotMatch(text, /ignore|display:none|<h1>/);
+});
+
+test("recovers filing headings without changing flattened text", () => {
+  const html = `
+    <html><body>
+      <div><strong>Table of Contents</strong></div>
+      <h1>Item 7. Management's Discussion and Analysis</h1>
+      <p>Revenue increased 18%.</p>
+      <div style="font-weight: 700">Liquidity and Capital Resources</div>
+      <p>Operating cash flow improved.</p>
+    </body></html>
+  `;
+
+  const document = htmlToSecDocument(html);
+
+  assert.equal(document.text, htmlToSecText(html));
+  assert.deepEqual(document.headings.map(({ title }) => title), [
+    "Table of Contents",
+    "Item 7. Management's Discussion and Analysis",
+    "Liquidity and Capital Resources",
+  ]);
+  assert.ok(document.headings.every((heading) => document.text.slice(heading.start).startsWith(heading.title)));
 });
 
 test("normalizes useful Chinese summary fields and removes filler", () => {
@@ -53,7 +77,7 @@ test("normalizes useful Chinese summary fields and removes filler", () => {
   assert.equal(summary.generatedAt, "2026-07-25T00:00:00.000Z");
 });
 
-test("retries failed summaries after 24 hours but never regenerates useful summaries", () => {
+test("retries failed summaries after 24 hours", () => {
   const failed = {
     ticker: "MSFT",
     form: "10-Q",
@@ -66,11 +90,37 @@ test("retries failed summaries after 24 hours but never regenerates useful summa
     generatedAt: "2026-07-24T00:00:00.000Z",
     error: "upstream failed",
   };
-  const ready = { ...failed, headline: "收入增长", source: "deepseek" as const };
 
   assert.equal(isSummaryRetryDue(failed, Date.parse("2026-07-24T23:59:59.000Z")), false);
   assert.equal(isSummaryRetryDue(failed, Date.parse("2026-07-25T00:00:00.000Z")), true);
-  assert.equal(isSummaryRetryDue(ready, Date.parse("2027-07-25T00:00:00.000Z")), false);
+});
+
+test("retries legacy short summaries until the current full report version exists", () => {
+  const legacy = {
+    ticker: "MSFT",
+    form: "10-K",
+    filingDate: "2026-07-30",
+    accessionNumber: "annual",
+    headline: "收入增长",
+    bullets: [],
+    analystView: "增长质量改善。",
+    source: "deepseek" as const,
+    generatedAt: "2026-08-01T00:00:00.000Z",
+  };
+  const current = { ...legacy, report: "完整分析正文。", version: SEC_SUMMARY_VERSION };
+
+  assert.equal(isSummaryRetryDue(legacy, Date.parse("2026-08-01T01:00:00.000Z")), true);
+  assert.equal(isSummaryRetryDue(current, Date.parse("2027-08-01T01:00:00.000Z")), false);
+});
+
+test("keeps useful event summaries on the compact contract", () => {
+  const event = {
+    ticker: "MSFT", form: "8-K", filingDate: "2026-08-10", accessionNumber: "event",
+    headline: "事件影响已披露", bullets: [{ label: "事件", detail: "收入影响已量化。", importance: "high" as const }],
+    analystView: "短期预期已经变化。", source: "deepseek" as const, generatedAt: "2026-08-10T00:00:00.000Z",
+  };
+
+  assert.equal(isSummaryRetryDue(event, Date.parse("2027-08-10T00:00:00.000Z")), false);
 });
 
 test("retries model configuration errors immediately after the provider model is corrected", () => {
