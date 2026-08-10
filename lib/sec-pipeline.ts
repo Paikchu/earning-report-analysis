@@ -336,7 +336,10 @@ function managerSystemPrompt() {
   return [
     "你是负责美股财报研究的主编，正在为一份 SEC filing 编排分析任务。",
     "输入只有章节标题清单，不含正文。主题数量和内容必须由本期 filing 的实际结构决定，不要套用固定模板。",
+    "只选择能改变投资判断的实质主题，通常输出 6 至 12 个节点；结构很短时可以更少，不要按 Item 顺序逐项复述。",
+    "优先覆盖经营驱动、分部与 KPI、利润率与成本、现金流与资本投入、资本配置、管理层展望和重大风险，但只在标题清单确有对应章节时选择。",
     "并购、减值、重大诉讼、分部重组、会计政策变更等特殊事项应独立成节点。",
+    "排除仅为 Not applicable、None、引用代理声明或例行合规的章节；未解决员工评论、矿山安全、物业、展品、签名、会计师变更、内部控制、外国司法辖区、10-K 摘要等，除非标题本身表明发生重大变化。",
     "每个节点只能使用清单内的 sectionIds，至少绑定一个章节，不要让两个节点承担同一问题。",
     "title 和 question 使用简体中文；id 使用小写英文短横线 slug；keywords 使用英文原文术语。",
     "输出 JSON：{\"nodes\":[{\"id\":\"\",\"title\":\"\",\"question\":\"\",\"sectionIds\":[\"\"],\"keywords\":[\"\"]}]}",
@@ -381,7 +384,7 @@ function synthesisSystemPrompt() {
     "数字、同比、环比和证据只能使用结构化输入中已有的值；不得编造或把 qoq 与 yoy 混写。",
     "report 输出 900 至 1,600 字简体中文正文，按投资者阅读逻辑用空行分段，不要使用 Markdown 标题或项目符号。",
     "headline 给出有方向性的结论；bullets 输出 3 至 5 条核心结论；analystView 说明投资含义但不给买卖建议。",
-    "同时输出 keyMetrics、changes 和 dataQuality，字段严格遵循 outputSchema。",
+    "以 JSON 对象输出 headline、bullets、analystView、report、keyMetrics、changes 和 dataQuality，字段严格遵循 outputSchema。",
   ].join("\n");
 }
 

@@ -99,8 +99,10 @@ test("lets the manager plan a variable node graph from headings without seeing f
     `),
   });
   let managerPayload: unknown;
-  const plan = await planPreparedSecFiling(prepared, async (stage, _system, payload) => {
+  let managerSystem = "";
+  const plan = await planPreparedSecFiling(prepared, async (stage, system, payload) => {
     assert.equal(stage, "manager");
+    managerSystem = system;
     managerPayload = payload;
     return {
       nodes: prepared.outline.map((section, index) => ({
@@ -116,6 +118,8 @@ test("lets the manager plan a variable node graph from headings without seeing f
   assert.equal(plan.nodes.length, prepared.outline.length);
   assert.ok(plan.nodes.length >= 3);
   assert.doesNotMatch(JSON.stringify(managerPayload), /\$120 million|Operating cash flow was/);
+  assert.match(managerSystem, /6 至 12 个/);
+  assert.match(managerSystem, /Not applicable/);
 });
 
 test("isolates a failed dynamic node while preserving completed node analysis", async () => {
@@ -192,13 +196,15 @@ test("synthesizes one full report from node outputs and verified structured data
     evidence: [],
   }];
   let synthesisPayload: unknown;
+  let synthesisSystem = "";
   const result = await summarizePreparedSecFiling(
     prepared,
     context,
     { selections: [], source: "fallback", status: "partial", missingModules: [] },
     modules,
-    async (stage, _system, payload) => {
+    async (stage, system, payload) => {
       assert.equal(stage, "synthesis");
+      synthesisSystem = system;
       synthesisPayload = payload;
       return {
         headline: "核心业务推动收入增长",
@@ -219,6 +225,7 @@ test("synthesizes one full report from node outputs and verified structured data
   assert.match(result.summary.report ?? "", /核心业务需求/);
   assert.equal(result.summary.nodes?.length, 1);
   assert.doesNotMatch(JSON.stringify(synthesisPayload), /RAW-FILING-MARKER/);
+  assert.match(synthesisSystem, /JSON/i);
 });
 
 function normalizePlan(sectionId: string) {
