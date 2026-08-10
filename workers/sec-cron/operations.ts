@@ -32,7 +32,7 @@ export type SecPipelineEnv = SecCronEnv & {
 };
 
 const modelKeyCache = new WeakMap<object, Promise<string>>();
-const PUBLISH_BLOCK_CHUNK_SIZE = 15;
+const PUBLISH_BLOCK_CHUNK_SIZE = 5;
 const PUBLISH_MEMORY_CHUNK_SIZE = 15;
 const PUBLISH_COMPARISON_CHUNK_SIZE = 30;
 

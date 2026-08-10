@@ -238,11 +238,11 @@ test("publishes cited evidence in bounded D1 bridge calls", async () => {
 
   await createSecPipelineOperations(env, fetcher).publish(artifact, null);
 
-  assert.equal(published.length, 4);
+  assert.equal(published.length, 6);
   assert.deepEqual(published.flatMap((body) => body.artifact.blocks.map((block) => block.blockId)), citedBlocks.map((block) => block.blockId));
   assert.ok(published.slice(0, -1).every((body) => body.artifact.report.dataQuality.verificationStatus === "failed"));
   assert.equal(published.at(-1)?.artifact.report.dataQuality.verificationStatus, "verified");
-  assert.ok(published.every((body) => body.artifact.blocks.length <= 15));
+  assert.ok(published.every((body) => body.artifact.blocks.length <= 5));
 });
 
 test("publishes event summaries without creating a structured filing artifact", async () => {
