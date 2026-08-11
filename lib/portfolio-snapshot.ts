@@ -214,7 +214,7 @@ export function buildPortfolioSnapshot(previous: PortfolioSnapshotV1, input: Sna
       currency: "USD",
       netLiquidation: input.account.netLiquidation,
       cashBalance: input.account.cashBalance,
-      netDeposits: 71_563.39,
+      netDeposits: 70_000,
     },
     positions: input.positions,
     trades,

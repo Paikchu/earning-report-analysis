@@ -3,96 +3,96 @@
     "date": "2026-07-20",
     "generatedAt": "2026-07-20T07:34:38.247Z",
     "netLiquidation": 64554.56,
-    "netDeposits": 71563.39
+    "netDeposits": 70000
   },
   {
     "date": "2026-07-21",
     "generatedAt": "2026-07-20T23:34:44.806Z",
     "netLiquidation": 64892.22,
-    "netDeposits": 71563.39
+    "netDeposits": 70000
   },
   {
     "date": "2026-07-22",
     "generatedAt": "2026-07-21T23:33:05.095Z",
     "netLiquidation": 66531.3,
-    "netDeposits": 71563.39
+    "netDeposits": 70000
   },
   {
     "date": "2026-07-24",
     "generatedAt": "2026-07-24T08:49:14.185Z",
     "netLiquidation": 64177.83,
-    "netDeposits": 71563.39
+    "netDeposits": 70000
   },
   {
     "date": "2026-07-25",
     "generatedAt": "2026-07-24T23:34:09.222Z",
     "netLiquidation": 62683.58,
-    "netDeposits": 71563.39
+    "netDeposits": 70000
   },
   {
     "date": "2026-07-29",
     "generatedAt": "2026-07-29T02:16:07.963Z",
     "netLiquidation": 62640.23,
-    "netDeposits": 71563.39
+    "netDeposits": 70000
   },
   {
     "date": "2026-07-30",
     "generatedAt": "2026-07-30T15:40:42.786Z",
     "netLiquidation": 64780.71,
-    "netDeposits": 71563.39
+    "netDeposits": 70000
   },
   {
     "date": "2026-07-31",
     "generatedAt": "2026-07-31T00:40:40.790Z",
     "netLiquidation": 65911.59,
-    "netDeposits": 71563.39
+    "netDeposits": 70000
   },
   {
     "date": "2026-08-01",
     "generatedAt": "2026-07-31T23:34:10.210Z",
     "netLiquidation": 65992.28,
-    "netDeposits": 71563.39
+    "netDeposits": 70000
   },
   {
     "date": "2026-08-02",
     "generatedAt": "2026-08-02T00:07:08.085Z",
     "netLiquidation": 65951.14,
-    "netDeposits": 71563.39
+    "netDeposits": 70000
   },
   {
     "date": "2026-08-03",
     "generatedAt": "2026-08-03T01:49:40.910Z",
     "netLiquidation": 65951.14,
-    "netDeposits": 71563.39
+    "netDeposits": 70000
   },
   {
     "date": "2026-08-04",
     "generatedAt": "2026-08-04T00:12:57.200Z",
     "netLiquidation": 68871.48,
-    "netDeposits": 71563.39
+    "netDeposits": 70000
   },
   {
     "date": "2026-08-05",
     "generatedAt": "2026-08-04T23:31:56.688Z",
     "netLiquidation": 70548.74,
-    "netDeposits": 71563.39
+    "netDeposits": 70000
   },
   {
     "date": "2026-08-07",
     "generatedAt": "2026-08-07T01:51:28.543Z",
     "netLiquidation": 71084.66,
-    "netDeposits": 71563.39
+    "netDeposits": 70000
   },
   {
     "date": "2026-08-10",
     "generatedAt": "2026-08-10T01:32:55.694Z",
     "netLiquidation": 72197.72,
-    "netDeposits": 71563.39
+    "netDeposits": 70000
   },
   {
     "date": "2026-08-11",
     "generatedAt": "2026-08-11T00:26:30.919Z",
     "netLiquidation": 70443.1,
-    "netDeposits": 71563.39
+    "netDeposits": 70000
   }
 ]
