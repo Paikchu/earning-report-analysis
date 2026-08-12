@@ -436,9 +436,25 @@ test("renders Yahoo price and daily change surfaces without changing ledger calc
 
   assert.match(html, /行情/);
   assert.match(detail, /activeQuote\.changePercent/);
+  assert.match(detail, /RSI 14/);
+  assert.match(detail, /activeQuote\.rsi14/);
   assert.match(detail, /Yahoo Finance/);
   assert.match(detail, /行情暂不可用/);
   assert.doesNotMatch(detail, /position\.value\s*=\s*quote|position\.unrealized\s*=\s*quote/);
+});
+
+test("renders the source-backed daily portfolio review on the homepage", async () => {
+  const [response, review] = await Promise.all([
+    render(),
+    readFile(new URL("../data/daily-portfolio-review.json", import.meta.url), "utf8").then(JSON.parse),
+  ]);
+  const html = await response.text();
+
+  assert.match(html, /每日投资复盘/);
+  assert.match(html, new RegExp(review.headline));
+  assert.match(html, /关键驱动/);
+  assert.match(html, /观察清单/);
+  for (const source of review.sources) assert.match(html, new RegExp(source.url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
 test("renders the holding summary in the header without the market pulse", async () => {

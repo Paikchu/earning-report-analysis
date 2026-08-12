@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "reviewDate": "2026-08-13",
+  "generatedAt": "2026-08-12T16:45:38.000Z",
+  "snapshotGeneratedAt": "2026-08-12T00:20:14.517Z",
+  "tone": "balanced",
+  "headline": "通胀边际降温利好成长仓位，但组合回报仍高度依赖 AI 主线",
+  "summary": "7 月美国 CPI 环比上涨 0.1%、同比上涨 3.4%，核心 CPI 环比上涨 0.2%；利率压力边际缓和，AI 相关股票也受强劲业绩带动。当前组合前三大净仓位 MSFT、BOXX、NVDA 合计约 56.5%，其中 MSFT 单一仓位约 25.0%。短期环境偏友好，但持仓集中度让个股执行和估值变化仍是主要风险。",
+  "drivers": [
+    {
+      "title": "通胀读数边际缓和",
+      "detail": "美国劳工统计局披露，7 月 CPI 环比上涨 0.1%、同比上涨 3.4%，核心 CPI 环比上涨 0.2%、同比上涨 2.5%。",
+      "implication": "较温和的通胀读数有助于压低利率再上行风险，对久期较长的软件和半导体持仓相对有利。",
+      "tickers": ["MSFT", "NVDA", "AVGO", "ORCL", "NOW", "MRVL"]
+    },
+    {
+      "title": "AI 业绩继续支撑风险偏好",
+      "detail": "当日市场报道显示，AI 基础设施相关公司的盈利与指引好于预期，带动该板块走强。",
+      "implication": "组合对 AI 软件、芯片与基础设施链的暴露较高，主题延续能提供顺风，但任何资本开支或需求预期下修也会放大回撤。",
+      "tickers": ["MSFT", "NVDA", "AVGO", "ORCL", "NOW", "MRVL", "DRAM"]
+    },
+    {
+      "title": "集中度仍是首要组合风险",
+      "detail": "按最新 IBKR 快照，MSFT 净权重约 25.0%，MSFT、BOXX、NVDA 三项合计约 56.5%，现金约占净值 7.6%。",
+      "implication": "BOXX 和现金提供缓冲，但权益波动仍会由少数大仓位主导；复盘应优先检查这些仓位的基本面是否继续支持当前权重。",
+      "tickers": ["MSFT", "BOXX", "NVDA"]
+    }
+  ],
+  "watchItems": [
+    {
+      "label": "验证 AI 需求",
+      "detail": "关注 MSFT、NVDA、AVGO 与 ORCL 后续披露中的订单、云增长、资本开支和利润率，避免只依据板块情绪判断。"
+    },
+    {
+      "label": "检查下行暴露",
+      "detail": "NVDA 与 INTC 的空头看跌期权会在快速下跌时改变组合敏感度，需要与正股和现金缓冲一并观察。"
+    },
+    {
+      "label": "保留估值纪律",
+      "detail": "宏观缓和能支持估值，但不能替代公司兑现；若利率或盈利预期反向变化，应重新检查集中仓位的持有依据。"
+    }
+  ],
+  "sources": [
+    {
+      "title": "美国劳工统计局：2026 年 7 月 CPI",
+      "url": "https://www.bls.gov/cpi/"
+    },
+    {
+      "title": "AP：AI 股走强与通胀担忧缓和",
+      "url": "https://apnews.com/article/stocks-markets-rates-trump-iran-chips-db541ced9f928f993bd3a17958a3deaa"
+    }
+  ]
+}

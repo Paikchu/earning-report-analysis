@@ -12,6 +12,7 @@ import {
   type SortDirection,
 } from "@/lib/portfolio-dashboard";
 import { buildEarningsReminder, isUpcomingEarnings, type EarningsEvent } from "@/lib/earnings-calendar";
+import type { DailyPortfolioReviewV1 } from "@/lib/daily-portfolio-review";
 import { money, number, percent } from "@/lib/portfolio-format";
 import { heatmapThemeColor, type HeatmapHolding } from "@/lib/portfolio-heatmap";
 import type { PositionGroupView } from "@/lib/portfolio-view-model";
@@ -102,6 +103,52 @@ function PositionReminder({ event, asOf }: { event?: EarningsEvent; asOf: string
       <strong>{reminder.releaseDateLabel} · {reminder.sessionLabel}</strong>
       <small>北京{reminder.viewDateLabel}{reminder.viewTimeLabel} · {reminder.countdownLabel}</small>
     </span>
+  );
+}
+
+function DailyPortfolioReview({ review }: { review: DailyPortfolioReviewV1 }) {
+  const reviewTime = new Intl.DateTimeFormat("zh-CN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Shanghai",
+  }).format(new Date(review.generatedAt));
+
+  return (
+    <section className="daily-review" aria-labelledby="daily-review-title">
+      <div className="daily-review-heading">
+        <div>
+          <span>每日投资复盘</span>
+          <h2 id="daily-review-title">{review.headline}</h2>
+        </div>
+        <time dateTime={review.generatedAt}>{reviewTime}</time>
+      </div>
+      <p className="daily-review-summary">{review.summary}</p>
+      <div className="daily-review-grid">
+        <div>
+          <h3>关键驱动</h3>
+          <ol className="review-driver-list">
+            {review.drivers.map((driver) => (
+              <li key={driver.title}>
+                <strong>{driver.title}</strong>
+                <p>{driver.detail}</p>
+                <span>{driver.implication}</span>
+                {driver.tickers.length > 0 && <small>{driver.tickers.join(" · ")}</small>}
+              </li>
+            ))}
+          </ol>
+        </div>
+        <aside>
+          <h3>观察清单</h3>
+          <ul className="review-watch-list">
+            {review.watchItems.map((item) => <li key={item.label}><strong>{item.label}</strong><span>{item.detail}</span></li>)}
+          </ul>
+          <details className="review-sources">
+            <summary>来源 {review.sources.length}</summary>
+            <ul>{review.sources.map((source) => <li key={source.url}><a href={source.url} rel="noreferrer" target="_blank">{source.title}</a></li>)}</ul>
+          </details>
+        </aside>
+      </div>
+    </section>
   );
 }
 
@@ -417,6 +464,7 @@ function PositionLedger({
 }
 
 export function PortfolioDashboard({
+  dailyReview,
   heatmapHoldings,
   positionGroups,
   stockMarketValue,
@@ -431,6 +479,7 @@ export function PortfolioDashboard({
   netDeposits,
   cashBalance,
 }: {
+  dailyReview: DailyPortfolioReviewV1;
   heatmapHoldings: HeatmapHolding[];
   positionGroups: PositionGroupView[];
   stockMarketValue: number;
@@ -482,6 +531,7 @@ export function PortfolioDashboard({
         nextEarnings={nextEarnings}
         nextEarningsReminder={nextEarningsReminder}
       />
+      <DailyPortfolioReview review={dailyReview} />
       <section className="lower-grid">
         <aside className="allocation-panel">
           <h2>仓位构成</h2>

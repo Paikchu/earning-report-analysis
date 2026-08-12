@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
+import * as yahooQuotes from "../lib/yahoo-quotes.ts";
+
+const {
   fetchYahooQuotes,
   handleQuoteRequest,
   parseRequestedSymbols,
   parseYahooSparkQuotes,
-} from "../lib/yahoo-quotes.ts";
+} = yahooQuotes;
+
+const wilderCloses = [
+  44.34, 44.09, 44.15, 43.61, 44.33, 44.83, 45.10, 45.42,
+  45.84, 46.08, 45.89, 46.03, 45.61, 46.28, 46.28, 46.00,
+];
 
 const yahooPayload = {
   spark: {
@@ -32,7 +39,7 @@ const yahooPayload = {
             previousClose: 212.06,
           },
           timestamp: [1_784_836_800],
-          indicators: { quote: [{ close: [208.76] }] },
+          indicators: { quote: [{ close: [...wilderCloses.slice(0, -2), 212.06, 208.76] }] },
         }],
       },
       {
@@ -51,11 +58,10 @@ const yahooPayload = {
             timezone: "EDT",
             exchangeTimezoneName: "America/New_York",
             regularMarketPrice: 381.58,
-            chartPreviousClose: 390.34,
-            previousClose: 390.34,
+            chartPreviousClose: 300,
           },
           timestamp: [1_784_836_801],
-          indicators: { quote: [{ close: [381.58] }] },
+          indicators: { quote: [{ close: [...wilderCloses.slice(0, -2), 390.34, 381.58] }] },
         }],
       },
     ],
@@ -68,12 +74,24 @@ test("parses Yahoo quotes by ticker when results arrive out of order", () => {
   assert.equal(quotes.MSFT.price, 381.58);
   assert.equal(quotes.MSFT.marketTime, "2026-07-23T20:00:01.000Z");
   assert.equal(Number(quotes.MSFT.changePercent.toFixed(4)), -2.2442);
+  assert.ok(Number.isFinite(quotes.MSFT.rsi14));
   assert.equal(quotes.NVDA.price, 208.76);
+});
+
+test("calculates 14-day Wilder RSI from daily closes", () => {
+  assert.equal(typeof yahooQuotes.calculateRsi, "function");
+  assert.equal(Number(yahooQuotes.calculateRsi!(wilderCloses)?.toFixed(2)), 66.25);
+  assert.equal(yahooQuotes.calculateRsi!([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]), 100);
+  assert.equal(yahooQuotes.calculateRsi!([15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]), 0);
+  assert.equal(yahooQuotes.calculateRsi!(Array.from({ length: 15 }, () => 10)), 50);
+  assert.equal(yahooQuotes.calculateRsi!(wilderCloses.slice(0, 14)), null);
 });
 
 test("omits Yahoo results without a usable previous close", () => {
   const payload = structuredClone(yahooPayload);
   payload.spark.result[0].response[0].meta.chartPreviousClose = 0;
+  payload.spark.result[0].response[0].meta.previousClose = 0;
+  payload.spark.result[0].response[0].indicators.quote[0].close = [208.76];
 
   const quotes = parseYahooSparkQuotes(payload, ["MSFT", "NVDA", "MISSING"]);
 
@@ -121,7 +139,7 @@ test("fetches all tickers through one Yahoo spark request", async () => {
   const url = new URL(requestedUrl);
   assert.equal(url.pathname, "/v7/finance/spark");
   assert.equal(url.searchParams.get("symbols"), "MSFT,BRK-B,^GSPC");
-  assert.equal(url.searchParams.get("range"), "1d");
+  assert.equal(url.searchParams.get("range"), "3mo");
   assert.equal(url.searchParams.get("interval"), "1d");
   assert.equal(quotes["BRK.B"].price, 208.76);
   assert.equal(quotes["^GSPC"].price, 208.76);

@@ -38,6 +38,9 @@ export function PositionDetailContent({
   const quoteTime = activeQuote
     ? new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Shanghai" }).format(new Date(activeQuote.marketTime))
     : null;
+  const rsiLabel = activeQuote?.rsi14 === null || activeQuote?.rsi14 === undefined
+    ? null
+    : activeQuote.rsi14 >= 70 ? "超买" : activeQuote.rsi14 <= 30 ? "超卖" : activeQuote.rsi14 >= 60 ? "偏强" : "中性";
 
   return (
     <>
@@ -56,6 +59,9 @@ export function PositionDetailContent({
                 <i className={activeQuote.changePercent < 0 ? "loss" : activeQuote.changePercent > 0 ? "gain" : "muted"}>
                   {percent(activeQuote.changePercent, true)}
                 </i>
+                {activeQuote.rsi14 !== null && (
+                  <span className="detail-rsi"><b>RSI 14 · 日线</b><strong>{number(activeQuote.rsi14, 1, 1)}</strong><i>{rsiLabel}</i></span>
+                )}
                 <small>{quoteTime}</small>
               </>
             ) : (

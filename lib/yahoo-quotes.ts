@@ -2,6 +2,7 @@ export type MarketQuote = {
   price: number;
   changePercent: number;
   marketTime: string;
+  rsi14: number | null;
 };
 
 export type MarketQuoteMap = Record<string, MarketQuote>;
@@ -27,8 +28,13 @@ export function parseYahooSparkQuotes(payload: unknown, requestedSymbols: string
     const response = asRecord(responses[0]);
     const meta = asRecord(response?.meta);
     const price = meta?.regularMarketPrice;
-    const previousClose = meta?.chartPreviousClose;
     const marketTime = meta?.regularMarketTime;
+    const indicators = asRecord(response?.indicators);
+    const quoteSeries = Array.isArray(indicators?.quote) ? asRecord(indicators.quote[0]) : null;
+    const closes = Array.isArray(quoteSeries?.close)
+      ? quoteSeries.close.filter((value): value is number => typeof value === "number" && Number.isFinite(value) && value > 0)
+      : [];
+    const previousClose = closes.at(-2) ?? (isPositiveFinite(meta?.previousClose) ? meta.previousClose : meta?.chartPreviousClose);
 
     if (
       !localSymbol ||
@@ -41,6 +47,7 @@ export function parseYahooSparkQuotes(payload: unknown, requestedSymbols: string
       price,
       changePercent: ((price - previousClose) / previousClose) * 100,
       marketTime: new Date(marketTime * 1_000).toISOString(),
+      rsi14: calculateRsi(closes),
     });
   }
 
@@ -70,7 +77,7 @@ export async function fetchYahooQuotes(
 ): Promise<MarketQuoteMap> {
   const url = new URL("https://query1.finance.yahoo.com/v7/finance/spark");
   url.searchParams.set("symbols", symbols.map(toYahooSymbol).join(","));
-  url.searchParams.set("range", "1d");
+  url.searchParams.set("range", "3mo");
   url.searchParams.set("interval", "1d");
 
   const response = await fetcher(url, {
@@ -84,6 +91,31 @@ export async function fetchYahooQuotes(
   if (!response.ok) throw new Error(`Yahoo Finance 请求失败：${response.status}`);
 
   return parseYahooSparkQuotes(await response.json(), symbols);
+}
+
+export function calculateRsi(closes: number[], period = 14): number | null {
+  if (!Number.isInteger(period) || period < 1 || closes.length <= period) return null;
+
+  let averageGain = 0;
+  let averageLoss = 0;
+  for (let index = 1; index <= period; index += 1) {
+    const change = closes[index]! - closes[index - 1]!;
+    averageGain += Math.max(change, 0);
+    averageLoss += Math.max(-change, 0);
+  }
+  averageGain /= period;
+  averageLoss /= period;
+
+  for (let index = period + 1; index < closes.length; index += 1) {
+    const change = closes[index]! - closes[index - 1]!;
+    averageGain = ((averageGain * (period - 1)) + Math.max(change, 0)) / period;
+    averageLoss = ((averageLoss * (period - 1)) + Math.max(-change, 0)) / period;
+  }
+
+  if (averageGain === 0 && averageLoss === 0) return 50;
+  if (averageLoss === 0) return 100;
+  if (averageGain === 0) return 0;
+  return 100 - (100 / (1 + averageGain / averageLoss));
 }
 
 export async function handleQuoteRequest(

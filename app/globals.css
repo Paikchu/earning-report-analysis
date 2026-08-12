@@ -218,6 +218,61 @@ h2 {
   white-space: nowrap;
 }
 
+.daily-review {
+  padding: 28px 0 30px;
+  border-top: 1px solid var(--ink);
+}
+
+.daily-review-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 28px;
+}
+
+.daily-review-heading > div { max-width: 900px; }
+.daily-review-heading span,
+.daily-review-heading time,
+.daily-review h3,
+.review-driver-list small { color: var(--ink-muted); font-size: 12px; }
+.daily-review-heading span { display: block; margin-bottom: 8px; font-weight: 650; letter-spacing: .06em; }
+.daily-review-heading h2 { font-size: clamp(24px, 2.2vw, 34px); line-height: 1.08; }
+.daily-review-heading time { flex: 0 0 auto; padding-top: 3px; }
+.daily-review-summary { max-width: 1120px; margin: 16px 0 24px; color: var(--ink-soft); font: 500 16px/1.7 var(--serif); }
+
+.daily-review-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, .8fr);
+  gap: clamp(32px, 5vw, 72px);
+}
+
+.daily-review h3 { margin: 0 0 10px; font-weight: 650; letter-spacing: .07em; }
+.review-driver-list,
+.review-watch-list,
+.review-sources ul { margin: 0; padding: 0; list-style: none; }
+.review-driver-list { counter-reset: driver; border-top: 1px dashed var(--paper-deep); }
+.review-driver-list li {
+  padding: 14px 0 14px 36px;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(150px, .55fr) minmax(0, 1.35fr);
+  gap: 5px 22px;
+  border-bottom: 1px dashed var(--paper-deep);
+}
+.review-driver-list li::before { counter-increment: driver; content: "0" counter(driver); position: absolute; top: 16px; left: 0; color: var(--ink-muted); font: 600 12px/1 var(--serif); }
+.review-driver-list strong { font: 600 16px/1.3 var(--serif); }
+.review-driver-list p { margin: 0; color: var(--ink-soft); font-size: 13px; line-height: 1.55; }
+.review-driver-list span { grid-column: 2; color: var(--ink); font-size: 13px; line-height: 1.55; }
+.review-driver-list small { grid-column: 2; letter-spacing: .04em; }
+.review-watch-list { border-top: 1px dashed var(--paper-deep); }
+.review-watch-list li { padding: 12px 0; display: grid; gap: 5px; border-bottom: 1px dashed var(--paper-deep); }
+.review-watch-list strong { font: 600 15px/1.2 var(--serif); }
+.review-watch-list span { color: var(--ink-soft); font-size: 13px; line-height: 1.5; }
+.review-sources { margin-top: 12px; }
+.review-sources summary { min-height: 44px; display: flex; align-items: center; color: var(--ink-muted); font-size: 12px; cursor: pointer; }
+.review-sources li { margin: 7px 0; }
+.review-sources a { color: var(--ink-soft); font-size: 12px; text-underline-offset: 3px; }
+
 .lower-grid {
   padding: 0 0 56px;
   display: grid;
@@ -1155,8 +1210,8 @@ td { font-size: 14px; }
 .back-link:hover { color: var(--ink); }
 
 .detail-hero {
-  min-height: 156px;
-  padding: 24px 0 26px;
+  min-height: 118px;
+  padding: 16px 0 18px;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -1165,11 +1220,11 @@ td { font-size: 14px; }
   border-bottom: 1px solid var(--ink);
 }
 
-.detail-hero h1 { font-size: clamp(52px, 8vw, 92px); }
-.detail-status { margin: 0 0 8px; color: var(--ink-muted); font-size: 12px; font-weight: 650; }
-.detail-company { max-width: 640px; margin: 12px 0 0; color: var(--ink-muted); font-size: 14px; }
+.detail-hero h1 { font-size: clamp(46px, 6vw, 70px); }
+.detail-status { margin: 0 0 5px; color: var(--ink-muted); font-size: 12px; font-weight: 650; }
+.detail-company { max-width: 640px; margin: 7px 0 0; color: var(--ink-muted); font-size: 13px; }
 
-.snapshot-note { min-width: 170px; display: grid; gap: 5px; text-align: right; }
+.snapshot-note { min-width: 170px; display: grid; gap: 3px; text-align: right; }
 .snapshot-note span { color: var(--ink-muted); font-size: 12px; }
 .snapshot-note strong { font: 600 14px/1.2 var(--serif); }
 
@@ -1177,7 +1232,7 @@ td { font-size: 14px; }
   min-width: 190px;
   display: grid;
   justify-items: end;
-  gap: 18px;
+  gap: 10px;
 }
 
 .detail-quote {
@@ -1192,6 +1247,10 @@ td { font-size: 14px; }
 .detail-quote strong { font: 600 28px/1 var(--serif); font-variant-numeric: tabular-nums lining-nums; }
 .detail-quote i { font-size: 14px; font-style: normal; font-weight: 650; }
 .detail-quote .quote-unavailable { color: var(--ink-muted); font-size: 14px; }
+.detail-rsi { margin-top: 3px; display: inline-flex; align-items: baseline; gap: 6px; color: var(--ink); }
+.detail-rsi b { color: var(--ink-muted); font-size: 11px; font-weight: 650; }
+.detail-rsi strong { font: 600 15px/1 var(--serif); }
+.detail-rsi i { color: var(--ink-muted); font-size: 11px; }
 
 .detail-section-nav {
   position: sticky;
@@ -1578,6 +1637,7 @@ td { font-size: 14px; }
     border-left: 0;
     border-top: 1px dashed var(--paper-deep);
   }
+  .daily-review-grid { grid-template-columns: 1fr; gap: 26px; }
   .lower-grid { gap: 38px; }
   .position-columns,
   .position-row { grid-template-columns: minmax(150px, 1.4fr) repeat(5, minmax(80px, 1fr)); gap: 8px; }
@@ -1601,6 +1661,14 @@ td { font-size: 14px; }
   .header-position-summary article:first-child,
   .header-position-summary article:nth-child(2) { border-top: 0; }
   .header-next-earnings { grid-column: 1 / -1; }
+  .daily-review { padding: 24px 0 26px; }
+  .daily-review-heading { display: grid; gap: 8px; }
+  .daily-review-heading h2 { font-size: 24px; }
+  .daily-review-heading time { padding: 0; }
+  .daily-review-summary { margin: 13px 0 21px; font-size: 15px; }
+  .review-driver-list li { padding-left: 28px; grid-template-columns: 1fr; gap: 7px; }
+  .review-driver-list span,
+  .review-driver-list small { grid-column: 1; }
   .ledger-heading { align-items: start; }
   .add-plan-button { min-height: 44px; padding: 0 10px; font-size: 12px; }
   .allocation-panel h2,
@@ -1717,8 +1785,8 @@ td { font-size: 14px; }
   }
   .detail-shell { width: calc(100% - 24px); padding-top: 16px; }
   .back-link { margin-bottom: 18px; }
-  .detail-hero { min-height: 170px; align-items: flex-start; flex-direction: column; gap: 24px; }
-  .detail-hero h1 { font-size: 56px; }
+  .detail-hero { min-height: 0; padding: 14px 0 16px; align-items: flex-start; flex-direction: column; gap: 16px; }
+  .detail-hero h1 { font-size: 48px; }
   .detail-section-nav { margin-inline: -12px; padding-inline: 12px; }
   .detail-market-panel { min-width: 0; justify-items: start; }
   .detail-quote { justify-items: start; text-align: left; }
