@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-12T00:20:14.517Z",
+  "generatedAt": "2026-08-13T00:30:38.582Z",
   "account": {
     "currency": "USD",
-    "netLiquidation": 70520.63,
-    "cashBalance": 5388.28,
+    "netLiquidation": 70942.89,
+    "cashBalance": 2126.4438,
     "netDeposits": 70000
   },
   "positions": [
@@ -15,10 +15,10 @@
       "assetClass": "STK",
       "quantity": 7.0061,
       "averagePrice": 384.11674113,
-      "marketPrice": 417.23999025,
-      "marketValue": 2923.22509569,
+      "marketPrice": 416.32998655,
+      "marketValue": 2916.84951877,
       "costBasis": 2691.160300030893,
-      "unrealizedPnl": 232.06479569
+      "unrealizedPnl": 225.68921877
     },
     {
       "positionKey": "STK:604408720",
@@ -27,10 +27,10 @@
       "assetClass": "STK",
       "quantity": 130,
       "averagePrice": 117.04128385,
-      "marketPrice": 117.80000305,
-      "marketValue": 15314.0003965,
+      "marketPrice": 117.8199997,
+      "marketValue": 15316.599961,
       "costBasis": 15215.3669005,
-      "unrealizedPnl": 98.6334965
+      "unrealizedPnl": 101.233061
     },
     {
       "positionKey": "STK:870556708",
@@ -39,10 +39,10 @@
       "assetClass": "STK",
       "quantity": 70,
       "averagePrice": 62.19048714,
-      "marketPrice": 51.13000105,
-      "marketValue": 3579.1000735,
+      "marketPrice": 55.34999845,
+      "marketValue": 3874.4998915,
       "costBasis": 4353.3340998,
-      "unrealizedPnl": -774.2340265
+      "unrealizedPnl": -478.8342085
     },
     {
       "positionKey": "OPT:845712739",
@@ -51,10 +51,10 @@
       "assetClass": "OPT",
       "quantity": -1,
       "averagePrice": 5.489521,
-      "marketPrice": 3.19486405,
-      "marketValue": -319.486405,
+      "marketPrice": 2.6928544,
+      "marketValue": -269.28544,
       "costBasis": -548.9521,
-      "unrealizedPnl": 229.465695
+      "unrealizedPnl": 279.66666
     },
     {
       "positionKey": "STK:483492393",
@@ -63,10 +63,10 @@
       "assetClass": "STK",
       "quantity": 5.001,
       "averagePrice": 267.65658868,
-      "marketPrice": 215.2899933,
-      "marketValue": 1076.66525649,
+      "marketPrice": 220.30999755,
+      "marketValue": 1101.77029775,
       "costBasis": 1338.5505999886802,
-      "unrealizedPnl": -261.88534351
+      "unrealizedPnl": -236.78030225
     },
     {
       "positionKey": "STK:272093",
@@ -75,22 +75,22 @@
       "assetClass": "STK",
       "quantity": 35.0455,
       "averagePrice": 429.83701474,
-      "marketPrice": 502.3500061,
-      "marketValue": 17605.10713878,
+      "marketPrice": 489.30999755,
+      "marketValue": 17148.11351914,
       "costBasis": 15063.853100070668,
-      "unrealizedPnl": 2541.25403878
+      "unrealizedPnl": 2084.26041914
     },
     {
       "positionKey": "STK:272110",
       "symbol": "MSTR",
       "contractDescription": "MSTR",
       "assetClass": "STK",
-      "quantity": 12,
-      "averagePrice": 120.88166667,
-      "marketPrice": 96.62000275,
-      "marketValue": 1159.440033,
-      "costBasis": 1450.58000004,
-      "unrealizedPnl": -291.139967
+      "quantity": 13,
+      "averagePrice": 118.95311233,
+      "marketPrice": 95.33000185,
+      "marketValue": 1239.29002405,
+      "costBasis": 1546.39046029,
+      "unrealizedPnl": -307.1004362
     },
     {
       "positionKey": "STK:109911821",
@@ -99,10 +99,10 @@
       "assetClass": "STK",
       "quantity": 20,
       "averagePrice": 107.699015,
-      "marketPrice": 127.078598,
-      "marketValue": 2541.57196,
+      "marketPrice": 124.5,
+      "marketValue": 2490,
       "costBasis": 2153.9803,
-      "unrealizedPnl": 387.59166
+      "unrealizedPnl": 336.0197
     },
     {
       "positionKey": "STK:4815747",
@@ -111,10 +111,10 @@
       "assetClass": "STK",
       "quantity": 35.0179,
       "averagePrice": 203.64195169,
-      "marketPrice": 217.91999815,
-      "marketValue": 7631.10070322,
+      "marketPrice": 224.05000305,
+      "marketValue": 7845.7606018,
       "costBasis": 7131.113500085251,
-      "unrealizedPnl": 499.98720322
+      "unrealizedPnl": 714.6471018
     },
     {
       "positionKey": "OPT:730765112",
@@ -123,10 +123,10 @@
       "assetClass": "OPT",
       "quantity": -1,
       "averagePrice": 17.339127,
-      "marketPrice": 7.02504875,
-      "marketValue": -702.504875,
+      "marketPrice": 6.1123986,
+      "marketValue": -611.23986,
       "costBasis": -1733.9127,
-      "unrealizedPnl": 1031.407825
+      "unrealizedPnl": 1122.67284
     },
     {
       "positionKey": "STK:272800",
@@ -135,10 +135,10 @@
       "assetClass": "STK",
       "quantity": 32.0655,
       "averagePrice": 142.4036862,
-      "marketPrice": 147.19999695,
-      "marketValue": 4720.0415022,
+      "marketPrice": 152.9299927,
+      "marketValue": 4903.77668092,
       "costBasis": 4566.245399846101,
-      "unrealizedPnl": 153.7961022
+      "unrealizedPnl": 337.53128092
     },
     {
       "positionKey": "STK:787273575",
@@ -147,10 +147,10 @@
       "assetClass": "STK",
       "quantity": 15,
       "averagePrice": 81.52225333,
-      "marketPrice": 79.80999755,
-      "marketValue": 1197.14996325,
+      "marketPrice": 81.19000245,
+      "marketValue": 1217.85003675,
       "costBasis": 1222.83379995,
-      "unrealizedPnl": -25.68383675
+      "unrealizedPnl": -4.98376325
     },
     {
       "positionKey": "STK:890493863",
@@ -159,37 +159,97 @@
       "assetClass": "STK",
       "quantity": 15,
       "averagePrice": 124.75890667,
-      "marketPrice": 132.7799988,
-      "marketValue": 1991.699982,
+      "marketPrice": 147.05000305,
+      "marketValue": 2205.75004575,
       "costBasis": 1871.38360005,
-      "unrealizedPnl": 120.316382
+      "unrealizedPnl": 334.36644575
     },
     {
       "positionKey": "STK:76792991",
       "symbol": "TSLA",
       "contractDescription": "TSLA",
       "assetClass": "STK",
-      "quantity": 15,
-      "averagePrice": 389.25858667,
-      "marketPrice": 333.2000122,
-      "marketValue": 4998.000183,
-      "costBasis": 5838.87880005,
-      "unrealizedPnl": -840.878617
+      "quantity": 16,
+      "averagePrice": 385.39089127,
+      "marketPrice": 327.5,
+      "marketValue": 5240,
+      "costBasis": 6166.25426032,
+      "unrealizedPnl": -926.25426025
     },
     {
       "positionKey": "STK:136155102",
       "symbol": "VOO",
       "contractDescription": "VOO",
       "assetClass": "STK",
-      "quantity": 2,
-      "averagePrice": 710.66375,
-      "marketPrice": 708.7000122,
-      "marketValue": 1417.4000244,
-      "costBasis": 1421.3275,
-      "unrealizedPnl": -3.9274756
+      "quantity": 6,
+      "averagePrice": 709.99629487,
+      "marketPrice": 710.02001955,
+      "marketValue": 4260.1201173,
+      "costBasis": 4259.9777692200005,
+      "unrealizedPnl": 0.14234805
     }
   ],
   "trades": [
+    {
+      "tradeId": "0001b020.6a7ca9d2.01.01",
+      "tradeTime": "2026-08-12T17:40:11.000Z",
+      "symbol": "MSTR",
+      "contractDescription": "STRATEGY INC",
+      "securityType": "STK",
+      "side": "BUY",
+      "size": 1,
+      "price": 95.46,
+      "commission": 0.35046,
+      "netAmount": 95.46,
+      "realizedPnl": 0,
+      "exchange": "IBKRATS",
+      "orderId": "2111540075"
+    },
+    {
+      "tradeId": "0001ebd7.6a7c895e.01.01",
+      "tradeTime": "2026-08-12T16:54:24.000Z",
+      "symbol": "TSLA",
+      "contractDescription": "TESLA INC",
+      "securityType": "STK",
+      "side": "BUY",
+      "size": 1,
+      "price": 327.025,
+      "commission": 0.35046,
+      "netAmount": 327.025,
+      "realizedPnl": 0,
+      "exchange": "IBKRATS",
+      "orderId": "2111539650"
+    },
+    {
+      "tradeId": "00030f00.6a7cf37a.01.01",
+      "tradeTime": "2026-08-12T15:22:25.000Z",
+      "symbol": "VOO",
+      "contractDescription": "VANGUARD S&P 500 ETF",
+      "securityType": "STK",
+      "side": "BUY",
+      "size": 2,
+      "price": 709.575,
+      "commission": 0.350663,
+      "netAmount": 1419.15,
+      "realizedPnl": 0,
+      "exchange": "DARK",
+      "orderId": "2111538865"
+    },
+    {
+      "tradeId": "00030e5e.6e4aa364.01.01",
+      "tradeTime": "2026-08-12T15:22:25.000Z",
+      "symbol": "VOO",
+      "contractDescription": "VANGUARD S&P 500 ETF",
+      "securityType": "STK",
+      "side": "BUY",
+      "size": 2,
+      "price": 709.5746,
+      "commission": 0.000406,
+      "netAmount": 1419.1492,
+      "realizedPnl": 0,
+      "exchange": "DARK",
+      "orderId": "2111538865"
+    },
     {
       "tradeId": "0000d9ba.6a79d296.01.01",
       "tradeTime": "2026-08-10T18:06:11.000Z",
@@ -5324,7 +5384,7 @@
   "tradeSync": {
     "status": "current",
     "queryPeriod": "DAYS_7",
-    "lastSuccessfulTradeAt": "2026-08-10T18:06:11.000Z",
+    "lastSuccessfulTradeAt": "2026-08-12T17:40:11.000Z",
     "message": null
   }
 }

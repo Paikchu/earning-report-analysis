@@ -1,53 +1,83 @@
 {
   "version": 1,
   "reviewDate": "2026-08-13",
-  "generatedAt": "2026-08-12T16:45:38.000Z",
-  "snapshotGeneratedAt": "2026-08-12T00:20:14.517Z",
+  "generatedAt": "2026-08-13T01:39:12.071Z",
+  "snapshotGeneratedAt": "2026-08-13T00:30:38.582Z",
   "tone": "balanced",
-  "headline": "通胀边际降温利好成长仓位，但组合回报仍高度依赖 AI 主线",
-  "summary": "7 月美国 CPI 环比上涨 0.1%、同比上涨 3.4%，核心 CPI 环比上涨 0.2%；利率压力边际缓和，AI 相关股票也受强劲业绩带动。当前组合前三大净仓位 MSFT、BOXX、NVDA 合计约 56.5%，其中 MSFT 单一仓位约 25.0%。短期环境偏友好，但持仓集中度让个股执行和估值变化仍是主要风险。",
+  "headline": "新资金转向 VOO 后现金缓冲收窄，组合仍由微软与 AI 链主导",
+  "summary": "最新 IBKR 快照显示净值 70,942.89 美元、现金权重约 3.0%。MSFT 约占净值 24.2%，BOXX 约 21.6%，NVDA 正股与空头看跌期权合计净市值约 10.2%；8 月 12 日新增 MSTR、TSLA 与 VOO，VOO 仓位升至约 6.0%。基本面仍支持云与 AI 主线，但低现金和集中持仓提高了单一事件对净值的影响。",
   "drivers": [
     {
-      "title": "通胀读数边际缓和",
-      "detail": "美国劳工统计局披露，7 月 CPI 环比上涨 0.1%、同比上涨 3.4%，核心 CPI 环比上涨 0.2%、同比上涨 2.5%。",
-      "implication": "较温和的通胀读数有助于压低利率再上行风险，对久期较长的软件和半导体持仓相对有利。",
-      "tickers": ["MSFT", "NVDA", "AVGO", "ORCL", "NOW", "MRVL"]
+      "title": "微软仍是最大单一风险来源",
+      "detail": "披露事实：微软 FY2026 第四季度收入 900 亿美元，同比增长 18%；Azure 及其他云服务收入增长 43%，Azure 年收入首次超过 1,000 亿美元。",
+      "implication": "组合含义：强劲云与 AI 需求支撑约 24.2% 的 MSFT 权重，但该仓位过大，后续云增速或资本开支回报变化会显著影响组合净值。",
+      "tickers": [
+        "MSFT"
+      ]
     },
     {
-      "title": "AI 业绩继续支撑风险偏好",
-      "detail": "当日市场报道显示，AI 基础设施相关公司的盈利与指引好于预期，带动该板块走强。",
-      "implication": "组合对 AI 软件、芯片与基础设施链的暴露较高，主题延续能提供顺风，但任何资本开支或需求预期下修也会放大回撤。",
-      "tickers": ["MSFT", "NVDA", "AVGO", "ORCL", "NOW", "MRVL", "DRAM"]
+      "title": "AI 芯片需求强，但敞口高度相关",
+      "detail": "披露事实：NVIDIA 最近一季收入 816 亿美元，同比增长 85%；Broadcom Q2 AI 半导体收入 108 亿美元，同比增长 143%。",
+      "implication": "组合含义：NVDA、AVGO、MRVL 与 DRAM 同受 AI 基础设施周期驱动，表面上的多只证券并未消除同一需求因子的回撤风险。",
+      "tickers": [
+        "NVDA",
+        "AVGO",
+        "MRVL",
+        "DRAM"
+      ]
     },
     {
-      "title": "集中度仍是首要组合风险",
-      "detail": "按最新 IBKR 快照，MSFT 净权重约 25.0%，MSFT、BOXX、NVDA 三项合计约 56.5%，现金约占净值 7.6%。",
-      "implication": "BOXX 和现金提供缓冲，但权益波动仍会由少数大仓位主导；复盘应优先检查这些仓位的基本面是否继续支持当前权重。",
-      "tickers": ["MSFT", "BOXX", "NVDA"]
+      "title": "Oracle 云增长伴随高资本强度",
+      "detail": "披露事实：Oracle FY2026 Q4 云收入同比增长 47%、IaaS 增长 93%；FY2026 自由现金流为负 237 亿美元，主要与云基础设施投资有关。",
+      "implication": "组合含义：约 6.9% 的 ORCL 仓位受益于 AI 云订单扩张，但增长兑现需要持续融资和数据中心投入，现金流是比收入增速更关键的观察点。",
+      "tickers": [
+        "ORCL"
+      ]
+    },
+    {
+      "title": "现金下降改变组合缓冲结构",
+      "detail": "披露事实：本次快照现金为 2,126.4438 美元，约占净值 3.0%；8 月 12 日新增 4 股 VOO、1 股 TSLA 和 1 股 MSTR，VOO 总持仓升至 6 股。",
+      "implication": "组合含义：新增宽基指数提高了分散度，但现金缓冲明显下降；BOXX 仍承担主要低波动储备角色，权益与短 put 的同步下跌敏感度上升。",
+      "tickers": [
+        "VOO",
+        "TSLA",
+        "MSTR",
+        "BOXX",
+        "NVDA",
+        "INTC"
+      ]
     }
   ],
   "watchItems": [
     {
-      "label": "验证 AI 需求",
-      "detail": "关注 MSFT、NVDA、AVGO 与 ORCL 后续披露中的订单、云增长、资本开支和利润率，避免只依据板块情绪判断。"
+      "label": "关注 NVIDIA 临近财报",
+      "detail": "NVIDIA 已列出 FY2027 第二季度业绩活动；其结果将同时影响 NVDA、AVGO、MRVL、DRAM、ORCL 与 MSFT 的 AI 需求预期。"
     },
     {
-      "label": "检查下行暴露",
-      "detail": "NVDA 与 INTC 的空头看跌期权会在快速下跌时改变组合敏感度，需要与正股和现金缓冲一并观察。"
+      "label": "检查短 put 下行非线性",
+      "detail": "NVDA 180 put 与 INTC 70 put 均为空头期权；市场快速下跌时，其风险不会仅按当前负市值线性变化。"
     },
     {
-      "label": "保留估值纪律",
-      "detail": "宏观缓和能支持估值，但不能替代公司兑现；若利率或盈利预期反向变化，应重新检查集中仓位的持有依据。"
+      "label": "复核现金与 BOXX 分工",
+      "detail": "现金权重约 3.0% 后，流动性缓冲更依赖 BOXX；应持续区分日常现金需求与低波动仓位，避免误判可用缓冲。"
     }
   ],
   "sources": [
     {
-      "title": "美国劳工统计局：2026 年 7 月 CPI",
-      "url": "https://www.bls.gov/cpi/"
+      "title": "Microsoft FY2026 Q4 results coverage",
+      "url": "https://apnews.com/article/f7dff4fb9d51a2bdec56a13e5da1053d"
     },
     {
-      "title": "AP：AI 股走强与通胀担忧缓和",
-      "url": "https://apnews.com/article/stocks-markets-rates-trump-iran-chips-db541ced9f928f993bd3a17958a3deaa"
+      "title": "NVIDIA FY2027 Q1 financial results",
+      "url": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-First-Quarter-Fiscal-2027/default.aspx"
+    },
+    {
+      "title": "Broadcom FY2026 Q2 financial results",
+      "url": "https://www.broadcom.com/company/news/financial-releases/64371"
+    },
+    {
+      "title": "Oracle FY2026 Q4 and full-year results",
+      "url": "https://investor.oracle.com/investor-news/news-details/2026/Oracle-Announces-Record-Q4-and-FY-2026-Results-Driven-by-Cloud-Infrastructure--Cloud-Applications/"
     }
   ]
 }
