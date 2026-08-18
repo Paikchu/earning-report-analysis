@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties, type KeyboardEvent } from "react";
 import Link from "next/link";
 
 import {
@@ -23,13 +23,15 @@ import type { MarketQuoteMap } from "@/lib/yahoo-quotes";
 
 type AllocationMode = "holding" | "sector";
 const allocationModes: AllocationMode[] = ["holding", "sector"];
+type DashboardView = "portfolio" | "review";
+const dashboardViews: DashboardView[] = ["portfolio", "review"];
 
 function Pnl({ value }: { value: number }) {
   const className = value < 0 ? "loss" : value > 0 ? "gain" : "muted";
   return <span className={className}>{money(value, true)}</span>;
 }
 
-function PortfolioHeader({
+function PortfolioOverview({
   netLiquidation,
   totalPnl,
   totalPnlRate,
@@ -57,7 +59,7 @@ function PortfolioHeader({
   nextEarningsReminder: ReturnType<typeof buildEarningsReminder> | null;
 }) {
   return (
-    <header className="portfolio-header" aria-labelledby="portfolio-title">
+    <section className="portfolio-overview" aria-labelledby="portfolio-title">
       <div className="hero">
         <div className="portfolio-heading">
           <h1 id="portfolio-title">投资组合</h1>
@@ -87,7 +89,7 @@ function PortfolioHeader({
           </article>
         )}
       </section>
-    </header>
+    </section>
   );
 }
 
@@ -494,6 +496,7 @@ export function PortfolioDashboard({
   netDeposits: number;
   cashBalance: number;
 }) {
+  const [activeView, setActiveView] = useState<DashboardView>("portfolio");
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
   const quoteSymbols = useMemo(() => positionGroups.map((group) => group.symbol).join(","), [positionGroups]);
   const quoteState = useMarketQuotes(quoteSymbols);
@@ -515,50 +518,85 @@ export function PortfolioDashboard({
   ));
   const nextEarningsReminder = nextEarnings ? buildEarningsReminder(nextEarnings, earningsAsOf) : null;
 
+  function switchView(view: DashboardView) {
+    setActiveView(view);
+    document.getElementById(`${view}-tab`)?.focus();
+  }
+
+  function handleViewKeyDown(event: KeyboardEvent<HTMLButtonElement>, currentView: DashboardView) {
+    const currentIndex = dashboardViews.indexOf(currentView);
+    let nextView: DashboardView | undefined;
+    if (event.key === "ArrowRight") nextView = dashboardViews[(currentIndex + 1) % dashboardViews.length];
+    if (event.key === "ArrowLeft") nextView = dashboardViews[(currentIndex - 1 + dashboardViews.length) % dashboardViews.length];
+    if (event.key === "Home") nextView = dashboardViews[0];
+    if (event.key === "End") nextView = dashboardViews.at(-1);
+    if (!nextView) return;
+    event.preventDefault();
+    switchView(nextView);
+  }
+
   return (
     <>
-      <PortfolioHeader
-        netLiquidation={netLiquidation}
-        totalPnl={totalPnl}
-        totalPnlRate={totalPnlRate}
-        netLiquidationWithoutOptionPnl={netLiquidationWithoutOptionPnl}
-        portfolioLeverage={portfolioLeverage}
-        netDeposits={netDeposits}
-        cashBalance={cashBalance}
-        netPositionsValue={netPositionsValue}
-        stockMarketValue={stockMarketValue}
-        optionMarketValue={optionMarketValue}
-        nextEarnings={nextEarnings}
-        nextEarningsReminder={nextEarningsReminder}
-      />
-      <DailyPortfolioReview review={dailyReview} />
-      <section className="lower-grid">
-        <aside className="allocation-panel">
-          <h2>仓位构成</h2>
-          <div className="section-divider" aria-hidden="true" />
-          <AllocationPanel groups={positionGroups} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
-          <PortfolioHeatmap holdings={heatmapHoldings} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
-        </aside>
+      <header className="site-header">
+        <div className="site-brand" aria-label="MAX 投资记录">
+          <strong>MAX</strong>
+          <span>投资记录</span>
+        </div>
+        <span className="site-context">私人投资组合</span>
+      </header>
 
-        <section className="ledger-panel" aria-labelledby="ledger-title">
-          <div className="ledger-heading">
-            <h2 id="ledger-title">投资账本</h2>
-            <AddPlanDialog />
-          </div>
-          <div className="section-divider" aria-hidden="true" />
-          <div className="ledger-content">
-            <PositionLedger
-              groups={positionGroups}
-              activeSymbol={activeSymbol}
-              onActiveSymbolChange={setActiveSymbol}
-              quotes={quoteState.quotes}
-              quoteStatus={quoteState.status}
-              earningsBySymbol={earningsBySymbol}
-              earningsUpdatedAt={earningsAsOf}
-            />
-          </div>
+      <nav className="dashboard-tabs" role="tablist" aria-label="首页视图">
+        <button aria-controls="portfolio-panel" aria-selected={activeView === "portfolio"} id="portfolio-tab" onClick={() => setActiveView("portfolio")} onKeyDown={(event) => handleViewKeyDown(event, "portfolio")} role="tab" tabIndex={activeView === "portfolio" ? 0 : -1} type="button">Portfolio</button>
+        <button aria-controls="review-panel" aria-selected={activeView === "review"} id="review-tab" onClick={() => setActiveView("review")} onKeyDown={(event) => handleViewKeyDown(event, "review")} role="tab" tabIndex={activeView === "review" ? 0 : -1} type="button">每日投资复盘</button>
+      </nav>
+
+      <div aria-labelledby="portfolio-tab" hidden={activeView !== "portfolio"} id="portfolio-panel" role="tabpanel">
+        <PortfolioOverview
+          netLiquidation={netLiquidation}
+          totalPnl={totalPnl}
+          totalPnlRate={totalPnlRate}
+          netLiquidationWithoutOptionPnl={netLiquidationWithoutOptionPnl}
+          portfolioLeverage={portfolioLeverage}
+          netDeposits={netDeposits}
+          cashBalance={cashBalance}
+          netPositionsValue={netPositionsValue}
+          stockMarketValue={stockMarketValue}
+          optionMarketValue={optionMarketValue}
+          nextEarnings={nextEarnings}
+          nextEarningsReminder={nextEarningsReminder}
+        />
+        <section className="lower-grid">
+          <aside className="allocation-panel">
+            <h2>仓位构成</h2>
+            <div className="section-divider" aria-hidden="true" />
+            <AllocationPanel groups={positionGroups} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
+            <PortfolioHeatmap holdings={heatmapHoldings} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
+          </aside>
+
+          <section className="ledger-panel" aria-labelledby="ledger-title">
+            <div className="ledger-heading">
+              <h2 id="ledger-title">投资账本</h2>
+              <AddPlanDialog />
+            </div>
+            <div className="section-divider" aria-hidden="true" />
+            <div className="ledger-content">
+              <PositionLedger
+                groups={positionGroups}
+                activeSymbol={activeSymbol}
+                onActiveSymbolChange={setActiveSymbol}
+                quotes={quoteState.quotes}
+                quoteStatus={quoteState.status}
+                earningsBySymbol={earningsBySymbol}
+                earningsUpdatedAt={earningsAsOf}
+              />
+            </div>
+          </section>
         </section>
-      </section>
+      </div>
+
+      <div aria-labelledby="review-tab" hidden={activeView !== "review"} id="review-panel" role="tabpanel">
+        <DailyPortfolioReview review={dailyReview} />
+      </div>
     </>
   );
 }

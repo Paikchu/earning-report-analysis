@@ -33,6 +33,21 @@ test("server-renders the investment record", async () => {
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
 });
 
+test("uses a compact site header with portfolio and review tabs below it", async () => {
+  const response = await render();
+  const html = await response.text();
+
+  assert.match(html, /<header class="site-header"/);
+  assert.match(html, /MAX/);
+  assert.match(html, /投资记录/);
+  assert.match(html, /role="tablist" aria-label="首页视图"/);
+  assert.match(html, /<button aria-controls="portfolio-panel"[^>]*role="tab"[^>]*>Portfolio</);
+  assert.match(html, /<button aria-controls="review-panel"[^>]*role="tab"[^>]*>每日投资复盘</);
+  assert.match(html, /id="portfolio-panel"[^>]*role="tabpanel"/);
+  assert.match(html, /id="review-panel"[^>]*role="tabpanel"/);
+  assert.doesNotMatch(html, /<header class="site-header"[\s\S]*?当前净值[\s\S]*?<\/header>/);
+});
+
 test("rejects anonymous access to accession-specific SEC reports", async () => {
   const response = await render("/positions/MSFT/sec/0000789019-26-000001");
 
@@ -70,7 +85,8 @@ test("removes the disposable starter preview", async () => {
   assert.doesNotMatch(page, /const optionContracts = \[/);
   assert.doesNotMatch(page, /const recentTrades = \[/);
   assert.doesNotMatch(page, /holding\.weight \/ 31\.12/);
-  assert.match(dashboard, /<header className="portfolio-header"/);
+  assert.match(dashboard, /<header className="site-header"/);
+  assert.match(dashboard, /<section className="portfolio-overview"/);
   assert.doesNotMatch(page, /masthead|SnapshotNotice|className="(?:eyebrow|kicker)"/);
   assert.match(layout, /lang="zh-CN"/);
   assert.match(layout, /个人投资组合与持仓记录/);
@@ -154,7 +170,7 @@ test("removes the portfolio history chart while keeping supporting metrics", asy
   assert.doesNotMatch(dashboard, /PortfolioChart|className="portfolio-chart"|range-switch|历史净值正在积累/);
 });
 
-test("renders the current portfolio leverage in the header", async () => {
+test("renders the current portfolio leverage in the portfolio overview", async () => {
   const [response, snapshot] = await Promise.all([
     render(),
     readFile(new URL("../data/portfolio-snapshot.json", import.meta.url), "utf8").then(JSON.parse),
@@ -457,7 +473,7 @@ test("renders the source-backed daily portfolio review on the homepage", async (
   for (const source of review.sources) assert.match(html, new RegExp(source.url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
-test("renders the holding summary in the header without the market pulse", async () => {
+test("renders the holding summary in the portfolio overview without the market pulse", async () => {
   const [response, dashboard] = await Promise.all([
     render(),
     readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
