@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "reviewDate": "2026-08-19",
+  "generatedAt": "2026-08-19T13:14:45.000Z",
+  "portfolioSnapshotGeneratedAt": "2026-08-18T01:59:33.460Z",
+  "coverageStatus": "complete",
+  "headline": "制造活动温和扩张，今晚焦点转向 FOMC 纪要",
+  "summary": "7 月工业生产与制造业产出均环比增长 0.2%，但产能利用率仍低于长期均值。增长没有失速，也没有形成明显的产能约束；对当前组合更直接的变量仍是今晚 FOMC 纪要是否改变利率路径预期。",
+  "impacts": [
+    {
+      "eventId": "fed-industrial-production-2026-07",
+      "title": "7 月工业生产与产能利用率",
+      "fact": "美联储披露，7 月工业生产和制造业产出均增长 0.2%，总工业产出同比增长 1.1%；产能利用率升至 76.3%，仍比 1972–2025 年长期均值低 3.1 个百分点。",
+      "transmission": "温和产出增长支持经济软着陆判断，而仍有余量的产能利用率削弱了新增需求立即转化为通胀压力的概率；利率与成长股估值的净影响偏中性。",
+      "channels": ["growth", "inflation", "rates"],
+      "direction": "mixed",
+      "horizon": "immediate",
+      "confidence": "high",
+      "tickers": ["VOO", "MSFT", "NVDA", "AVGO", "MRVL"],
+      "implication": "这组数据本身不足以重定价长久期科技股；如果纪要维持对通胀的谨慎表述，10 年期收益率仍会比工业数据更直接地主导组合估值。",
+      "sourceIds": ["fed-industrial-production"]
+    },
+    {
+      "eventId": "fed-business-equipment-2026-07",
+      "title": "企业设备与国防航天产出",
+      "fact": "7 月企业设备产出增长 0.8%，其中信息处理设备走强；国防和航天设备产出增长 1.8%。",
+      "transmission": "设备和航天产出扩张为相关资本开支链条提供宏观顺风，但全国工业分类不能替代公司订单、积压或指引。",
+      "channels": ["growth"],
+      "direction": "tailwind",
+      "horizon": "near_term",
+      "confidence": "medium",
+      "tickers": ["NVDA", "AVGO", "MRVL", "RKLB", "SPCX"],
+      "implication": "把这项数据作为需求背景，而不是公司收入信号；后续仍需由订单、云资本开支和发射节奏确认。",
+      "sourceIds": ["fed-industrial-production"]
+    }
+  ],
+  "upcomingEvents": [
+    {
+      "id": "fomc-minutes-2026-07",
+      "title": "FOMC 7 月会议纪要",
+      "scheduledAt": "2026-08-19T18:00:00.000Z",
+      "importance": "high",
+      "status": "scheduled",
+      "sourceIds": ["fed-august-calendar"]
+    },
+    {
+      "id": "initial-claims-2026-08-20",
+      "title": "初请失业金人数",
+      "scheduledAt": "2026-08-20T12:30:00.000Z",
+      "importance": "medium",
+      "status": "scheduled",
+      "sourceIds": ["dol-ui-claims"]
+    },
+    {
+      "id": "new-home-sales-2026-07",
+      "title": "7 月新屋销售",
+      "scheduledAt": "2026-08-25T14:00:00.000Z",
+      "importance": "medium",
+      "status": "scheduled",
+      "sourceIds": ["census-calendar"]
+    },
+    {
+      "id": "durable-goods-2026-07",
+      "title": "7 月耐用品订单",
+      "scheduledAt": "2026-08-26T12:30:00.000Z",
+      "importance": "high",
+      "status": "scheduled",
+      "sourceIds": ["census-calendar"]
+    },
+    {
+      "id": "gdp-second-estimate-2026-q2",
+      "title": "二季度 GDP 第二次估算",
+      "scheduledAt": "2026-08-26T12:30:00.000Z",
+      "importance": "high",
+      "status": "scheduled",
+      "sourceIds": ["bea-schedule"]
+    },
+    {
+      "id": "pce-2026-07",
+      "title": "7 月个人收入、支出与 PCE",
+      "scheduledAt": "2026-08-26T12:30:00.000Z",
+      "importance": "high",
+      "status": "scheduled",
+      "sourceIds": ["bea-schedule"]
+    }
+  ],
+  "sources": [
+    {
+      "id": "fed-industrial-production",
+      "title": "Federal Reserve — Industrial Production and Capacity Utilization, July 2026",
+      "url": "https://www.federalreserve.gov/releases/g17/current/default.htm",
+      "publishedAt": "2026-08-18T13:15:00.000Z"
+    },
+    {
+      "id": "fed-august-calendar",
+      "title": "Federal Reserve — August 2026 Calendar",
+      "url": "https://www.federalreserve.gov/newsevents/2026-august.htm"
+    },
+    {
+      "id": "dol-ui-claims",
+      "title": "U.S. Department of Labor — Unemployment Insurance Weekly Claims",
+      "url": "https://www.dol.gov/newsroom/releases/eta"
+    },
+    {
+      "id": "census-calendar",
+      "title": "U.S. Census Bureau — Economic Indicator Release Schedule",
+      "url": "https://www.census.gov/economic-indicators/calendar-listview.html"
+    },
+    {
+      "id": "bea-schedule",
+      "title": "Bureau of Economic Analysis — Release Schedule",
+      "url": "https://www.bea.gov/news/schedule/full"
+    }
+  ]
+}

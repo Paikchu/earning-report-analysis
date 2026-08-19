@@ -48,6 +48,23 @@ test("uses a compact site header with portfolio and review tabs below it", async
   assert.doesNotMatch(html, /<header class="site-header"[\s\S]*?当前净值[\s\S]*?<\/header>/);
 });
 
+test("renders the independent macro dashboard without adding market charts to the homepage", async () => {
+  const [homeResponse, macroResponse] = await Promise.all([render(), render("/macro")]);
+  const [homeHtml, macroHtml] = await Promise.all([homeResponse.text(), macroResponse.text()]);
+
+  assert.equal(macroResponse.status, 200);
+  assert.doesNotMatch(homeHtml, /今日宏观影响|美债与利率|TVC:US10Y/);
+  assert.match(macroHtml, /今日宏观影响/);
+  assert.match(macroHtml, /美国大盘/);
+  assert.match(macroHtml, /美债与利率/);
+  assert.match(macroHtml, /未来七天经济事件/);
+  assert.match(macroHtml, /href="\/"[^>]*>投资组合</);
+  assert.match(macroHtml, /href="\/macro"[^>]*aria-current="page"[^>]*>宏观</);
+  for (const symbol of ["AMEX:SPY", "NASDAQ:QQQ", "AMEX:IWM", "TVC:US02Y", "TVC:US10Y", "TVC:US30Y", "NASDAQ:IEF", "NASDAQ:TLT"]) {
+    assert.match(macroHtml, new RegExp(symbol.replace(":", "(?:<!-- -->)?:")));
+  }
+});
+
 test("rejects anonymous access to accession-specific SEC reports", async () => {
   const response = await render("/positions/MSFT/sec/0000789019-26-000001");
 
@@ -56,9 +73,10 @@ test("rejects anonymous access to accession-specific SEC reports", async () => {
 });
 
 test("removes the disposable starter preview", async () => {
-  const [page, dashboard, layout, packageJson, viewModel] = await Promise.all([
+  const [page, dashboard, siteHeader, layout, packageJson, viewModel] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/site-header.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../lib/portfolio-view-model.ts", import.meta.url), "utf8"),
@@ -85,7 +103,8 @@ test("removes the disposable starter preview", async () => {
   assert.doesNotMatch(page, /const optionContracts = \[/);
   assert.doesNotMatch(page, /const recentTrades = \[/);
   assert.doesNotMatch(page, /holding\.weight \/ 31\.12/);
-  assert.match(dashboard, /<header className="site-header"/);
+  assert.match(dashboard, /<SiteHeader active="portfolio" \/>/);
+  assert.match(siteHeader, /<header className="site-header"/);
   assert.match(dashboard, /<section className="portfolio-overview"/);
   assert.doesNotMatch(page, /masthead|SnapshotNotice|className="(?:eyebrow|kicker)"/);
   assert.match(layout, /lang="zh-CN"/);

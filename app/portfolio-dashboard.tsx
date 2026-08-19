@@ -18,6 +18,7 @@ import { heatmapThemeColor, type HeatmapHolding } from "@/lib/portfolio-heatmap"
 import type { PositionGroupView } from "@/lib/portfolio-view-model";
 import { AddPlanDialog } from "./AddPlanDialog";
 import { PortfolioHeatmap } from "./portfolio-heatmap";
+import { SiteHeader } from "./site-header";
 import { useMarketQuotes, type QuoteLoadStatus } from "./use-market-quotes";
 import type { MarketQuoteMap } from "@/lib/yahoo-quotes";
 
@@ -537,13 +538,7 @@ export function PortfolioDashboard({
 
   return (
     <>
-      <header className="site-header">
-        <div className="site-brand" aria-label="MAX 投资记录">
-          <strong>MAX</strong>
-          <span>投资记录</span>
-        </div>
-        <span className="site-context">私人投资组合</span>
-      </header>
+      <SiteHeader active="portfolio" />
 
       <nav className="dashboard-tabs" role="tablist" aria-label="首页视图">
         <button aria-controls="portfolio-panel" aria-selected={activeView === "portfolio"} id="portfolio-tab" onClick={() => setActiveView("portfolio")} onKeyDown={(event) => handleViewKeyDown(event, "portfolio")} role="tab" tabIndex={activeView === "portfolio" ? 0 : -1} type="button">Portfolio</button>
