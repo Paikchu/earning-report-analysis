@@ -1,84 +1,57 @@
 {
   "version": 1,
-  "reviewDate": "2026-08-18",
-  "generatedAt": "2026-08-18T02:00:48.851Z",
-  "snapshotGeneratedAt": "2026-08-18T01:59:33.460Z",
-  "tone": "balanced",
-  "headline": "BOXX 减持把现金抬至 14.6%，为油价与 AI 财报波动提供缓冲",
-  "summary": "最新 IBKR 快照净值为 71,037.00 美元，现金约占 14.6%；BOXX 从 130 股降至 60 股，当前约占 10.0%。MSFT 仍是最大仓位，约占净值 23.7%；NVDA 正股与空头看跌期权合计净市值约占 10.3%。8 月 17 日油价上涨令美股继续从纪录高位回落，组合的防守能力因现金增加而改善，但科技与 AI 相关仓位的共同因子风险没有消失。",
+  "reviewDate": "2026-08-20",
+  "generatedAt": "2026-08-19T23:46:12.240Z",
+  "snapshotGeneratedAt": "2026-08-19T23:46:12.240Z",
+  "tone": "cautious",
+  "headline": "BOXX 退出后现金降至 12.3%，MSFT 与 AI 链集中度遇上偏鹰派利率信号",
+  "summary": "最新 IBKR 快照净值为 60,531.10 美元，现金为 7,455.83 美元，约占净值 12.3%；BOXX 已不在开放持仓中。MSFT 约占净值 28.1%，NVDA 正股与空头看跌期权合计净市值约占 11.6%。美联储 7 月会议纪要继续强调通胀上行风险，而 NVIDIA 将于 8 月 26 日发布 FY2027 第二季度业绩，本组合短期仍由利率敏感度和 AI 链共同主导。",
   "drivers": [
     {
-      "title": "现金缓冲显著增加",
-      "detail": "披露事实：8 月 17 日卖出 BOXX 共 70 股，净回笼约 8,250.93 美元；现金升至 10,382.6497 美元，约占净值 14.6%，BOXX 剩余 60 股。",
-      "implication": "组合含义：流动性和短期抗波动能力明显增强，但现金加剩余 BOXX 合计约 24.6%，后续组合表现会更取决于这部分防守资产与风险资产之间的配置节奏。",
-      "tickers": [
-        "BOXX"
-      ]
+      "title": "MSFT 集中度升至组合净值的 28.1%",
+      "detail": "披露事实：当前 MSFT 市值约 17,000.22 美元，是组合第一大仓位；美联储纪要显示名义利率上升主要由更高政策利率预期推动，AI 基础设施股票此前的升势也已停滞。",
+      "implication": "组合含义：单一股票接近三成净值，使云业务、AI 投入回报和实际利率变化都足以主导组合波动；现金缓冲只能部分对冲这种集中度。",
+      "tickers": ["MSFT"]
     },
     {
-      "title": "油价反弹重新施压成长估值",
-      "detail": "披露事实：AP 报道 8 月 17 日油价上涨推动通胀担忧升温，美股从纪录高位进一步回落，午后跌势随油价加速而扩大。",
-      "implication": "组合含义：MSFT、NVDA、AVGO、NOW 和 ORCL 等久期较长的成长仓位可能同时承受利率预期上修压力；较高现金只能缓冲，不能消除相关性。",
-      "tickers": [
-        "MSFT",
-        "NVDA",
-        "AVGO",
-        "NOW",
-        "ORCL"
-      ]
+      "title": "AI 与半导体仓位面临同一估值因子",
+      "detail": "披露事实：8 月 19 日 S&P 500 上涨 0.2%，但 Broadcom 下跌 4.6%；AP 将其归因于市场对 AI 股票估值及盈利兑现持续性的担忧。",
+      "implication": "组合含义：NVDA、AVGO、MRVL、DRAM、ORCL 与 MSFT 的基本面并不相同，但在 AI 资本开支预期转弱时可能同步承压，分散的 ticker 数量并未消除共同因子风险。",
+      "tickers": ["NVDA", "AVGO", "MRVL", "DRAM", "ORCL", "MSFT"]
     },
     {
-      "title": "NVIDIA 财报是下一项集中催化剂",
-      "detail": "披露事实：NVIDIA 将于 8 月 26 日发布 FY2027 第二季度业绩，并在美东时间下午 5 点召开电话会。",
-      "implication": "组合含义：NVDA 净市值暴露约 10.3%，其需求、毛利率和指引还会影响 AVGO、MRVL、DRAM、ORCL 与 MSFT 的 AI 资本开支预期，是组合层面的事件而非单股事件。",
-      "tickers": [
-        "NVDA",
-        "AVGO",
-        "MRVL",
-        "DRAM",
-        "ORCL",
-        "MSFT"
-      ]
-    },
-    {
-      "title": "微软集中度仍高于单一事件舒适区",
-      "detail": "披露事实：微软 FY2026 第四季度收入 900 亿美元，同比增长 18%；Azure 及其他云服务收入增长 43%，但本次 MSFT 市值仍约占组合净值 23.7%。",
-      "implication": "组合含义：基本面兑现支持持仓，但单一股票接近四分之一净值，使任何云增速、AI 投入回报或估值变化都足以主导日度盈亏。",
-      "tickers": [
-        "MSFT"
-      ]
+      "title": "NVIDIA 财报成为下一项组合级催化剂",
+      "detail": "披露事实：NVIDIA 确认将于 8 月 26 日美东时间下午 5 点讨论 FY2027 第二季度业绩，并在约下午 1:20 发布结果和 CFO 书面评论。",
+      "implication": "组合含义：NVDA 净市值暴露约占净值 11.6%，其需求、毛利率与指引还会重估本组合内多只 AI 基础设施和企业软件持仓。",
+      "tickers": ["NVDA", "AVGO", "MRVL", "DRAM", "ORCL", "MSFT"]
     }
   ],
   "watchItems": [
     {
-      "label": "8 月 19 日 FOMC 纪要",
-      "detail": "关注委员对通胀、能源冲击和加息分歧的表述，判断油价上涨是否会强化高利率持续时间风险。"
+      "label": "核对净值变化的资金属性",
+      "detail": "本次净值和现金较前次快照明显下降，且 BOXX 已退出开放持仓；在没有入出金明细前，不把全部变化归因于市场盈亏。"
     },
     {
       "label": "8 月 26 日 NVIDIA 财报",
-      "detail": "重点核对数据中心需求、毛利率、供应约束和下一季指引，避免只依据股价反应判断 AI 链基本面。"
+      "detail": "重点核对数据中心需求、毛利率、供应约束及下一季指引，并观察 AVGO、MRVL、DRAM、ORCL 与 MSFT 的联动。"
     },
     {
-      "label": "区分现金与 BOXX 的用途",
-      "detail": "现金约 14.6%、BOXX 约 10.0%；两者都降低波动，但流动性、收益与再配置约束不同，应分别观察。"
+      "label": "更高利率对成长仓位的压力",
+      "detail": "纪要显示许多委员认为通胀若不下降可能需要更高利率；关注长端收益率是否继续抬升组合的估值折现压力。"
     }
   ],
   "sources": [
     {
-      "title": "AP: US stocks edge further from records as oil rises",
-      "url": "https://apnews.com/article/bf398d5a01f611921c0b48a8bfc884d9"
+      "title": "Federal Reserve: Minutes of the July 28-29, 2026 FOMC meeting",
+      "url": "https://www.federalreserve.gov/monetarypolicy/files/fomcminutes20260729.pdf"
+    },
+    {
+      "title": "AP: US stocks halt their slide as Treasury eases bond-market pressure",
+      "url": "https://apnews.com/article/stocks-futures-bonds-oil-inflation-trump-ai-9e355be634e4a21059fc1d1f20a1239e"
     },
     {
       "title": "NVIDIA sets FY2027 Q2 earnings call",
       "url": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Sets-Conference-Call-for-Second-Quarter-Financial-Results/default.aspx"
-    },
-    {
-      "title": "Federal Reserve August 2026 calendar",
-      "url": "https://www.federalreserve.gov/newsevents/2026-august.htm"
-    },
-    {
-      "title": "AP: Microsoft AI spending translates into profits",
-      "url": "https://apnews.com/article/99b5702d93a2b5c6e513fb952ccdcc92"
     }
   ]
 }

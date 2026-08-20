@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-18T01:59:33.460Z",
+  "generatedAt": "2026-08-19T23:46:12.240Z",
   "account": {
     "currency": "USD",
-    "netLiquidation": 71037,
-    "cashBalance": 10382.6497,
+    "netLiquidation": 60531.1,
+    "cashBalance": 7455.8301,
     "netDeposits": 70000
   },
   "positions": [
@@ -15,22 +15,10 @@
       "assetClass": "STK",
       "quantity": 7.0061,
       "averagePrice": 384.11674113,
-      "marketPrice": 390.8800049,
-      "marketValue": 2738.54440233,
+      "marketPrice": 367.41000365,
+      "marketValue": 2574.11122657,
       "costBasis": 2691.160300030893,
-      "unrealizedPnl": 47.38410233
-    },
-    {
-      "positionKey": "STK:604408720",
-      "symbol": "BOXX",
-      "contractDescription": "BOXX",
-      "assetClass": "STK",
-      "quantity": 60,
-      "averagePrice": 117.04128385,
-      "marketPrice": 117.87999725,
-      "marketValue": 7072.799835,
-      "costBasis": 7022.477031,
-      "unrealizedPnl": 50.32280425
+      "unrealizedPnl": -117.04907343
     },
     {
       "positionKey": "STK:870556708",
@@ -39,10 +27,10 @@
       "assetClass": "STK",
       "quantity": 70,
       "averagePrice": 62.19048714,
-      "marketPrice": 59.70000075,
-      "marketValue": 4179.0000525,
+      "marketPrice": 56.63000105,
+      "marketValue": 3964.1000735,
       "costBasis": 4353.3340998,
-      "unrealizedPnl": -174.3340475
+      "unrealizedPnl": -389.2340265
     },
     {
       "positionKey": "OPT:845712739",
@@ -51,10 +39,10 @@
       "assetClass": "OPT",
       "quantity": -1,
       "averagePrice": 5.489521,
-      "marketPrice": 2.0835843,
-      "marketValue": -208.35843,
+      "marketPrice": 2.9100001,
+      "marketValue": -291.00001,
       "costBasis": -548.9521,
-      "unrealizedPnl": 340.59367
+      "unrealizedPnl": 257.95209
     },
     {
       "positionKey": "STK:483492393",
@@ -63,10 +51,10 @@
       "assetClass": "STK",
       "quantity": 5.001,
       "averagePrice": 267.65658868,
-      "marketPrice": 231.4600067,
-      "marketValue": 1157.53149351,
+      "marketPrice": 241.5,
+      "marketValue": 1207.7415,
       "costBasis": 1338.5505999886802,
-      "unrealizedPnl": -181.01910649
+      "unrealizedPnl": -130.8091
     },
     {
       "positionKey": "STK:272093",
@@ -75,10 +63,10 @@
       "assetClass": "STK",
       "quantity": 35.0455,
       "averagePrice": 429.83701474,
-      "marketPrice": 479.6499939,
-      "marketValue": 16809.57386122,
+      "marketPrice": 485.08999635,
+      "marketValue": 17000.22146708,
       "costBasis": 15063.853100070668,
-      "unrealizedPnl": 1745.72076122
+      "unrealizedPnl": 1936.36836708
     },
     {
       "positionKey": "STK:272110",
@@ -87,10 +75,10 @@
       "assetClass": "STK",
       "quantity": 13,
       "averagePrice": 118.95311538,
-      "marketPrice": 97.05999755,
-      "marketValue": 1261.77996815,
+      "marketPrice": 107.84999845,
+      "marketValue": 1402.04997985,
       "costBasis": 1546.39049994,
-      "unrealizedPnl": -284.61053185
+      "unrealizedPnl": -144.34052015
     },
     {
       "positionKey": "STK:109911821",
@@ -99,10 +87,10 @@
       "assetClass": "STK",
       "quantity": 20,
       "averagePrice": 107.699015,
-      "marketPrice": 116.80000305,
-      "marketValue": 2336.000061,
+      "marketPrice": 127.0299988,
+      "marketValue": 2540.599976,
       "costBasis": 2153.9803,
-      "unrealizedPnl": 182.019761
+      "unrealizedPnl": 386.619676
     },
     {
       "positionKey": "STK:4815747",
@@ -111,10 +99,10 @@
       "assetClass": "STK",
       "quantity": 35.0179,
       "averagePrice": 203.64195169,
-      "marketPrice": 224.2100067,
-      "marketValue": 7851.36359362,
+      "marketPrice": 219.0099945,
+      "marketValue": 7669.2700864,
       "costBasis": 7131.113500085251,
-      "unrealizedPnl": 720.25009362
+      "unrealizedPnl": 538.1565864
     },
     {
       "positionKey": "OPT:730765112",
@@ -123,10 +111,10 @@
       "assetClass": "OPT",
       "quantity": -1,
       "averagePrice": 17.339127,
-      "marketPrice": 5.4468298,
-      "marketValue": -544.68298,
+      "marketPrice": 6.5107584,
+      "marketValue": -651.07584,
       "costBasis": -1733.9127,
-      "unrealizedPnl": 1189.22972
+      "unrealizedPnl": 1082.83686
     },
     {
       "positionKey": "STK:272800",
@@ -135,10 +123,10 @@
       "assetClass": "STK",
       "quantity": 32.0655,
       "averagePrice": 142.4036862,
-      "marketPrice": 145.47999575,
-      "marketValue": 4664.88880372,
+      "marketPrice": 145.05999755,
+      "marketValue": 4651.42135144,
       "costBasis": 4566.245399846101,
-      "unrealizedPnl": 98.64340372
+      "unrealizedPnl": 85.17595144
     },
     {
       "positionKey": "STK:787273575",
@@ -147,10 +135,10 @@
       "assetClass": "STK",
       "quantity": 15,
       "averagePrice": 81.52225333,
-      "marketPrice": 81.15000155,
-      "marketValue": 1217.25002325,
+      "marketPrice": 76.5299988,
+      "marketValue": 1147.949982,
       "costBasis": 1222.83379995,
-      "unrealizedPnl": -5.58377675
+      "unrealizedPnl": -74.883818
     },
     {
       "positionKey": "STK:890493863",
@@ -159,10 +147,10 @@
       "assetClass": "STK",
       "quantity": 15,
       "averagePrice": 124.75890667,
-      "marketPrice": 144.25,
-      "marketValue": 2163.75,
+      "marketPrice": 139.25,
+      "marketValue": 2088.75,
       "costBasis": 1871.38360005,
-      "unrealizedPnl": 292.3664
+      "unrealizedPnl": 217.3664
     },
     {
       "positionKey": "STK:76792991",
@@ -171,10 +159,10 @@
       "assetClass": "STK",
       "quantity": 16,
       "averagePrice": 385.39089375,
-      "marketPrice": 338.3999939,
-      "marketValue": 5414.3999024,
+      "marketPrice": 350.7999878,
+      "marketValue": 5612.7998048,
       "costBasis": 6166.2543,
-      "unrealizedPnl": -751.8543976
+      "unrealizedPnl": -553.4544952
     },
     {
       "positionKey": "STK:136155102",
@@ -183,13 +171,28 @@
       "assetClass": "STK",
       "quantity": 6,
       "averagePrice": 709.99628333,
-      "marketPrice": 709.52001955,
-      "marketValue": 4257.1201173,
+      "marketPrice": 708.1300049,
+      "marketValue": 4248.7800294,
       "costBasis": 4259.97769998,
-      "unrealizedPnl": -2.8575827
+      "unrealizedPnl": -11.1976706
     }
   ],
   "trades": [
+    {
+      "tradeId": "0000d62f.6a85a4f1.01.01",
+      "tradeTime": "2026-08-19T15:25:22.000Z",
+      "symbol": "BOXX",
+      "contractDescription": "ALPHA ARCHITECT 1-3 MNTH BOX",
+      "securityType": "STK",
+      "side": "SELL",
+      "size": 60,
+      "price": 117.895,
+      "commission": 0.519855,
+      "netAmount": 7073.7,
+      "realizedPnl": 50.703145,
+      "exchange": "IBKRATS",
+      "orderId": "1345631055"
+    },
     {
       "tradeId": "00030e5e.6e5a4010.01.01",
       "tradeTime": "2026-08-17T15:13:00.000Z",
@@ -5444,7 +5447,7 @@
   "tradeSync": {
     "status": "current",
     "queryPeriod": "DAYS_7",
-    "lastSuccessfulTradeAt": "2026-08-17T15:13:00.000Z",
+    "lastSuccessfulTradeAt": "2026-08-19T15:25:22.000Z",
     "message": null
   }
 }
