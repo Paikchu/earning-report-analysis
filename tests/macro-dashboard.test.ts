@@ -101,13 +101,14 @@ test("defines the fixed TradingView universes and locked technical-analysis conf
   const tradingView = await loadModule<typeof import("../lib/tradingview.ts")>("../lib/tradingview.ts");
 
   assert.deepEqual(tradingView.EQUITY_CHARTS.map((item) => item.symbol), ["AMEX:SPY", "NASDAQ:QQQ", "AMEX:IWM"]);
-  assert.deepEqual(tradingView.BOND_CHARTS.map((item) => item.symbol), ["TVC:US02Y", "TVC:US10Y", "TVC:US30Y", "NASDAQ:IEF", "NASDAQ:TLT"]);
-  const config = tradingView.buildTradingViewConfig("TVC:US10Y");
-  assert.equal(config.symbol, "TVC:US10Y");
+  assert.deepEqual(tradingView.BOND_CHARTS.map((item) => item.symbol), ["NASDAQ:SHY", "NASDAQ:IEF", "NASDAQ:TLT"]);
+  const config = tradingView.buildTradingViewConfig("NASDAQ:IEF");
+  assert.equal(config.symbol, "NASDAQ:IEF");
   assert.equal(config.interval, "D");
   assert.equal(config.range, "12M");
   assert.equal(config.allow_symbol_change, false);
   assert.deepEqual(config.studies, ["MASimple@tv-basicstudies", "StochasticRSI@tv-basicstudies", "ROC@tv-basicstudies"]);
+  assert.throws(() => tradingView.buildTradingViewConfig("TVC:US10Y"), /不支持/);
   assert.throws(() => tradingView.buildTradingViewConfig("NASDAQ:NVDA"), /不支持/);
 });
 

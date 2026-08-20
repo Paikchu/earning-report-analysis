@@ -153,7 +153,7 @@ export function MacroDashboard({ dashboard }: { dashboard: MacroDashboardV1 }) {
 
       <section className="macro-chart-grid" aria-label="市场与利率走势">
         <ChartPanel charts={EQUITY_CHARTS} initialSymbol="AMEX:SPY" note="EQUITY" title="美国大盘" />
-        <ChartPanel charts={BOND_CHARTS} initialSymbol="TVC:US10Y" note="RATES" title="美债与利率" />
+        <ChartPanel charts={BOND_CHARTS} initialSymbol="NASDAQ:IEF" note="RATES PROXY" title="美债期限 ETF" />
       </section>
 
       <section className="macro-events" aria-labelledby="macro-events-title">

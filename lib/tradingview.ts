@@ -11,9 +11,7 @@ export const EQUITY_CHARTS: TradingViewChart[] = [
 ];
 
 export const BOND_CHARTS: TradingViewChart[] = [
-  { symbol: "TVC:US02Y", label: "2Y", description: "美国 2 年期国债收益率" },
-  { symbol: "TVC:US10Y", label: "10Y", description: "美国 10 年期国债收益率" },
-  { symbol: "TVC:US30Y", label: "30Y", description: "美国 30 年期国债收益率" },
+  { symbol: "NASDAQ:SHY", label: "SHY", description: "1–3 年美债 ETF" },
   { symbol: "NASDAQ:IEF", label: "IEF", description: "7–10 年美债 ETF" },
   { symbol: "NASDAQ:TLT", label: "TLT", description: "20 年以上美债 ETF" },
 ];

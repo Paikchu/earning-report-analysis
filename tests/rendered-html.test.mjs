@@ -53,16 +53,17 @@ test("renders the independent macro dashboard without adding market charts to th
   const [homeHtml, macroHtml] = await Promise.all([homeResponse.text(), macroResponse.text()]);
 
   assert.equal(macroResponse.status, 200);
-  assert.doesNotMatch(homeHtml, /今日宏观影响|美债与利率|TVC:US10Y/);
+  assert.doesNotMatch(homeHtml, /今日宏观影响|美债期限 ETF|TVC:US10Y/);
   assert.match(macroHtml, /今日宏观影响/);
   assert.match(macroHtml, /美国大盘/);
-  assert.match(macroHtml, /美债与利率/);
+  assert.match(macroHtml, /美债期限 ETF/);
   assert.match(macroHtml, /未来七天经济事件/);
   assert.match(macroHtml, /href="\/"[^>]*>投资组合</);
   assert.match(macroHtml, /href="\/macro"[^>]*aria-current="page"[^>]*>宏观</);
-  for (const symbol of ["AMEX:SPY", "NASDAQ:QQQ", "AMEX:IWM", "TVC:US02Y", "TVC:US10Y", "TVC:US30Y", "NASDAQ:IEF", "NASDAQ:TLT"]) {
+  for (const symbol of ["AMEX:SPY", "NASDAQ:QQQ", "AMEX:IWM", "NASDAQ:SHY", "NASDAQ:IEF", "NASDAQ:TLT"]) {
     assert.match(macroHtml, new RegExp(symbol.replace(":", "(?:<!-- -->)?:")));
   }
+  assert.doesNotMatch(macroHtml, /TVC:US(?:02|10|30)Y/);
 });
 
 test("rejects anonymous access to accession-specific SEC reports", async () => {
