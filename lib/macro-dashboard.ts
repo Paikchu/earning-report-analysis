@@ -52,6 +52,8 @@ const directions = new Set(["tailwind", "headwind", "mixed", "unclear"]);
 const horizons = new Set(["immediate", "near_term", "medium_term"]);
 const confidences = new Set(["high", "medium", "low"]);
 const channels = new Set(["rates", "inflation", "growth", "liquidity", "usd", "volatility"]);
+const snapshotMismatchError = "portfolioSnapshotGeneratedAt 必须匹配当前持仓快照。";
+const snapshotDelayNote = "组合影响基于上一份持仓快照，最新持仓变化尚未纳入。";
 
 export function validateMacroDashboard(dashboard: unknown, snapshot: PortfolioSnapshotV1): string[] {
   const errors: string[] = [];
@@ -66,7 +68,7 @@ export function validateMacroDashboard(dashboard: unknown, snapshot: PortfolioSn
     shanghaiDate(dashboard.generatedAt) !== dashboard.reviewDate
   ) errors.push("reviewDate 必须匹配 generatedAt 的上海日期。");
   if (dashboard.portfolioSnapshotGeneratedAt !== snapshot.generatedAt) {
-    errors.push("portfolioSnapshotGeneratedAt 必须匹配当前持仓快照。");
+    errors.push(snapshotMismatchError);
   }
   if (!coverageStatuses.has(String(dashboard.coverageStatus))) errors.push("coverageStatus 无效。");
   if (dashboard.coverageStatus === "partial" && !isUsefulText(dashboard.coverageNote)) {
@@ -82,6 +84,25 @@ export function validateMacroDashboard(dashboard: unknown, snapshot: PortfolioSn
   validateEvents(dashboard.upcomingEvents, dashboard.reviewDate, sourceIds, errors);
 
   return errors;
+}
+
+export function prepareMacroDashboardForDisplay(
+  dashboard: MacroDashboardV1,
+  snapshot: PortfolioSnapshotV1,
+): { dashboard: MacroDashboardV1; errors: string[] } {
+  const errors = validateMacroDashboard(dashboard, snapshot);
+  if (errors.length !== 1 || errors[0] !== snapshotMismatchError) return { dashboard, errors };
+
+  return {
+    dashboard: {
+      ...dashboard,
+      coverageStatus: "partial",
+      coverageNote: dashboard.coverageNote
+        ? `${dashboard.coverageNote} ${snapshotDelayNote}`
+        : snapshotDelayNote,
+    },
+    errors: [],
+  };
 }
 
 function validateSources(value: unknown, errors: string[]): Map<string, string | undefined> {
