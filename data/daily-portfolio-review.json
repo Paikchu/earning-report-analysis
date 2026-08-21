@@ -1,57 +1,67 @@
 {
   "version": 1,
-  "reviewDate": "2026-08-20",
-  "generatedAt": "2026-08-19T23:46:12.240Z",
-  "snapshotGeneratedAt": "2026-08-19T23:46:12.240Z",
+  "reviewDate": "2026-08-21",
+  "generatedAt": "2026-08-21T07:34:38.541Z",
+  "snapshotGeneratedAt": "2026-08-21T07:34:38.541Z",
   "tone": "cautious",
-  "headline": "BOXX 退出后现金降至 12.3%，MSFT 与 AI 链集中度遇上偏鹰派利率信号",
-  "summary": "最新 IBKR 快照净值为 60,531.10 美元，现金为 7,455.83 美元，约占净值 12.3%；BOXX 已不在开放持仓中。MSFT 约占净值 28.1%，NVDA 正股与空头看跌期权合计净市值约占 11.6%。美联储 7 月会议纪要继续强调通胀上行风险，而 NVIDIA 将于 8 月 26 日发布 FY2027 第二季度业绩，本组合短期仍由利率敏感度和 AI 链共同主导。",
+  "headline": "RKLB 退出并转向 META、SPCX，组合仍由 MSFT 与 NVIDIA 财报风险主导",
+  "summary": "最新 IBKR 快照净值为 60,208.50 美元，现金为 7,338.80 美元，约占净值 12.2%。8 月 20 日组合卖出全部 15 股 RKLB，新买 1 股 META，并将 SPCX 增至 20 股；这次轮换没有改变核心集中度：MSFT 仍约占净值 28.0%，NVDA 正股与空头看跌期权合计净市值约占 11.6%。长端利率再度上行压低美股，而 NVIDIA 将于 8 月 26 日公布业绩，组合短期仍偏向利率和 AI 资本开支的共同因子。",
   "drivers": [
     {
-      "title": "MSFT 集中度升至组合净值的 28.1%",
-      "detail": "披露事实：当前 MSFT 市值约 17,000.22 美元，是组合第一大仓位；美联储纪要显示名义利率上升主要由更高政策利率预期推动，AI 基础设施股票此前的升势也已停滞。",
-      "implication": "组合含义：单一股票接近三成净值，使云业务、AI 投入回报和实际利率变化都足以主导组合波动；现金缓冲只能部分对冲这种集中度。",
-      "tickers": ["MSFT"]
+      "title": "航天敞口从 RKLB 转向 SPCX",
+      "detail": "披露事实：8 月 20 日卖出 RKLB 15 股，成交金额约 1,082.10 美元并确认约 141.09 美元已实现亏损；同日买入 SPCX 5 股后，SPCX 增至 20 股，当前市值约 2,699.60 美元。",
+      "implication": "组合含义：航天主题没有退出，而是集中到 SPCX；当前约占净值 4.5%，主题风险更集中，但对总组合的影响仍显著低于 MSFT 和 NVDA。",
+      "tickers": ["SPCX"]
     },
     {
-      "title": "AI 与半导体仓位面临同一估值因子",
-      "detail": "披露事实：8 月 19 日 S&P 500 上涨 0.2%，但 Broadcom 下跌 4.6%；AP 将其归因于市场对 AI 股票估值及盈利兑现持续性的担忧。",
-      "implication": "组合含义：NVDA、AVGO、MRVL、DRAM、ORCL 与 MSFT 的基本面并不相同，但在 AI 资本开支预期转弱时可能同步承压，分散的 ticker 数量并未消除共同因子风险。",
-      "tickers": ["NVDA", "AVGO", "MRVL", "DRAM", "ORCL", "MSFT"]
+      "title": "META 新仓规模小，基本面与资本开支更重要",
+      "detail": "披露事实：组合新买入 META 1 股，当前约占净值 0.9%。Meta 第二季度收入同比增长 28%，但营业利润率从 43% 降至 31%，并将 2026 年资本开支指引收窄至 1,300 亿至 1,450 亿美元。",
+      "implication": "组合含义：META 目前不足以主导净值，但其高资本开支既压缩自身现金流，也支撑 NVDA、AVGO、MRVL、ORCL 与 MSFT 所处的 AI 基础设施需求链。",
+      "tickers": ["META", "NVDA", "AVGO", "MRVL", "ORCL", "MSFT"]
     },
     {
-      "title": "NVIDIA 财报成为下一项组合级催化剂",
-      "detail": "披露事实：NVIDIA 确认将于 8 月 26 日美东时间下午 5 点讨论 FY2027 第二季度业绩，并在约下午 1:20 发布结果和 CFO 书面评论。",
-      "implication": "组合含义：NVDA 净市值暴露约占净值 11.6%，其需求、毛利率与指引还会重估本组合内多只 AI 基础设施和企业软件持仓。",
+      "title": "长端利率重新压制高估值仓位",
+      "detail": "披露事实：AP 报道 8 月 20 日债券市场重新担忧通胀、油价与政府债务，S&P 500 下跌 0.9%，纳斯达克下跌 1.0%。",
+      "implication": "组合含义：MSFT 单一仓位约占净值 28.0%，加上 NOW、ORCL、META 和半导体仓位，使实际利率上升仍可能通过估值折现同时放大多只持仓的波动。",
+      "tickers": ["MSFT", "NOW", "ORCL", "META", "NVDA", "AVGO", "MRVL", "DRAM"]
+    },
+    {
+      "title": "NVIDIA 财报仍是下一项组合级催化剂",
+      "detail": "披露事实：NVIDIA 将于 8 月 26 日美东时间下午 5 点讨论 FY2027 第二季度业绩，并在约下午 1:20 发布结果和 CFO 书面评论。",
+      "implication": "组合含义：NVDA 净市值暴露约占净值 11.6%，财报中的需求、毛利率与指引还会重估本组合内多只 AI 基础设施和企业软件持仓。",
       "tickers": ["NVDA", "AVGO", "MRVL", "DRAM", "ORCL", "MSFT"]
     }
   ],
   "watchItems": [
     {
-      "label": "核对净值变化的资金属性",
-      "detail": "本次净值和现金较前次快照明显下降，且 BOXX 已退出开放持仓；在没有入出金明细前，不把全部变化归因于市场盈亏。"
-    },
-    {
       "label": "8 月 26 日 NVIDIA 财报",
       "detail": "重点核对数据中心需求、毛利率、供应约束及下一季指引，并观察 AVGO、MRVL、DRAM、ORCL 与 MSFT 的联动。"
     },
     {
-      "label": "更高利率对成长仓位的压力",
-      "detail": "纪要显示许多委员认为通胀若不下降可能需要更高利率；关注长端收益率是否继续抬升组合的估值折现压力。"
+      "label": "META 资本开支与利润率",
+      "detail": "新仓虽小，但 META 的 AI 投资强度会同时影响自身自由现金流和组合内算力、网络与云基础设施需求。"
+    },
+    {
+      "label": "现金与集中度",
+      "detail": "现金约占 12.2%，MSFT 约占 28.0%；若长端收益率继续上行，现金缓冲不足以完全抵消第一大仓位的估值波动。"
     }
   ],
   "sources": [
     {
-      "title": "Federal Reserve: Minutes of the July 28-29, 2026 FOMC meeting",
-      "url": "https://www.federalreserve.gov/monetarypolicy/files/fomcminutes20260729.pdf"
+      "title": "AP: The bond market swings back to worries and knocks US stocks lower",
+      "url": "https://apnews.com/article/1dcf7c9c3cc490b82b2632302628c46b"
     },
     {
-      "title": "AP: US stocks halt their slide as Treasury eases bond-market pressure",
-      "url": "https://apnews.com/article/stocks-futures-bonds-oil-inflation-trump-ai-9e355be634e4a21059fc1d1f20a1239e"
+      "title": "Meta reports second quarter 2026 results",
+      "url": "https://investor.atmeta.com/investor-news/press-release-details/2026/Meta-Reports-Second-Quarter-2026-Results/default.aspx"
     },
     {
       "title": "NVIDIA sets FY2027 Q2 earnings call",
       "url": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Sets-Conference-Call-for-Second-Quarter-Financial-Results/default.aspx"
+    },
+    {
+      "title": "Federal Reserve: Minutes of the July 28-29, 2026 FOMC meeting",
+      "url": "https://www.federalreserve.gov/monetarypolicy/files/fomcminutes20260729.pdf"
     }
   ]
 }
