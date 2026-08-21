@@ -1,56 +1,40 @@
 {
   "version": 1,
-  "reviewDate": "2026-08-19",
-  "generatedAt": "2026-08-19T13:14:45.000Z",
-  "portfolioSnapshotGeneratedAt": "2026-08-18T01:59:33.460Z",
+  "reviewDate": "2026-08-21",
+  "generatedAt": "2026-08-21T07:21:16.000Z",
+  "portfolioSnapshotGeneratedAt": "2026-08-19T23:46:12.240Z",
   "coverageStatus": "complete",
-  "headline": "制造活动温和扩张，今晚焦点转向 FOMC 纪要",
-  "summary": "7 月工业生产与制造业产出均环比增长 0.2%，但产能利用率仍低于长期均值。增长没有失速，也没有形成明显的产能约束；对当前组合更直接的变量仍是今晚 FOMC 纪要是否改变利率路径预期。",
+  "headline": "初请回落，30 年期 TIPS 实际收益率定于 2.973%",
+  "summary": "截至 8 月 15 日当周初请失业金人数降至 20.6 万，但截至 8 月 8 日当周持续申领人数升至 179.9 万；30 年期 TIPS 增发以 2.973% 的实际收益率成交，投标倍数为 2.82。裁员压力仍低，但再就业速度偏慢的风险没有消失；长期实际贴现率仍约束成长股估值，较高的间接投标吸收比例则缓和了当日供给压力。",
   "impacts": [
     {
-      "eventId": "fed-industrial-production-2026-07",
-      "title": "7 月工业生产与产能利用率",
-      "fact": "美联储披露，7 月工业生产和制造业产出均增长 0.2%，总工业产出同比增长 1.1%；产能利用率升至 76.3%，仍比 1972–2025 年长期均值低 3.1 个百分点。",
-      "transmission": "温和产出增长支持经济软着陆判断，而仍有余量的产能利用率削弱了新增需求立即转化为通胀压力的概率；利率与成长股估值的净影响偏中性。",
-      "channels": ["growth", "inflation", "rates"],
+      "eventId": "dol-weekly-claims-2026-08-20",
+      "title": "每周失业金申请",
+      "fact": "美国劳工部披露，截至 8 月 15 日当周，季调后初请失业金人数为 20.6 万，较前值下降 0.6 万；四周移动平均为 20.4 万，上升 0.425 万。截至 8 月 8 日当周，持续申领人数为 179.9 万，上升 1.8 万，参保失业率维持 1.2%。",
+      "transmission": "初请回落说明新增裁员仍受控，支持短期增长；持续申领上升则指向再就业吸收偏慢。前者降低立即宽松的必要性，后者增加未来消费和就业走弱的风险，利率传导方向并不单一。",
+      "channels": ["growth", "rates"],
       "direction": "mixed",
-      "horizon": "immediate",
+      "horizon": "near_term",
       "confidence": "high",
-      "tickers": ["VOO", "MSFT", "NVDA", "AVGO", "MRVL"],
-      "implication": "这组数据本身不足以重定价长久期科技股；如果纪要维持对通胀的谨慎表述，10 年期收益率仍会比工业数据更直接地主导组合估值。",
-      "sourceIds": ["fed-industrial-production"]
+      "tickers": ["VOO", "MSFT", "NVDA", "AVGO", "NOW", "TSLA"],
+      "implication": "组合的短期增长背景仍稳定，但长久期科技股没有获得明确的降息顺风；后续需要由就业报告和 PCE 确认方向。",
+      "sourceIds": ["dol-weekly-claims-2026-08-20"]
     },
     {
-      "eventId": "fed-business-equipment-2026-07",
-      "title": "企业设备与国防航天产出",
-      "fact": "7 月企业设备产出增长 0.8%，其中信息处理设备走强；国防和航天设备产出增长 1.8%。",
-      "transmission": "设备和航天产出扩张为相关资本开支链条提供宏观顺风，但全国工业分类不能替代公司订单、积压或指引。",
-      "channels": ["growth"],
-      "direction": "tailwind",
-      "horizon": "near_term",
+      "eventId": "treasury-30y-tips-auction-2026-08-20",
+      "title": "30 年期 TIPS 增发拍卖",
+      "fact": "美国财政部披露，剩余期限 29 年 6 个月的 TIPS 增发拍卖以 2.973% 的最高实际收益率成交，投标倍数为 2.82；间接投标人获配 67.076 亿美元，占竞争性获配 79.427 亿美元的约 84%。",
+      "transmission": "2.973% 的长期实际收益率提高远期现金流的贴现门槛，对长久期资产不利；间接投标人吸收大部分竞争性获配，降低了拍卖供给在当日进一步放大利率波动的风险。",
+      "channels": ["rates", "inflation", "volatility"],
+      "direction": "mixed",
+      "horizon": "immediate",
       "confidence": "medium",
-      "tickers": ["NVDA", "AVGO", "MRVL", "RKLB", "SPCX"],
-      "implication": "把这项数据作为需求背景，而不是公司收入信号；后续仍需由订单、云资本开支和发射节奏确认。",
-      "sourceIds": ["fed-industrial-production"]
+      "tickers": ["VOO", "MSFT", "NVDA", "AVGO", "MRVL", "NOW", "TSLA"],
+      "implication": "实际利率仍是组合估值的主要逆风，但本次拍卖结果没有显示出明显的需求断层；继续观察长端实际收益率能否维持稳定。",
+      "sourceIds": ["treasury-30y-tips-auction-2026-08-20"]
     }
   ],
   "upcomingEvents": [
-    {
-      "id": "fomc-minutes-2026-07",
-      "title": "FOMC 7 月会议纪要",
-      "scheduledAt": "2026-08-19T18:00:00.000Z",
-      "importance": "high",
-      "status": "scheduled",
-      "sourceIds": ["fed-august-calendar"]
-    },
-    {
-      "id": "initial-claims-2026-08-20",
-      "title": "初请失业金人数",
-      "scheduledAt": "2026-08-20T12:30:00.000Z",
-      "importance": "medium",
-      "status": "scheduled",
-      "sourceIds": ["dol-ui-claims"]
-    },
     {
       "id": "new-home-sales-2026-07",
       "title": "7 月新屋销售",
@@ -82,24 +66,28 @@
       "importance": "high",
       "status": "scheduled",
       "sourceIds": ["bea-schedule"]
+    },
+    {
+      "id": "initial-claims-2026-08-27",
+      "title": "初请失业金人数",
+      "scheduledAt": "2026-08-27T12:30:00.000Z",
+      "importance": "medium",
+      "status": "scheduled",
+      "sourceIds": ["dol-claims-schedule"]
     }
   ],
   "sources": [
     {
-      "id": "fed-industrial-production",
-      "title": "Federal Reserve — Industrial Production and Capacity Utilization, July 2026",
-      "url": "https://www.federalreserve.gov/releases/g17/current/default.htm",
-      "publishedAt": "2026-08-18T13:15:00.000Z"
+      "id": "dol-weekly-claims-2026-08-20",
+      "title": "U.S. Department of Labor — Unemployment Insurance Weekly Claims, August 20, 2026",
+      "url": "https://www.dol.gov/newsroom/releases/eta/eta20260820",
+      "publishedAt": "2026-08-20T12:30:00.000Z"
     },
     {
-      "id": "fed-august-calendar",
-      "title": "Federal Reserve — August 2026 Calendar",
-      "url": "https://www.federalreserve.gov/newsevents/2026-august.htm"
-    },
-    {
-      "id": "dol-ui-claims",
-      "title": "U.S. Department of Labor — Unemployment Insurance Weekly Claims",
-      "url": "https://www.dol.gov/newsroom/releases/eta"
+      "id": "treasury-30y-tips-auction-2026-08-20",
+      "title": "U.S. Treasury — 29-Year 6-Month TIPS Auction Results, August 20, 2026",
+      "url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260820_3.pdf",
+      "publishedAt": "2026-08-20T17:00:00.000Z"
     },
     {
       "id": "census-calendar",
@@ -110,6 +98,11 @@
       "id": "bea-schedule",
       "title": "Bureau of Economic Analysis — Release Schedule",
       "url": "https://www.bea.gov/news/schedule/full"
+    },
+    {
+      "id": "dol-claims-schedule",
+      "title": "U.S. Department of Labor — Weekly Claims Publication Schedule",
+      "url": "https://oui.doleta.gov/unemploy/claims_arch.asp"
     }
   ]
 }
