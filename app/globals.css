@@ -334,29 +334,25 @@ h2 {
 .portfolio-analysis > .heatmap-section .heatmap-key { order: 2; }
 .portfolio-analysis > .heatmap-section .heatmap-plot { order: 3; }
 
-.allocation-tabs {
-  width: fit-content;
-  margin-bottom: 18px;
-  display: flex;
-  border: 1px solid var(--ink);
+.allocation-comparison {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 26px;
 }
 
-.allocation-tabs button {
-  min-width: 72px;
-  min-height: 44px;
-  padding: 0 16px;
-  color: var(--ink-muted);
-  border: 0;
-  background: transparent;
+.allocation-mode-panel {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.allocation-mode-panel h3 {
+  margin: 0;
+  color: var(--ink-soft);
   font: 650 12px/1 var(--sans);
-  cursor: pointer;
+  letter-spacing: .06em;
 }
-
-.allocation-tabs button + button { border-left: 1px solid var(--ink); }
-.allocation-tabs button[aria-selected="true"] { color: var(--paper); background: var(--ink); }
-.allocation-tabpanels { min-height: 170px; display: grid; }
-.allocation-tabpanel { min-width: 0; grid-area: 1 / 1; }
-.allocation-tabpanel[data-active="false"] { visibility: hidden; pointer-events: none; }
 
 .section-divider {
   width: 100%;

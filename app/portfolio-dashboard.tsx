@@ -22,8 +22,6 @@ import { SiteHeader } from "./site-header";
 import { useMarketQuotes, type QuoteLoadStatus } from "./use-market-quotes";
 import type { MarketQuoteMap } from "@/lib/yahoo-quotes";
 
-type AllocationMode = "holding" | "sector";
-const allocationModes: AllocationMode[] = ["holding", "sector"];
 type DashboardView = "portfolio" | "review";
 
 function Pnl({ value }: { value: number }) {
@@ -315,62 +313,17 @@ function AllocationPanel({
   activeSymbol: string | null;
   onActiveSymbolChange: (symbol: string | null) => void;
 }) {
-  const [mode, setMode] = useState<AllocationMode>("holding");
-
   return (
-    <>
-      <div className="allocation-tabs" role="tablist" aria-label="仓位占比口径">
-        {allocationModes.map((value) => (
-          <button
-            aria-controls={`allocation-panel-${value}`}
-            aria-selected={mode === value}
-            id={`allocation-tab-${value}`}
-            key={value}
-            onClick={() => setMode(value)}
-            onKeyDown={(event) => {
-              if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-              event.preventDefault();
-              const currentIndex = allocationModes.indexOf(value);
-              const direction = event.key === "ArrowLeft" ? -1 : 1;
-              const nextMode = event.key === "Home"
-                ? allocationModes[0]
-                : event.key === "End"
-                  ? allocationModes.at(-1)!
-                  : allocationModes[(currentIndex + direction + allocationModes.length) % allocationModes.length];
-              setMode(nextMode);
-              requestAnimationFrame(() => document.getElementById(`allocation-tab-${nextMode}`)?.focus());
-            }}
-            role="tab"
-            tabIndex={mode === value ? 0 : -1}
-            type="button"
-          >
-            {value === "holding" ? "个股" : "板块"}
-          </button>
-        ))}
-      </div>
-      <div className="allocation-tabpanels">
-        <div
-          aria-hidden={mode !== "holding"}
-          aria-labelledby="allocation-tab-holding"
-          className="allocation-tabpanel"
-          data-active={mode === "holding"}
-          id="allocation-panel-holding"
-          role="tabpanel"
-        >
-          <AllocationRing groups={groups} activeSymbol={activeSymbol} onActiveSymbolChange={onActiveSymbolChange} />
-        </div>
-        <div
-          aria-hidden={mode !== "sector"}
-          aria-labelledby="allocation-tab-sector"
-          className="allocation-tabpanel"
-          data-active={mode === "sector"}
-          id="allocation-panel-sector"
-          role="tabpanel"
-        >
-          <SectorAllocationRing groups={groups} />
-        </div>
-      </div>
-    </>
+    <div className="allocation-comparison">
+      <section className="allocation-mode-panel" aria-labelledby="holding-allocation-title">
+        <h3 id="holding-allocation-title">个股</h3>
+        <AllocationRing groups={groups} activeSymbol={activeSymbol} onActiveSymbolChange={onActiveSymbolChange} />
+      </section>
+      <section className="allocation-mode-panel" aria-labelledby="sector-allocation-title">
+        <h3 id="sector-allocation-title">板块</h3>
+        <SectorAllocationRing groups={groups} />
+      </section>
+    </div>
   );
 }
 

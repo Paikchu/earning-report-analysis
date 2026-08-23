@@ -248,7 +248,7 @@ test("renders the stock-only investment theme heatmap", async () => {
   }
 });
 
-test("switches one allocation chart between holding and sector modes", async () => {
+test("renders holding and sector allocation charts together", async () => {
   const [response, dashboard, css] = await Promise.all([
     render(),
     readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
@@ -256,14 +256,15 @@ test("switches one allocation chart between holding and sector modes", async () 
   ]);
   const html = await response.text();
 
-  assert.match(html, /role="tablist"/);
-  assert.match(html, /aria-selected="true"[^>]*role="tab"[^>]*>个股</);
-  assert.match(html, /role="tabpanel"/);
-  assert.match(dashboard, /type AllocationMode = "holding" \| "sector"/);
-  assert.match(dashboard, /\(currentIndex \+ direction \+ allocationModes\.length\) % allocationModes\.length/);
+  assert.match(html, /id="holding-allocation-title">个股</);
+  assert.match(html, /id="sector-allocation-title">板块</);
+  assert.equal(html.match(/class="allocation-ring"/g)?.length, 2);
+  assert.doesNotMatch(html, /role="tablist"|role="tab"|role="tabpanel"/);
+  assert.doesNotMatch(dashboard, /AllocationMode|allocationModes|setMode|aria-selected/);
   assert.match(dashboard, /SectorAllocationRing/);
   assert.match(dashboard, /allocationColor\(index\)/);
-  assert.match(css, /\.allocation-tabs/);
+  assert.match(css, /\.allocation-comparison/);
+  assert.doesNotMatch(css, /\.allocation-tabs|\.allocation-tabpanels|\.allocation-tabpanel/);
 });
 
 test("keeps domain headers outside the holding tile area", async () => {
@@ -549,18 +550,17 @@ test("keeps the portfolio overview dense across desktop and tablet widths", asyn
   assert.match(mobileCss, /\.hero \{[^}]*grid-template-columns: 1fr;/s);
 });
 
-test("keeps the allocation panel height stable while switching modes", async () => {
+test("keeps both allocation charts visible in a responsive grid", async () => {
   const [dashboard, css] = await Promise.all([
     readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(dashboard, /className="allocation-tabpanels"/);
-  assert.match(dashboard, /data-active=\{mode === "holding"\}/);
-  assert.match(dashboard, /data-active=\{mode === "sector"\}/);
-  assert.match(css, /\.allocation-tabpanels \{[^}]*display: grid;/s);
-  assert.match(css, /\.allocation-tabpanel \{[^}]*grid-area: 1 \/ 1;/s);
-  assert.match(css, /\.allocation-tabpanel\[data-active="false"\] \{[^}]*visibility: hidden;[^}]*pointer-events: none;/s);
+  assert.match(dashboard, /className="allocation-comparison"/);
+  assert.match(dashboard, /className="allocation-mode-panel" aria-labelledby="holding-allocation-title"/);
+  assert.match(dashboard, /className="allocation-mode-panel" aria-labelledby="sector-allocation-title"/);
+  assert.match(css, /\.allocation-comparison \{[^}]*display: grid;[^}]*grid-template-columns: repeat\(auto-fit,/s);
+  assert.match(css, /\.allocation-mode-panel \{[^}]*min-width: 0;[^}]*display: grid;/s);
 });
 
 test("fetches homepage and independent detail quotes without modal state", async () => {
