@@ -99,50 +99,19 @@ h2 {
   min-height: 72px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 24px;
+  justify-content: flex-start;
+  gap: 32px;
   border-bottom: 1px solid var(--paper-deep);
 }
 
-.site-brand { display: flex; align-items: baseline; gap: 11px; color: var(--ink); text-decoration: none; }
+.site-brand { display: flex; flex: 0 0 auto; align-items: baseline; gap: 11px; color: var(--ink); text-decoration: none; }
 .site-brand strong { font: 700 17px/1 var(--sans); letter-spacing: .12em; }
 .site-brand span { color: var(--ink-soft); font: 600 17px/1 var(--serif); }
 .site-context { color: var(--ink-muted); font-size: 12px; font-weight: 650; letter-spacing: .06em; }
 
-.site-primary-nav { display: flex; align-items: center; gap: 24px; }
-.site-primary-nav a { padding: 7px 0; color: var(--ink-muted); border-bottom: 2px solid transparent; font-size: 13px; font-weight: 650; text-decoration: none; }
+.site-primary-nav { min-width: 0; align-self: stretch; display: flex; align-items: stretch; gap: 24px; }
+.site-primary-nav a { display: flex; align-items: center; padding: 2px 0 0; color: var(--ink-muted); border-bottom: 2px solid transparent; font-size: 13px; font-weight: 650; text-decoration: none; white-space: nowrap; }
 .site-primary-nav a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--ink); }
-
-.dashboard-tabs {
-  min-height: 52px;
-  display: flex;
-  align-items: stretch;
-  gap: 30px;
-  border-bottom: 1px solid var(--ink);
-}
-
-.dashboard-tabs button {
-  position: relative;
-  padding: 0;
-  color: var(--ink-muted);
-  border: 0;
-  background: transparent;
-  font: 650 13px/1 var(--sans);
-  cursor: pointer;
-}
-
-.dashboard-tabs button::after {
-  position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  height: 3px;
-  background: transparent;
-  content: "";
-}
-
-.dashboard-tabs button[aria-selected="true"] { color: var(--ink); }
-.dashboard-tabs button[aria-selected="true"]::after { background: var(--ink); }
 
 .portfolio-overview { color: var(--ink); }
 
@@ -1773,10 +1742,12 @@ td { font-size: 14px; }
 
 @media (max-width: 620px) {
   .page-shell { width: calc(100% - 24px); }
-  .site-header { min-height: 62px; }
-  .site-primary-nav { gap: 16px; }
+  .site-header { min-height: 62px; gap: 12px; }
+  .site-brand { gap: 6px; }
+  .site-brand strong, .site-brand span { font-size: 14px; }
+  .site-primary-nav { gap: 10px; }
+  .site-primary-nav a { font-size: 12px; }
   .site-context { display: none; }
-  .dashboard-tabs { min-height: 50px; gap: 24px; }
   .macro-hero { padding: 38px 0 34px; }
   .macro-hero h1 { margin-top: 19px; font-size: 40px; }
   .macro-hero > p { margin-top: 22px; font-size: 17px; }

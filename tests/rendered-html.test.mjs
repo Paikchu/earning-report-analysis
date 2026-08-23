@@ -33,18 +33,18 @@ test("server-renders the investment record", async () => {
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
 });
 
-test("uses a compact site header with portfolio and review tabs below it", async () => {
+test("uses one compact header row for the brand and all primary views", async () => {
   const response = await render();
   const html = await response.text();
 
   assert.match(html, /<header class="site-header"/);
-  assert.match(html, /MAX/);
-  assert.match(html, /投资记录/);
-  assert.match(html, /role="tablist" aria-label="首页视图"/);
-  assert.match(html, /<button aria-controls="portfolio-panel"[^>]*role="tab"[^>]*>Portfolio</);
-  assert.match(html, /<button aria-controls="review-panel"[^>]*role="tab"[^>]*>每日投资复盘</);
-  assert.match(html, /id="portfolio-panel"[^>]*role="tabpanel"/);
-  assert.match(html, /id="review-panel"[^>]*role="tabpanel"/);
+  assert.match(html, /<header class="site-header"[\s\S]*?MAX[\s\S]*?投资记录[\s\S]*?Portfolio[\s\S]*?每日复盘[\s\S]*?今日宏观经济[\s\S]*?<\/header>/);
+  assert.match(html, /href="\/"[^>]*aria-current="page"[^>]*>Portfolio</);
+  assert.match(html, /href="\/\?view=review"[^>]*>每日复盘</);
+  assert.match(html, /href="\/macro"[^>]*>今日宏观经济</);
+  assert.doesNotMatch(html, /class="dashboard-tabs"/);
+  assert.match(html, /id="portfolio-panel"[^>]*role="region"/);
+  assert.match(html, /id="review-panel"[^>]*role="region"/);
   assert.doesNotMatch(html, /<header class="site-header"[\s\S]*?当前净值[\s\S]*?<\/header>/);
 });
 
@@ -58,8 +58,9 @@ test("renders the independent macro dashboard without adding market charts to th
   assert.match(macroHtml, /美国大盘/);
   assert.match(macroHtml, /美债期限 ETF/);
   assert.match(macroHtml, /未来七天经济事件/);
-  assert.match(macroHtml, /href="\/"[^>]*>投资组合</);
-  assert.match(macroHtml, /href="\/macro"[^>]*aria-current="page"[^>]*>宏观</);
+  assert.match(macroHtml, /href="\/"[^>]*>Portfolio</);
+  assert.match(macroHtml, /href="\/\?view=review"[^>]*>每日复盘</);
+  assert.match(macroHtml, /href="\/macro"[^>]*aria-current="page"[^>]*>今日宏观经济</);
   for (const symbol of ["AMEX:SPY", "NASDAQ:QQQ", "AMEX:IWM", "NASDAQ:SHY", "NASDAQ:IEF", "NASDAQ:TLT"]) {
     assert.match(macroHtml, new RegExp(symbol.replace(":", "(?:<!-- -->)?:")));
   }
@@ -104,7 +105,7 @@ test("removes the disposable starter preview", async () => {
   assert.doesNotMatch(page, /const optionContracts = \[/);
   assert.doesNotMatch(page, /const recentTrades = \[/);
   assert.doesNotMatch(page, /holding\.weight \/ 31\.12/);
-  assert.match(dashboard, /<SiteHeader active="portfolio" \/>/);
+  assert.match(dashboard, /<SiteHeader active=\{activeView\} onViewChange=\{switchView\} \/>/);
   assert.match(siteHeader, /<header className="site-header"/);
   assert.match(dashboard, /<section className="portfolio-overview"/);
   assert.doesNotMatch(page, /masthead|SnapshotNotice|className="(?:eyebrow|kicker)"/);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 
 import {
@@ -25,7 +25,6 @@ import type { MarketQuoteMap } from "@/lib/yahoo-quotes";
 type AllocationMode = "holding" | "sector";
 const allocationModes: AllocationMode[] = ["holding", "sector"];
 type DashboardView = "portfolio" | "review";
-const dashboardViews: DashboardView[] = ["portfolio", "review"];
 
 function Pnl({ value }: { value: number }) {
   const className = value < 0 ? "loss" : value > 0 ? "gain" : "muted";
@@ -519,33 +518,25 @@ export function PortfolioDashboard({
   ));
   const nextEarningsReminder = nextEarnings ? buildEarningsReminder(nextEarnings, earningsAsOf) : null;
 
+  useEffect(() => {
+    const syncViewFromUrl = () => {
+      setActiveView(new URLSearchParams(window.location.search).get("view") === "review" ? "review" : "portfolio");
+    };
+    syncViewFromUrl();
+    window.addEventListener("popstate", syncViewFromUrl);
+    return () => window.removeEventListener("popstate", syncViewFromUrl);
+  }, []);
+
   function switchView(view: DashboardView) {
     setActiveView(view);
-    document.getElementById(`${view}-tab`)?.focus();
-  }
-
-  function handleViewKeyDown(event: KeyboardEvent<HTMLButtonElement>, currentView: DashboardView) {
-    const currentIndex = dashboardViews.indexOf(currentView);
-    let nextView: DashboardView | undefined;
-    if (event.key === "ArrowRight") nextView = dashboardViews[(currentIndex + 1) % dashboardViews.length];
-    if (event.key === "ArrowLeft") nextView = dashboardViews[(currentIndex - 1 + dashboardViews.length) % dashboardViews.length];
-    if (event.key === "Home") nextView = dashboardViews[0];
-    if (event.key === "End") nextView = dashboardViews.at(-1);
-    if (!nextView) return;
-    event.preventDefault();
-    switchView(nextView);
+    window.history.replaceState(null, "", view === "review" ? "/?view=review" : "/");
   }
 
   return (
     <>
-      <SiteHeader active="portfolio" />
+      <SiteHeader active={activeView} onViewChange={switchView} />
 
-      <nav className="dashboard-tabs" role="tablist" aria-label="首页视图">
-        <button aria-controls="portfolio-panel" aria-selected={activeView === "portfolio"} id="portfolio-tab" onClick={() => setActiveView("portfolio")} onKeyDown={(event) => handleViewKeyDown(event, "portfolio")} role="tab" tabIndex={activeView === "portfolio" ? 0 : -1} type="button">Portfolio</button>
-        <button aria-controls="review-panel" aria-selected={activeView === "review"} id="review-tab" onClick={() => setActiveView("review")} onKeyDown={(event) => handleViewKeyDown(event, "review")} role="tab" tabIndex={activeView === "review" ? 0 : -1} type="button">每日投资复盘</button>
-      </nav>
-
-      <div aria-labelledby="portfolio-tab" hidden={activeView !== "portfolio"} id="portfolio-panel" role="tabpanel">
+      <div hidden={activeView !== "portfolio"} id="portfolio-panel" role="region">
         <PortfolioOverview
           netLiquidation={netLiquidation}
           totalPnl={totalPnl}
@@ -589,7 +580,7 @@ export function PortfolioDashboard({
         </section>
       </div>
 
-      <div aria-labelledby="review-tab" hidden={activeView !== "review"} id="review-panel" role="tabpanel">
+      <div hidden={activeView !== "review"} id="review-panel" role="region">
         <DailyPortfolioReview review={dailyReview} />
       </div>
     </>
