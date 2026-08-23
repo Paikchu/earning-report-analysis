@@ -13,8 +13,6 @@ const earnings = earningsData as EarningsCalendarSnapshot;
 const dailyReview = dailyReviewData as DailyPortfolioReviewV1;
 const heatmapHoldings = buildHeatmapHoldings(snapshot);
 const portfolio = buildPortfolioViewModel(snapshot);
-const totalPnl = snapshot.account.netLiquidation - snapshot.account.netDeposits;
-const totalPnlRate = snapshot.account.netDeposits === 0 ? 0 : totalPnl / snapshot.account.netDeposits * 100;
 const optionUnrealizedPnl = snapshot.positions
   .filter((position) => position.assetClass === "OPT")
   .reduce((sum, position) => sum + position.unrealizedPnl, 0);
@@ -36,8 +34,6 @@ export default function Home() {
           netPositionsValue={portfolio.netPositionsValue}
           earningsEvents={earnings.events}
           netLiquidation={snapshot.account.netLiquidation}
-          totalPnl={totalPnl}
-          totalPnlRate={totalPnlRate}
           netLiquidationWithoutOptionPnl={netLiquidationWithoutOptionPnl}
           portfolioLeverage={portfolioLeverage}
           netDeposits={snapshot.account.netDeposits}

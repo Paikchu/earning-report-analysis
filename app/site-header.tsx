@@ -1,21 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import type { MouseEvent } from "react";
+import { useRef, type MouseEvent } from "react";
 
 type SiteHeaderView = "portfolio" | "ledger" | "review" | "macro";
 
 export function SiteHeader({
   active,
   onViewChange,
+  onOpenSettings,
 }: {
   active: SiteHeaderView;
   onViewChange?: (view: "portfolio" | "review") => void;
+  onOpenSettings?: () => void;
 }) {
+  const menuRef = useRef<HTMLDetailsElement>(null);
+
   function handleViewClick(event: MouseEvent<HTMLAnchorElement>, view: "portfolio" | "review") {
     if (!onViewChange) return;
     event.preventDefault();
     onViewChange(view);
+  }
+
+  function closeMenu() {
+    if (menuRef.current) menuRef.current.open = false;
   }
 
   return (
@@ -30,6 +38,16 @@ export function SiteHeader({
         <Link aria-current={active === "review" ? "page" : undefined} href="/?view=review" onClick={(event) => handleViewClick(event, "review")}>每日复盘</Link>
         <Link aria-current={active === "macro" ? "page" : undefined} href="/macro">今日宏观经济</Link>
       </nav>
+      <details className="profile-menu" ref={menuRef}>
+        <summary className="profile-trigger" aria-label="打开账户菜单"><span className="profile-avatar" aria-hidden="true" /></summary>
+        <div className="profile-popover">
+          {onOpenSettings ? (
+            <button className="profile-menu-item" type="button" onClick={() => { closeMenu(); onOpenSettings(); }}>设置</button>
+          ) : (
+            <Link className="profile-menu-item" href="/?settings=1" onClick={closeMenu}>设置</Link>
+          )}
+        </div>
+      </details>
     </header>
   );
 }

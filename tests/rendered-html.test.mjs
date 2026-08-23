@@ -49,6 +49,30 @@ test("uses one compact header row for the brand and all primary views", async ()
   assert.doesNotMatch(html, /<header class="site-header"[\s\S]*?当前净值[\s\S]*?<\/header>/);
 });
 
+test("opens device-local net deposit settings from the profile menu", async () => {
+  const [response, header, dashboard, dialog, css] = await Promise.all([
+    render(),
+    readFile(new URL("../app/site-header.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/investment-settings-dialog.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  const html = await response.text();
+
+  assert.match(html, /class="profile-menu"/);
+  assert.match(html, /aria-label="打开账户菜单"/);
+  assert.match(html, />设置</);
+  assert.match(html, /class="settings-dialog"/);
+  assert.match(html, /当前净入金/);
+  assert.match(header, /onOpenSettings/);
+  assert.match(dashboard, /localStorage\.getItem\(NET_DEPOSITS_STORAGE_KEY\)/);
+  assert.match(dashboard, /localStorage\.setItem\(NET_DEPOSITS_STORAGE_KEY, String\(value\)\)/);
+  assert.match(dashboard, /const configuredTotalPnl = netLiquidation - configuredNetDeposits/);
+  assert.match(dialog, /type="number"/);
+  assert.match(css, /\.profile-menu \{[^}]*margin-left: auto;[^}]*position: relative;/s);
+  assert.match(css, /\.settings-dialog \{[^}]*position: fixed;[^}]*width: min\(440px,/s);
+});
+
 test("renders the investment ledger as an independent primary page", async () => {
   const [homeResponse, ledgerResponse] = await Promise.all([render(), render("/ledger")]);
   const [homeHtml, ledgerHtml] = await Promise.all([homeResponse.text(), ledgerResponse.text()]);
@@ -130,7 +154,7 @@ test("removes the disposable starter preview", async () => {
   assert.doesNotMatch(page, /const optionContracts = \[/);
   assert.doesNotMatch(page, /const recentTrades = \[/);
   assert.doesNotMatch(page, /holding\.weight \/ 31\.12/);
-  assert.match(dashboard, /<SiteHeader active=\{activeView\} onViewChange=\{switchView\} \/>/);
+  assert.match(dashboard, /<SiteHeader active=\{activeView\} onViewChange=\{switchView\} onOpenSettings=/);
   assert.match(siteHeader, /<header className="site-header"/);
   assert.match(dashboard, /<section className="portfolio-overview"/);
   assert.doesNotMatch(page, /masthead|SnapshotNotice|className="(?:eyebrow|kicker)"/);

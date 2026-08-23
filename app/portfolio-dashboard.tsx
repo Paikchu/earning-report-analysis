@@ -17,12 +17,14 @@ import { money, number, percent } from "@/lib/portfolio-format";
 import { heatmapThemeColor, type HeatmapHolding } from "@/lib/portfolio-heatmap";
 import type { PositionGroupView } from "@/lib/portfolio-view-model";
 import { AddPlanDialog } from "./AddPlanDialog";
+import { InvestmentSettingsDialog } from "./investment-settings-dialog";
 import { PortfolioHeatmap } from "./portfolio-heatmap";
 import { SiteHeader } from "./site-header";
 import { useMarketQuotes, type QuoteLoadStatus } from "./use-market-quotes";
 import type { MarketQuoteMap } from "@/lib/yahoo-quotes";
 
 type DashboardView = "portfolio" | "review";
+const NET_DEPOSITS_STORAGE_KEY = "max-investment-record:net-deposits";
 
 function Pnl({ value }: { value: number }) {
   const className = value < 0 ? "loss" : value > 0 ? "gain" : "muted";
@@ -493,8 +495,6 @@ export function PortfolioDashboard({
   netPositionsValue,
   earningsEvents,
   netLiquidation,
-  totalPnl,
-  totalPnlRate,
   netLiquidationWithoutOptionPnl,
   portfolioLeverage,
   netDeposits,
@@ -508,8 +508,6 @@ export function PortfolioDashboard({
   netPositionsValue: number;
   earningsEvents: EarningsEvent[];
   netLiquidation: number;
-  totalPnl: number;
-  totalPnlRate: number;
   netLiquidationWithoutOptionPnl: number;
   portfolioLeverage: number;
   netDeposits: number;
@@ -517,18 +515,41 @@ export function PortfolioDashboard({
 }) {
   const [activeView, setActiveView] = useState<DashboardView>("portfolio");
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
+  const [configuredNetDeposits, setConfiguredNetDeposits] = useState(netDeposits);
+  const [settingsOpen, setSettingsOpen] = useState(() => (
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("settings") === "1"
+  ));
   const [earningsAsOf] = useState(() => new Date().toISOString());
   const positionSymbols = useMemo(() => new Set(positionGroups.map((group) => group.symbol)), [positionGroups]);
   const nextEarnings = earningsEvents.find((event) => (
     positionSymbols.has(event.symbol) && isUpcomingEarnings(event, earningsAsOf)
   ));
   const nextEarningsReminder = nextEarnings ? buildEarningsReminder(nextEarnings, earningsAsOf) : null;
+  const configuredTotalPnl = netLiquidation - configuredNetDeposits;
+  const configuredTotalPnlRate = configuredNetDeposits === 0 ? 0 : configuredTotalPnl / configuredNetDeposits * 100;
+
+  useEffect(() => {
+    const syncStoredNetDeposits = () => {
+      const storedValue = window.localStorage.getItem(NET_DEPOSITS_STORAGE_KEY);
+      const parsedValue = storedValue === null ? Number.NaN : Number(storedValue);
+      setConfiguredNetDeposits(Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : netDeposits);
+    };
+    syncStoredNetDeposits();
+    window.addEventListener("storage", syncStoredNetDeposits);
+    return () => window.removeEventListener("storage", syncStoredNetDeposits);
+  }, [netDeposits]);
 
   useEffect(() => {
     const syncViewFromUrl = () => {
       setActiveView(new URLSearchParams(window.location.search).get("view") === "review" ? "review" : "portfolio");
     };
     syncViewFromUrl();
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get("settings") === "1") {
+      searchParams.delete("settings");
+      const query = searchParams.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+    }
     window.addEventListener("popstate", syncViewFromUrl);
     return () => window.removeEventListener("popstate", syncViewFromUrl);
   }, []);
@@ -538,18 +559,23 @@ export function PortfolioDashboard({
     window.history.replaceState(null, "", view === "review" ? "/?view=review" : "/");
   }
 
+  function saveNetDeposits(value: number) {
+    window.localStorage.setItem(NET_DEPOSITS_STORAGE_KEY, String(value));
+    setConfiguredNetDeposits(value);
+  }
+
   return (
     <>
-      <SiteHeader active={activeView} onViewChange={switchView} />
+      <SiteHeader active={activeView} onViewChange={switchView} onOpenSettings={() => setSettingsOpen(true)} />
 
       <div hidden={activeView !== "portfolio"} id="portfolio-panel" role="region">
         <PortfolioOverview
           netLiquidation={netLiquidation}
-          totalPnl={totalPnl}
-          totalPnlRate={totalPnlRate}
+          totalPnl={configuredTotalPnl}
+          totalPnlRate={configuredTotalPnlRate}
           netLiquidationWithoutOptionPnl={netLiquidationWithoutOptionPnl}
           portfolioLeverage={portfolioLeverage}
-          netDeposits={netDeposits}
+          netDeposits={configuredNetDeposits}
           cashBalance={cashBalance}
           netPositionsValue={netPositionsValue}
           stockMarketValue={stockMarketValue}
@@ -570,6 +596,7 @@ export function PortfolioDashboard({
       <div hidden={activeView !== "review"} id="review-panel" role="region">
         <DailyPortfolioReview review={dailyReview} />
       </div>
+      <InvestmentSettingsDialog open={settingsOpen} value={configuredNetDeposits} onClose={() => setSettingsOpen(false)} onSave={saveNetDeposits} />
     </>
   );
 }

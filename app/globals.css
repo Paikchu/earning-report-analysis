@@ -113,6 +113,86 @@ h2 {
 .site-primary-nav a { display: flex; align-items: center; padding: 2px 0 0; color: var(--ink-muted); border-bottom: 2px solid transparent; font-size: 13px; font-weight: 650; text-decoration: none; white-space: nowrap; }
 .site-primary-nav a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--ink); }
 
+.profile-menu {
+  margin-left: auto;
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.profile-trigger {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  border: 1px solid var(--paper-deep);
+  list-style: none;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease;
+}
+
+.profile-trigger::-webkit-details-marker { display: none; }
+.profile-trigger:hover,
+.profile-menu[open] .profile-trigger { border-color: var(--ink); background: rgb(230 220 203 / 55%); }
+
+.profile-avatar {
+  width: 17px;
+  height: 18px;
+  position: relative;
+  display: block;
+}
+
+.profile-avatar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  transform: translateX(-50%);
+}
+
+.profile-avatar::after {
+  content: "";
+  position: absolute;
+  right: 1px;
+  bottom: 0;
+  left: 1px;
+  height: 8px;
+  border: 1.5px solid currentColor;
+  border-radius: 9px 9px 2px 2px;
+}
+
+.profile-popover {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 124px;
+  padding: 6px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+}
+
+.profile-menu-item {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  color: var(--ink);
+  border: 0;
+  background: transparent;
+  font: 600 12px/1 var(--sans);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.profile-menu-item:hover { background: var(--paper-deep); }
+
 .portfolio-overview { color: var(--ink); }
 
 .hero {
@@ -861,6 +941,38 @@ h2 {
 .add-plan-button:hover { background: #263e56; }
 
 button:disabled { cursor: not-allowed; opacity: .45; }
+
+.settings-dialog {
+  position: fixed;
+  inset: 50% auto auto 50%;
+  width: min(440px, calc(100% - 32px));
+  margin: 0;
+  padding: 0;
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  transform: translate(-50%, -50%);
+}
+
+.settings-dialog::backdrop { background: rgb(23 40 59 / 42%); backdrop-filter: blur(3px); }
+.settings-card { padding: 26px; }
+.settings-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.settings-heading span { display: block; margin-bottom: 5px; color: var(--ink-muted); font-size: 10px; font-weight: 650; letter-spacing: .08em; }
+.settings-heading h2 { font-size: 24px; }
+.settings-heading button { width: 40px; height: 40px; padding: 0; color: var(--ink); border: 0; background: transparent; font: 400 24px/1 var(--serif); cursor: pointer; }
+.settings-copy { margin: 18px 0 22px; color: var(--ink-soft); font: 500 13px/1.55 var(--serif); }
+.settings-field { display: grid; gap: 8px; }
+.settings-field > span:first-child { color: var(--ink-muted); font-size: 11px; font-weight: 650; letter-spacing: .05em; }
+.settings-amount-input { height: 52px; display: grid; grid-template-columns: 36px 1fr; align-items: center; border: 1px solid var(--paper-deep); background: rgb(255 255 255 / 28%); }
+.settings-amount-input i { color: var(--ink-muted); font: 600 18px/1 var(--serif); font-style: normal; text-align: right; }
+.settings-amount-input input { width: 100%; min-width: 0; height: 100%; padding: 0 12px 0 7px; color: var(--ink); border: 0; outline: 0; background: transparent; font: 600 24px/1 var(--serif); font-variant-numeric: tabular-nums lining-nums; }
+.settings-amount-input:focus-within { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.settings-actions { margin-top: 18px; display: flex; justify-content: flex-end; gap: 8px; }
+.settings-actions button { min-height: 40px; padding: 0 14px; border: 1px solid var(--ink); font: 650 12px/1 var(--sans); cursor: pointer; }
+.settings-cancel { color: var(--ink); background: transparent; }
+.settings-save { color: var(--paper); background: var(--ink); }
+.settings-cancel:hover { background: var(--paper-deep); }
+.settings-save:hover { background: #263e56; }
 
 .plan-dialog {
   --dialog-max-height: min(720px, calc(100dvh - 32px));
