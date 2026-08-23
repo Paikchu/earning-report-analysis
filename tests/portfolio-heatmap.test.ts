@@ -1,12 +1,67 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import type { PortfolioSnapshotV1 } from "../lib/portfolio-snapshot.ts";
 
-const snapshot = JSON.parse(
-  await readFile(new URL("../data/portfolio-snapshot.json", import.meta.url), "utf8"),
-) as PortfolioSnapshotV1;
+const structuralSnapshot: PortfolioSnapshotV1 = {
+  schemaVersion: 1,
+  generatedAt: "2026-07-22T00:00:00.000Z",
+  account: { currency: "USD", netLiquidation: 1_000, cashBalance: 400, netDeposits: 1_000 },
+  positions: [
+    {
+      positionKey: "STK:TEST_A",
+      symbol: "TEST_A",
+      contractDescription: "Test A",
+      assetClass: "STK",
+      quantity: 4,
+      averagePrice: 75,
+      marketPrice: 100,
+      marketValue: 400,
+      costBasis: 300,
+      unrealizedPnl: 100,
+    },
+    {
+      positionKey: "STK:TEST_B",
+      symbol: "TEST_B",
+      contractDescription: "Test B ETF",
+      assetClass: "STK",
+      quantity: 5,
+      averagePrice: 50,
+      marketPrice: 50,
+      marketValue: 250,
+      costBasis: 250,
+      unrealizedPnl: 0,
+    },
+    {
+      positionKey: "OPT:TEST_OPTION",
+      symbol: "TEST_OPTION",
+      contractDescription: "Test option",
+      assetClass: "OPT",
+      quantity: -1,
+      averagePrice: 50,
+      marketPrice: 50,
+      marketValue: -50,
+      costBasis: -50,
+      unrealizedPnl: 0,
+    },
+  ],
+  trades: [{
+    tradeId: "test-a-stock",
+    tradeTime: "2026-07-22T00:00:00.000Z",
+    symbol: "TEST_A",
+    contractDescription: "Test A Company",
+    securityType: "STK",
+    side: "BUY",
+    size: 1,
+    price: 75,
+    commission: 0,
+    netAmount: -75,
+    realizedPnl: 0,
+    exchange: "TEST",
+    orderId: "1",
+  }],
+  tradeSync: { status: "current", queryPeriod: "DAYS_7", lastSuccessfulTradeAt: "2026-07-22T00:00:00.000Z", message: null },
+};
 
 const acceptanceSnapshot: PortfolioSnapshotV1 = {
   schemaVersion: 1,
@@ -56,17 +111,17 @@ test("builds the heatmap from stock and ETF positions only", async () => {
     assert.fail("portfolio heatmap module is required");
   }
 
-  const holdings = heatmapModule.buildHeatmapHoldings(snapshot);
-  const nvda = holdings.find((holding) => holding.symbol === "NVDA");
-  const rklb = holdings.find((holding) => holding.symbol === "RKLB");
+  const holdings = heatmapModule.buildHeatmapHoldings(structuralSnapshot);
+  const includedPositions = structuralSnapshot.positions.filter(
+    (position) => position.assetClass === "STK" && position.marketValue > 0,
+  );
 
-  assert.ok(nvda);
-  assert.ok(rklb);
-  assert.equal(nvda.company, "NVIDIA CORP");
-  assert.equal(nvda.portfolioWeight, snapshot.positions.find((position) => position.symbol === "NVDA" && position.assetClass === "STK")!.marketValue / snapshot.account.netLiquidation * 100);
-  assert.equal(rklb.portfolioWeight, snapshot.positions.find((position) => position.symbol === "RKLB" && position.assetClass === "STK")!.marketValue / snapshot.account.netLiquidation * 100);
-  assert.equal(holdings.some((holding) => holding.symbol === "INTC"), false);
-  assert.equal(holdings.length, snapshot.positions.filter((position) => position.assetClass === "STK").length);
+  assert.deepEqual(holdings.map((holding) => holding.symbol), includedPositions.map((position) => position.symbol));
+  assert.equal(holdings[0].company, structuralSnapshot.trades[0].contractDescription);
+  for (const [index, position] of includedPositions.entries()) {
+    assert.equal(holdings[index].portfolioWeight, position.marketValue / structuralSnapshot.account.netLiquidation * 100);
+  }
+  assert.equal(holdings.some((holding) => holding.symbol === structuralSnapshot.positions[2].symbol), false);
 });
 
 test("matches the approved heatmap acceptance weights", async () => {
@@ -110,7 +165,7 @@ test("assigns one vivid terminal color to every investment theme", async () => {
 test("uses other for unknown symbols and neutral performance for zero cost", async () => {
   const { buildHeatmapHoldings } = await import("../lib/portfolio-heatmap.ts");
   const fixture: PortfolioSnapshotV1 = {
-    ...snapshot,
+    ...structuralSnapshot,
     positions: [{
       positionKey: "STK:NEW",
       symbol: "NEW",
@@ -130,7 +185,7 @@ test("uses other for unknown symbols and neutral performance for zero cost", asy
     company: "NEW COMPANY",
     domain: "其他",
     marketValue: 10,
-    portfolioWeight: 10 / snapshot.account.netLiquidation * 100,
+    portfolioWeight: 10 / structuralSnapshot.account.netLiquidation * 100,
     costBasis: 0,
     unrealizedPnl: 10,
     unrealizedRate: 0,

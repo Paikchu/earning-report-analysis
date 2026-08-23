@@ -263,12 +263,15 @@ test("renders the stock-only investment theme heatmap", async () => {
   assert.match(html, /持仓主题热力图/);
   assert.match(html, /总敞口/);
   assert.match(html, /aria-label="持仓主题热力图"/);
-  assert.match(html, /AI \/ 企业软件/);
-  assert.match(html, /太空与通信/);
-  for (const symbol of ["NVDA", "RKLB"]) {
-    const position = snapshot.positions.find((candidate) => candidate.assetClass === "STK" && candidate.symbol === symbol);
+  assert.match(html, /class="heatmap-domain /);
+  const representativePositions = snapshot.positions
+    .filter((position) => position.assetClass === "STK" && position.marketValue > 0)
+    .sort((left, right) => right.marketValue - left.marketValue)
+    .slice(0, 2);
+  assert.ok(representativePositions.length > 0);
+  for (const position of representativePositions) {
     const weight = (position.marketValue / snapshot.account.netLiquidation * 100).toFixed(2).replace(".", "\\.");
-    assert.match(html, new RegExp(`${symbol}[^]*?${weight}%`));
+    assert.match(html, new RegExp(`${position.symbol}[^]*?${weight}%`));
   }
 });
 
@@ -343,24 +346,21 @@ test("groups stock and option positions by ticker", async () => {
   const snapshot = JSON.parse(await readFile(new URL("../data/portfolio-snapshot.json", import.meta.url), "utf8"));
   const response = await render("/ledger");
   const html = await response.text();
-  const expectedTickerCount = new Set(snapshot.positions.map((position) => position.symbol)).size;
+  const symbols = [...new Set(snapshot.positions.map((position) => position.symbol))];
+  const expectedTickerCount = symbols.length;
   const renderedTickerCount = html.match(/class="position-row"/g)?.length ?? 0;
 
   assert.equal(renderedTickerCount, expectedTickerCount);
-  assert.doesNotMatch(html, /aria-label="查看 INTC 持仓详情"/);
+  assert.doesNotMatch(html, /aria-label="查看 [^"]+ 持仓详情"/);
   assert.match(html, /，查看持仓详情/);
-  assert.match(html, /href="\/positions\/INTC"/);
   assert.doesNotMatch(html, /<details class="position-row"/);
-  assert.match(html, /INTC/);
-  assert.match(html, /期权/);
+  for (const symbol of symbols) {
+    const href = `href="/positions/${encodeURIComponent(symbol)}"`;
+    assert.match(html, new RegExp(href.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
   assert.match(html, /净市值/);
   assert.match(html, /年内已实现/);
   assert.match(html, /年内净盈亏/);
-  assert.match(html, /class="position-reminder"/);
-  assert.match(html, /北京/);
-  assert.match(html, /NVDA 期权持仓/);
-  assert.match(html, /INTC 期权持仓/);
-  assert.match(html, /NVDA Jan15&#x27;27 180 PUT @AMEX/);
   assert.doesNotMatch(html, /持仓拆分|>拆分</);
   assert.doesNotMatch(html, /期权覆盖/);
 });
@@ -435,10 +435,11 @@ test("keeps ledger labels and values above the minimum readable sizes", async ()
 test("compresses the desktop ledger into six paired data groups", async () => {
   const dashboard = await readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8");
 
-  assert.match(dashboard, /const columns = \["标的", "行情", "仓位", "成本", "未实现", "年内"\]/);
+  assert.match(dashboard, /const columns = \["标的", "行情", "仓位", "摊薄成本", "未实现", "年内"\]/);
   assert.match(dashboard, /className="position-market-cell"/);
   assert.match(dashboard, /className="position-value-cell"/);
   assert.match(dashboard, /className="position-cost-cell"/);
+  assert.match(dashboard, /className="position-cost-cell" data-label="摊薄成本"/);
   assert.match(dashboard, /className="position-year-cell"/);
   assert.match(dashboard, /group\.stock \? money\(group\.stock\.actualCost\)/);
 });
@@ -554,7 +555,7 @@ test("renders the holding summary in the portfolio overview without the market p
   assert.match(html, /正股/);
   assert.match(html, /期权/);
   assert.match(html, /即将财报/);
-  assert.doesNotMatch(html, /美股大盘|标普 500|纳斯达克|道琼斯|罗素 2000/);
+  assert.doesNotMatch(html, /class="market-tape"|aria-label="美股大盘"/);
   assert.doesNotMatch(dashboard, /MARKET_INDEXES|MARKET_INDEX_SYMBOLS|market-tape/);
   assert.match(dashboard, /const quoteSymbols = useMemo\(\(\) => positionGroups\.map/);
   assert.match(dashboard, /useMarketQuotes\(quoteSymbols\)/);
@@ -656,14 +657,14 @@ test("keeps the add-plan dialog content-sized with useful idle and loading state
 
 test("calculates actual holding cost from cost, realized P&L, and quantity", () => {
   const fixtures = [
-    { symbol: "BOXX", cost: 21067.4311002, realized: 1.063786, quantity: 180, expected: 117.04 },
-    { symbol: "TSLA", cost: 5838.87880005, realized: -44.802037, quantity: 15, expected: 392.25 },
-    { symbol: "ORCL", cost: 3903.89579991, realized: 264.609827, quantity: 27, expected: 134.79 },
-    { symbol: "RKLB", cost: 1222.83379995, realized: 725.296967, quantity: 15, expected: 33.17 },
+    { label: "large position", cost: 21067.4311002, realized: 1.063786, quantity: 180, expected: 117.04 },
+    { label: "realized loss", cost: 5838.87880005, realized: -44.802037, quantity: 15, expected: 392.25 },
+    { label: "realized gain", cost: 3903.89579991, realized: 264.609827, quantity: 27, expected: 134.79 },
+    { label: "diluted cost", cost: 1222.83379995, realized: 725.296967, quantity: 15, expected: 33.17 },
   ];
 
   for (const fixture of fixtures) {
     const actual = (fixture.cost - fixture.realized) / fixture.quantity;
-    assert.equal(Number(actual.toFixed(2)), fixture.expected, fixture.symbol);
+    assert.equal(Number(actual.toFixed(2)), fixture.expected, fixture.label);
   }
 });

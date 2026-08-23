@@ -329,7 +329,7 @@ function AllocationPanel({
   );
 }
 
-const columns = ["标的", "行情", "仓位", "成本", "未实现", "年内"];
+const columns = ["标的", "行情", "仓位", "摊薄成本", "未实现", "年内"];
 
 const sortOptions: Array<{ key: PositionSortKey; label: string }> = [
   { key: "symbol", label: "标的" },
@@ -412,7 +412,7 @@ function PositionLedger({
                   : <small className="quote-muted">当日 —</small>}
               </span>
               <span className="position-value-cell" data-label="仓位"><strong>{money(group.value)}</strong><small>{percent(group.weight)}</small></span>
-              <span className="position-cost-cell" data-label="成本"><strong>{group.stock ? money(group.stock.actualCost) : <i className="quote-muted">—</i>}</strong><small>持仓 {money(group.cost)}</small></span>
+              <span className="position-cost-cell" data-label="摊薄成本"><strong>{group.stock ? money(group.stock.actualCost) : <i className="quote-muted">—</i>}</strong><small>持仓 {money(group.cost)}</small></span>
               <span className="position-unrealized-cell" data-label="未实现"><Pnl value={group.unrealized} /></span>
               <span className="position-year-cell" data-label="年内"><strong><Pnl value={group.netPnl} /></strong><small>已实现 <Pnl value={group.realized} /></small></span>
               <span className="sr-only">，查看持仓详情</span>
