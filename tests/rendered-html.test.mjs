@@ -141,8 +141,8 @@ test("uses the approved ledger-dominant hierarchy without horizontal scrolling",
   assert.match(css, /\.section-divider \{[\s\S]*?border-top: 1px dashed var\(--paper-deep\);/);
   assert.doesNotMatch(css, /min-width:\s*900px/);
   assert.match(css, /\.position-scroll \{[\s\S]*?overflow-x: visible;/);
-  assert.match(css, /\.hero \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) auto;/);
-  assert.match(css, /\.summary-nav-value \{[\s\S]*?font-size: clamp\(48px, 5vw, 56px\);/);
+  assert.match(css, /\.hero \{[\s\S]*?grid-template-columns: minmax\(300px, \.75fr\) minmax\(0, 1\.25fr\);/);
+  assert.match(css, /\.summary-nav-value \{[\s\S]*?font-size: clamp\(36px, 4vw, 44px\);/);
   assert.match(css, /\.header-position-summary \{[\s\S]*?grid-template-columns: minmax\(110px, \.65fr\) minmax\(110px, \.65fr\) minmax\(190px, 1fr\) minmax\(280px, 1\.8fr\);/);
   assert.match(css, /h2 \{[\s\S]*?font: 600 22px\/1\.1 var\(--serif\);/);
   assert.doesNotMatch(css, /\.portfolio-header \{[^}]*background:/);
@@ -520,6 +520,20 @@ test("renders the holding summary in the portfolio overview without the market p
   assert.doesNotMatch(dashboard, /MARKET_INDEXES|MARKET_INDEX_SYMBOLS|market-tape/);
   assert.match(dashboard, /const quoteSymbols = useMemo\(\(\) => positionGroups\.map/);
   assert.match(dashboard, /useMarketQuotes\(quoteSymbols\)/);
+});
+
+test("keeps the portfolio overview dense across desktop and tablet widths", async () => {
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(css, /\.hero \{[^}]*min-height: 0;[^}]*grid-template-columns: minmax\(300px, \.75fr\) minmax\(0, 1\.25fr\);/s);
+  assert.match(css, /\.summary-nav-value \{[^}]*font-size: clamp\(36px, 4vw, 44px\);/s);
+  assert.match(css, /\.summary-support \{[^}]*grid-template-columns: repeat\(4, minmax\(110px, 1fr\)\);/s);
+
+  const tabletCss = css.match(/@media \(max-width: 820px\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  assert.match(tabletCss, /\.hero \{ grid-template-columns: minmax\(230px, \.8fr\) minmax\(0, 1\.2fr\);/);
+
+  const mobileCss = css.match(/@media \(max-width: 620px\) \{([\s\S]*)\}\s*$/)?.[1] ?? "";
+  assert.match(mobileCss, /\.hero \{[^}]*grid-template-columns: 1fr;/s);
 });
 
 test("fetches homepage and independent detail quotes without modal state", async () => {
