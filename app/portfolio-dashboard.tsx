@@ -322,7 +322,7 @@ function AllocationPanel({
       <div className="allocation-tabs" role="tablist" aria-label="仓位占比口径">
         {allocationModes.map((value) => (
           <button
-            aria-controls="allocation-panel"
+            aria-controls={`allocation-panel-${value}`}
             aria-selected={mode === value}
             id={`allocation-tab-${value}`}
             key={value}
@@ -348,10 +348,27 @@ function AllocationPanel({
           </button>
         ))}
       </div>
-      <div aria-labelledby={`allocation-tab-${mode}`} className="allocation-tabpanel" id="allocation-panel" role="tabpanel">
-        {mode === "holding"
-          ? <AllocationRing groups={groups} activeSymbol={activeSymbol} onActiveSymbolChange={onActiveSymbolChange} />
-          : <SectorAllocationRing groups={groups} />}
+      <div className="allocation-tabpanels">
+        <div
+          aria-hidden={mode !== "holding"}
+          aria-labelledby="allocation-tab-holding"
+          className="allocation-tabpanel"
+          data-active={mode === "holding"}
+          id="allocation-panel-holding"
+          role="tabpanel"
+        >
+          <AllocationRing groups={groups} activeSymbol={activeSymbol} onActiveSymbolChange={onActiveSymbolChange} />
+        </div>
+        <div
+          aria-hidden={mode !== "sector"}
+          aria-labelledby="allocation-tab-sector"
+          className="allocation-tabpanel"
+          data-active={mode === "sector"}
+          id="allocation-panel-sector"
+          role="tabpanel"
+        >
+          <SectorAllocationRing groups={groups} />
+        </div>
       </div>
     </>
   );

@@ -549,6 +549,20 @@ test("keeps the portfolio overview dense across desktop and tablet widths", asyn
   assert.match(mobileCss, /\.hero \{[^}]*grid-template-columns: 1fr;/s);
 });
 
+test("keeps the allocation panel height stable while switching modes", async () => {
+  const [dashboard, css] = await Promise.all([
+    readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(dashboard, /className="allocation-tabpanels"/);
+  assert.match(dashboard, /data-active=\{mode === "holding"\}/);
+  assert.match(dashboard, /data-active=\{mode === "sector"\}/);
+  assert.match(css, /\.allocation-tabpanels \{[^}]*display: grid;/s);
+  assert.match(css, /\.allocation-tabpanel \{[^}]*grid-area: 1 \/ 1;/s);
+  assert.match(css, /\.allocation-tabpanel\[data-active="false"\] \{[^}]*visibility: hidden;[^}]*pointer-events: none;/s);
+});
+
 test("fetches homepage and independent detail quotes without modal state", async () => {
   const [dashboard, detail] = await Promise.all([
     readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),

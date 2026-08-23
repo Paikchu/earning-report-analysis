@@ -354,7 +354,9 @@ h2 {
 
 .allocation-tabs button + button { border-left: 1px solid var(--ink); }
 .allocation-tabs button[aria-selected="true"] { color: var(--paper); background: var(--ink); }
-.allocation-tabpanel { min-height: 170px; }
+.allocation-tabpanels { min-height: 170px; display: grid; }
+.allocation-tabpanel { min-width: 0; grid-area: 1 / 1; }
+.allocation-tabpanel[data-active="false"] { visibility: hidden; pointer-events: none; }
 
 .section-divider {
   width: 100%;
