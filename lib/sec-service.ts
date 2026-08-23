@@ -38,7 +38,7 @@ import {
 const TICKER_MAP_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 const FILING_TEXT_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 const SEC_FETCH_INTERVAL_MS = 200;
-const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
+const AI_CHAT_COMPLETIONS_URL = "https://api.b.ai/v1/chat/completions";
 
 export type SecCacheRecord<T> = {
   payload: T;
@@ -335,8 +335,8 @@ function structuredSummarySystemPrompt(): string {
 }
 
 export async function callSecModel(runtime: SecServiceRuntime, system: string, payload: unknown): Promise<Record<string, unknown>> {
-  if (!runtime.apiKey) throw new Error("DEEPSEEK_API_KEY not set");
-  const response = await (runtime.fetcher ?? fetch)(DEEPSEEK_URL, {
+  if (!runtime.apiKey) throw new Error("AI_API_KEY not set");
+  const response = await (runtime.fetcher ?? fetch)(AI_CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${runtime.apiKey}` },
     body: JSON.stringify({
@@ -483,10 +483,10 @@ async function summarizeFiling(
   secRequest: (url: string, accept?: string) => Promise<Response>,
 ): Promise<SecFilingSummary> {
   try {
-    if (!runtime.apiKey) throw new Error("DEEPSEEK_API_KEY not set");
+    if (!runtime.apiKey) throw new Error("AI_API_KEY not set");
     const text = await getFilingText(repository, filing, now, secRequest);
     const sections = splitFilingSections(text);
-    const response = await (runtime.fetcher ?? fetch)(DEEPSEEK_URL, {
+    const response = await (runtime.fetcher ?? fetch)(AI_CHAT_COMPLETIONS_URL, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${runtime.apiKey}` },
       body: JSON.stringify({

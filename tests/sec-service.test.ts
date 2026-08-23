@@ -70,7 +70,7 @@ test("refreshes a ticker and never regenerates a cached useful summary", async (
     if (url.includes("company_tickers_exchange")) return response(tickerMap);
     if (url.includes("/submissions/")) return response(submissions);
     if (url.includes("/Archives/")) return response("<h1>Revenue</h1><p>Cloud revenue increased 22%.</p>");
-    if (url.includes("api.deepseek.com")) {
+    if (url === "https://api.b.ai/v1/chat/completions") {
       modelCalls += 1;
       assert.equal(init?.headers && new Headers(init.headers).get("authorization"), "Bearer test-key");
       return response({

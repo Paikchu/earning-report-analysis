@@ -203,7 +203,7 @@ test("runs router, module, comparison, and summary stages with qoq/yoy output", 
     if (url.includes("company_tickers_exchange")) return new Response(JSON.stringify(company), { status: 200 });
     if (url.includes("/submissions/")) return new Response(JSON.stringify(submissions), { status: 200 });
     if (url.includes("/Archives/")) return new Response("<h1>Item 7. Management Discussion</h1><p>Revenue 120 USDm. Cloud growth remained strong.</p>", { status: 200 });
-    if (!url.includes("api.deepseek.com")) throw new Error(`Unexpected URL ${url}`);
+    if (url !== "https://api.b.ai/v1/chat/completions") throw new Error(`Unexpected URL ${url}`);
     modelCalls += 1;
     const body = JSON.parse(String(init?.body ?? "{}")) as { messages?: Array<{ content?: string }> };
     const userPayload = JSON.parse(body.messages?.[1]?.content ?? "{}");

@@ -26,7 +26,7 @@ type R2BucketLike = {
 export type SecPipelineEnv = SecCronEnv & {
   SEC_FILINGS: R2BucketLike;
   SEC_USER_AGENT: string;
-  DEEPSEEK_API_KEY?: string;
+  AI_API_KEY?: string;
   SEC_ANALYSIS_MODEL?: string;
   SEC_BOOTSTRAP_PRIVATE_KEY?: string;
 };
@@ -193,7 +193,7 @@ async function callWorkerSecModel(
   payload: unknown,
 ): Promise<Record<string, unknown>> {
   const apiKey = await resolveWorkerModelKey(env, fetcher);
-  const response = await fetcher("https://api.deepseek.com/chat/completions", {
+  const response = await fetcher("https://api.b.ai/v1/chat/completions", {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
@@ -218,7 +218,7 @@ async function callWorkerSecModel(
 }
 
 export async function resolveWorkerModelKey(env: SecPipelineEnv, fetcher: typeof fetch = fetch): Promise<string> {
-  if (env.DEEPSEEK_API_KEY) return env.DEEPSEEK_API_KEY;
+  if (env.AI_API_KEY) return env.AI_API_KEY;
   if (!env.SEC_BOOTSTRAP_PRIVATE_KEY) throw new Error("SEC workflow model key is not configured");
   const cached = modelKeyCache.get(env);
   if (cached) return cached;

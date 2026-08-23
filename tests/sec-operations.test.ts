@@ -28,7 +28,7 @@ test("module stages read compact R2 slices after routing instead of reparsing th
     MAX_SITE_BYPASS_TOKEN: "sites-token",
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
-    DEEPSEEK_API_KEY: "worker-model-secret",
+    AI_API_KEY: "worker-model-secret",
     SEC_FILINGS: bucket,
   } as SecPipelineEnv;
   let modelCalls = 0;
@@ -72,7 +72,7 @@ test("scheduled analysis does not overlap an already running filing job", async 
   assert.equal(await operations.shouldAnalyze(filing, "manual"), true);
 });
 
-test("calls DeepSeek from the workflow worker when its model secret is configured", async () => {
+test("calls B.ai from the workflow worker when its shared AI secret is configured", async () => {
   const objects = new Map<string, string>();
   const requests: string[] = [];
   const env = {
@@ -80,7 +80,7 @@ test("calls DeepSeek from the workflow worker when its model secret is configure
     MAX_SITE_BYPASS_TOKEN: "sites-token",
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
-    DEEPSEEK_API_KEY: "worker-model-secret",
+    AI_API_KEY: "worker-model-secret",
     SEC_ANALYSIS_MODEL: "deepseek-v4-flash",
     SEC_FILINGS: {
       async get(key: string) {
@@ -97,7 +97,7 @@ test("calls DeepSeek from the workflow worker when its model secret is configure
     const url = String(input);
     requests.push(url);
     if (url === filing.documentUrl) return new Response("<h1>Revenue</h1><p>Revenue was 120 USDm.</p>");
-    if (url === "https://api.deepseek.com/chat/completions") {
+    if (url === "https://api.b.ai/v1/chat/completions") {
       const full = JSON.parse(objects.get("filings/MSFT/annual.json") ?? "{}") as { blocks?: Array<{ blockId: string }> };
       return Response.json({ choices: [{ message: { content: JSON.stringify({ selections: [{ moduleKey: "performance", blockIds: [full.blocks?.[0]?.blockId], confidence: 1 }] }) } }] });
     }
@@ -109,7 +109,7 @@ test("calls DeepSeek from the workflow worker when its model secret is configure
 
   await operations.route(filing, reference, context);
 
-  assert.ok(requests.includes("https://api.deepseek.com/chat/completions"));
+  assert.ok(requests.includes("https://api.b.ai/v1/chat/completions"));
   assert.equal(requests.some((url) => url.includes("/api/internal/sec/model")), false);
 });
 
@@ -120,7 +120,7 @@ test("plans and runs dynamic nodes from the prepared R2 filing", async () => {
     MAX_SITE_BYPASS_TOKEN: "sites-token",
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
-    DEEPSEEK_API_KEY: "worker-model-secret",
+    AI_API_KEY: "worker-model-secret",
     SEC_FILINGS: {
       async get(key: string) {
         const value = objects.get(key);

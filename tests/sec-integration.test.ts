@@ -113,8 +113,10 @@ test("exposes only short authenticated bridge routes to the independent SEC work
   assert.doesNotMatch(sources.join("\n"), /refreshSecTicker/);
 });
 
-test("defaults new DeepSeek credentials to the supported v4 flash model", async () => {
+test("uses the shared AI credential with the supported SEC model", async () => {
   const runtime = await readFile(new URL("../lib/sec-runtime.ts", import.meta.url), "utf8");
+  assert.match(runtime, /AI_API_KEY/);
+  assert.doesNotMatch(runtime, /DEEPSEEK_API_KEY/);
   assert.match(runtime, /deepseek-v4-flash/);
   assert.doesNotMatch(runtime, /"deepseek-chat"/);
 });

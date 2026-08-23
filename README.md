@@ -46,7 +46,7 @@ npm run earnings:update
 npm run db:generate
 ```
 
-SEC 本地配置复制自 `.env.example`。`DEEPSEEK_API_KEY` 与 `SEC_REFRESH_KEY` 必须作为密钥保存；`SEC_USER_AGENT` 必须包含可联系的邮箱。
+SEC 本地配置复制自 `.env.example`。`AI_API_KEY` 与 `SEC_REFRESH_KEY` 必须作为密钥保存；`SEC_USER_AGENT` 必须包含可联系的邮箱。
 
 检查或部署 SEC 定时任务：
 
