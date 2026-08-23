@@ -38,11 +38,12 @@ test("uses one compact header row for the brand and all primary views", async ()
   const html = await response.text();
 
   assert.match(html, /<header class="site-header"/);
-  assert.match(html, /<header class="site-header"[\s\S]*?MAX[\s\S]*?投资记录[\s\S]*?Portfolio[\s\S]*?投资账本[\s\S]*?每日复盘[\s\S]*?今日宏观经济[\s\S]*?<\/header>/);
+  assert.match(html, /<header class="site-header"[\s\S]*?MAX[\s\S]*?投资记录[\s\S]*?Portfolio[\s\S]*?投资账本[\s\S]*?每日复盘[\s\S]*?今日宏观经济[\s\S]*?昨日收盘总结[\s\S]*?<\/header>/);
   assert.match(html, /href="\/"[^>]*aria-current="page"[^>]*>Portfolio</);
   assert.match(html, /href="\/ledger"[^>]*>投资账本</);
   assert.match(html, /href="\/\?view=review"[^>]*>每日复盘</);
   assert.match(html, /href="\/macro"[^>]*>今日宏观经济</);
+  assert.match(html, /href="\/market-close"[^>]*>昨日收盘总结</);
   assert.doesNotMatch(html, /class="dashboard-tabs"/);
   assert.match(html, /id="portfolio-panel"[^>]*role="region"/);
   assert.match(html, /id="review-panel"[^>]*role="region"/);
@@ -114,6 +115,20 @@ test("renders the independent macro dashboard without adding market charts to th
     assert.match(macroHtml, new RegExp(symbol.replace(":", "(?:<!-- -->)?:")));
   }
   assert.doesNotMatch(macroHtml, /TVC:US(?:02|10|30)Y/);
+});
+
+test("renders the latest close brief as an independent archived document", async () => {
+  const [homeResponse, marketCloseResponse] = await Promise.all([render(), render("/market-close")]);
+  const [homeHtml, marketCloseHtml] = await Promise.all([homeResponse.text(), marketCloseResponse.text()]);
+
+  assert.equal(marketCloseResponse.status, 200);
+  assert.doesNotMatch(homeHtml, /板块全景|长债压力没有退场/);
+  assert.match(marketCloseHtml, /href="\/market-close"[^>]*aria-current="page"[^>]*>昨日收盘总结</);
+  assert.match(marketCloseHtml, /道指领涨，但长债压力没有退场/);
+  assert.match(marketCloseHtml, /主要指数/);
+  assert.match(marketCloseHtml, /11 SECTORS/);
+  assert.match(marketCloseHtml, /下个交易日关注/);
+  assert.match(marketCloseHtml, /本文为公开信息的整理与分析，不构成任何投资建议/);
 });
 
 test("rejects anonymous access to accession-specific SEC reports", async () => {

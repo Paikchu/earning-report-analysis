@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRef, type MouseEvent } from "react";
 
-type SiteHeaderView = "portfolio" | "ledger" | "review" | "macro";
+type SiteHeaderView = "portfolio" | "ledger" | "review" | "macro" | "market-close";
 
 export function SiteHeader({
   active,
@@ -37,6 +37,7 @@ export function SiteHeader({
         <Link aria-current={active === "ledger" ? "page" : undefined} href="/ledger">投资账本</Link>
         <Link aria-current={active === "review" ? "page" : undefined} href="/?view=review" onClick={(event) => handleViewClick(event, "review")}>每日复盘</Link>
         <Link aria-current={active === "macro" ? "page" : undefined} href="/macro">今日宏观经济</Link>
+        <Link aria-current={active === "market-close" ? "page" : undefined} href="/market-close">昨日收盘总结</Link>
       </nav>
       <details className="profile-menu" ref={menuRef}>
         <summary className="profile-trigger" aria-label="打开账户菜单"><span className="profile-avatar" aria-hidden="true" /></summary>
