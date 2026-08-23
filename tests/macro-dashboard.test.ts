@@ -106,6 +106,10 @@ test("defines the fixed TradingView universes and locked technical-analysis conf
   assert.equal(config.symbol, "NASDAQ:IEF");
   assert.equal(config.interval, "D");
   assert.equal(config.range, "12M");
+  assert.equal(config.withdateranges, false);
+  assert.equal(config.hide_side_toolbar, true);
+  assert.equal(config.hide_top_toolbar, true);
+  assert.equal(config.hide_legend, true);
   assert.equal(config.allow_symbol_change, false);
   assert.deepEqual(config.studies, ["MASimple@tv-basicstudies", "StochasticRSI@tv-basicstudies", "ROC@tv-basicstudies"]);
   assert.throws(() => tradingView.buildTradingViewConfig("TVC:US10Y"), /不支持/);
