@@ -560,7 +560,8 @@ test("keeps both allocation charts visible in a responsive grid", async () => {
   assert.match(dashboard, /className="allocation-mode-panel" aria-labelledby="holding-allocation-title"/);
   assert.match(dashboard, /className="allocation-mode-panel" aria-labelledby="sector-allocation-title"/);
   assert.match(css, /\.allocation-comparison \{[^}]*display: grid;[^}]*grid-template-columns: repeat\(auto-fit,/s);
-  assert.match(css, /\.allocation-mode-panel \{[^}]*min-width: 0;[^}]*display: grid;/s);
+  assert.match(css, /\.allocation-mode-panel \{[^}]*min-width: 0;[^}]*display: grid;[^}]*grid-template-rows: auto 1fr;/s);
+  assert.match(css, /\.allocation-mode-panel > \.allocation-wrap \{[^}]*height: 100%;[^}]*align-items: flex-start;/s);
 });
 
 test("fetches homepage and independent detail quotes without modal state", async () => {

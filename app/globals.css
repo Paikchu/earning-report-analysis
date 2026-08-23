@@ -343,8 +343,13 @@ h2 {
 .allocation-mode-panel {
   min-width: 0;
   display: grid;
-  align-content: start;
+  grid-template-rows: auto 1fr;
   gap: 14px;
+}
+
+.allocation-mode-panel > .allocation-wrap {
+  height: 100%;
+  align-items: flex-start;
 }
 
 .allocation-mode-panel h3 {
