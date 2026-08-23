@@ -314,6 +314,26 @@ h2 {
 .allocation-panel h2,
 .ledger-heading h2 { font-size: inherit; }
 
+.portfolio-analysis > .heatmap-section {
+  margin-top: 0;
+  padding-top: 24px;
+  display: flex;
+  flex-direction: column;
+}
+
+.portfolio-analysis > .heatmap-section .heatmap-heading {
+  min-height: 34px;
+  order: 0;
+}
+
+.portfolio-analysis > .heatmap-section .heatmap-divider {
+  margin: 8px 0 18px;
+  order: 1;
+}
+
+.portfolio-analysis > .heatmap-section .heatmap-key { order: 2; }
+.portfolio-analysis > .heatmap-section .heatmap-plot { order: 3; }
+
 .allocation-tabs {
   width: fit-content;
   margin-bottom: 18px;
@@ -806,6 +826,9 @@ h2 {
   justify-content: space-between;
   gap: 20px;
 }
+
+.ledger-page { padding: 24px 0 56px; }
+.ledger-page .ledger-heading h1 { font: 600 22px/1.1 var(--serif); letter-spacing: -.02em; }
 
 .add-plan-button,
 .secondary-button,
@@ -1969,6 +1992,13 @@ td { font-size: 14px; }
   .level-index { align-self: start; padding-top: 13px; }
   .level-actions { justify-content: flex-start; }
   .level-actions button { padding-left: 0; padding-right: 14px; }
+}
+
+@media (max-width: 360px) {
+  .site-header { gap: 8px; }
+  .site-brand span { display: none; }
+  .site-primary-nav { gap: 6px; }
+  .site-primary-nav a { font-size: 11px; }
 }
 
 @media (prefers-reduced-motion: no-preference) {

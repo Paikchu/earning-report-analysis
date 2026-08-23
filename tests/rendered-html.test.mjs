@@ -38,14 +38,28 @@ test("uses one compact header row for the brand and all primary views", async ()
   const html = await response.text();
 
   assert.match(html, /<header class="site-header"/);
-  assert.match(html, /<header class="site-header"[\s\S]*?MAX[\s\S]*?投资记录[\s\S]*?Portfolio[\s\S]*?每日复盘[\s\S]*?今日宏观经济[\s\S]*?<\/header>/);
+  assert.match(html, /<header class="site-header"[\s\S]*?MAX[\s\S]*?投资记录[\s\S]*?Portfolio[\s\S]*?投资账本[\s\S]*?每日复盘[\s\S]*?今日宏观经济[\s\S]*?<\/header>/);
   assert.match(html, /href="\/"[^>]*aria-current="page"[^>]*>Portfolio</);
+  assert.match(html, /href="\/ledger"[^>]*>投资账本</);
   assert.match(html, /href="\/\?view=review"[^>]*>每日复盘</);
   assert.match(html, /href="\/macro"[^>]*>今日宏观经济</);
   assert.doesNotMatch(html, /class="dashboard-tabs"/);
   assert.match(html, /id="portfolio-panel"[^>]*role="region"/);
   assert.match(html, /id="review-panel"[^>]*role="region"/);
   assert.doesNotMatch(html, /<header class="site-header"[\s\S]*?当前净值[\s\S]*?<\/header>/);
+});
+
+test("renders the investment ledger as an independent primary page", async () => {
+  const [homeResponse, ledgerResponse] = await Promise.all([render(), render("/ledger")]);
+  const [homeHtml, ledgerHtml] = await Promise.all([homeResponse.text(), ledgerResponse.text()]);
+
+  assert.equal(ledgerResponse.status, 200);
+  assert.doesNotMatch(homeHtml, /id="ledger-title"/);
+  assert.match(ledgerHtml, /href="\/ledger"[^>]*aria-current="page"[^>]*>投资账本</);
+  assert.match(ledgerHtml, /<h1 id="ledger-title">投资账本<\/h1>/);
+  assert.match(ledgerHtml, /aria-label="账本排序"/);
+  assert.match(ledgerHtml, /class="position-list"/);
+  assert.doesNotMatch(ledgerHtml, /class="portfolio-overview"|class="heatmap-plot"/);
 });
 
 test("uses compact editorial density for macro and daily review pages", async () => {
@@ -302,7 +316,7 @@ test("keeps the heatmap responsive and keyboard reachable", async () => {
 
 test("groups stock and option positions by ticker", async () => {
   const snapshot = JSON.parse(await readFile(new URL("../data/portfolio-snapshot.json", import.meta.url), "utf8"));
-  const response = await render();
+  const response = await render("/ledger");
   const html = await response.text();
   const expectedTickerCount = new Set(snapshot.positions.map((position) => position.symbol)).size;
   const renderedTickerCount = html.match(/class="position-row"/g)?.length ?? 0;
@@ -313,12 +327,11 @@ test("groups stock and option positions by ticker", async () => {
   assert.match(html, /href="\/positions\/INTC"/);
   assert.doesNotMatch(html, /<details class="position-row"/);
   assert.match(html, /INTC/);
-  assert.match(html, /正股/);
   assert.match(html, /期权/);
   assert.match(html, /净市值/);
   assert.match(html, /年内已实现/);
   assert.match(html, /年内净盈亏/);
-  assert.match(html, /财报/);
+  assert.match(html, /class="position-reminder"/);
   assert.match(html, /北京/);
   assert.match(html, /NVDA 期权持仓/);
   assert.match(html, /INTC 期权持仓/);
@@ -423,7 +436,7 @@ test("renders option-only submenus below every ticker with options", async () =>
     readFile(new URL("../app/portfolio-dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
-  const response = await render();
+  const response = await render("/ledger");
   const html = await response.text();
   const optionSymbols = new Set(
     snapshot.positions.filter((position) => position.assetClass === "OPT").map((position) => position.symbol),
@@ -477,7 +490,7 @@ test("uses independent position routes and removes the workspace dialog", async 
 
 test("renders Yahoo price and daily change surfaces without changing ledger calculations", async () => {
   const [response, detail] = await Promise.all([
-    render(),
+    render("/ledger"),
     readFile(new URL("../app/positions/[ticker]/PositionDetailContent.tsx", import.meta.url), "utf8"),
   ]);
   const html = await response.text();

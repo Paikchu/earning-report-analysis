@@ -465,6 +465,55 @@ function PositionLedger({
   );
 }
 
+export function PortfolioLedgerPage({
+  positionGroups,
+  earningsEvents,
+}: {
+  positionGroups: PositionGroupView[];
+  earningsEvents: EarningsEvent[];
+}) {
+  const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
+  const quoteSymbols = useMemo(() => positionGroups.map((group) => group.symbol).join(","), [positionGroups]);
+  const quoteState = useMarketQuotes(quoteSymbols);
+  const [earningsAsOf] = useState(() => new Date().toISOString());
+  const positionSymbols = useMemo(() => new Set(positionGroups.map((group) => group.symbol)), [positionGroups]);
+  const earningsBySymbol = useMemo(() => {
+    const events = new Map<string, EarningsEvent>();
+    for (const event of earningsEvents) {
+      if (
+        positionSymbols.has(event.symbol) &&
+        isUpcomingEarnings(event, earningsAsOf) &&
+        !events.has(event.symbol)
+      ) events.set(event.symbol, event);
+    }
+    return events;
+  }, [earningsAsOf, earningsEvents, positionSymbols]);
+
+  return (
+    <>
+      <SiteHeader active="ledger" />
+      <section className="ledger-panel ledger-page" aria-labelledby="ledger-title">
+        <div className="ledger-heading">
+          <h1 id="ledger-title">投资账本</h1>
+          <AddPlanDialog />
+        </div>
+        <div className="section-divider" aria-hidden="true" />
+        <div className="ledger-content">
+          <PositionLedger
+            groups={positionGroups}
+            activeSymbol={activeSymbol}
+            onActiveSymbolChange={setActiveSymbol}
+            quotes={quoteState.quotes}
+            quoteStatus={quoteState.status}
+            earningsBySymbol={earningsBySymbol}
+            earningsUpdatedAt={earningsAsOf}
+          />
+        </div>
+      </section>
+    </>
+  );
+}
+
 export function PortfolioDashboard({
   dailyReview,
   heatmapHoldings,
@@ -498,21 +547,8 @@ export function PortfolioDashboard({
 }) {
   const [activeView, setActiveView] = useState<DashboardView>("portfolio");
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
-  const quoteSymbols = useMemo(() => positionGroups.map((group) => group.symbol).join(","), [positionGroups]);
-  const quoteState = useMarketQuotes(quoteSymbols);
   const [earningsAsOf] = useState(() => new Date().toISOString());
   const positionSymbols = useMemo(() => new Set(positionGroups.map((group) => group.symbol)), [positionGroups]);
-  const earningsBySymbol = useMemo(() => {
-    const events = new Map<string, EarningsEvent>();
-    for (const event of earningsEvents) {
-      if (
-        positionSymbols.has(event.symbol) &&
-        isUpcomingEarnings(event, earningsAsOf) &&
-        !events.has(event.symbol)
-      ) events.set(event.symbol, event);
-    }
-    return events;
-  }, [earningsAsOf, earningsEvents, positionSymbols]);
   const nextEarnings = earningsEvents.find((event) => (
     positionSymbols.has(event.symbol) && isUpcomingEarnings(event, earningsAsOf)
   ));
@@ -551,32 +587,13 @@ export function PortfolioDashboard({
           nextEarnings={nextEarnings}
           nextEarningsReminder={nextEarningsReminder}
         />
-        <section className="lower-grid">
+        <section className="lower-grid portfolio-analysis">
           <aside className="allocation-panel">
             <h2>仓位构成</h2>
             <div className="section-divider" aria-hidden="true" />
             <AllocationPanel groups={positionGroups} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
-            <PortfolioHeatmap holdings={heatmapHoldings} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
           </aside>
-
-          <section className="ledger-panel" aria-labelledby="ledger-title">
-            <div className="ledger-heading">
-              <h2 id="ledger-title">投资账本</h2>
-              <AddPlanDialog />
-            </div>
-            <div className="section-divider" aria-hidden="true" />
-            <div className="ledger-content">
-              <PositionLedger
-                groups={positionGroups}
-                activeSymbol={activeSymbol}
-                onActiveSymbolChange={setActiveSymbol}
-                quotes={quoteState.quotes}
-                quoteStatus={quoteState.status}
-                earningsBySymbol={earningsBySymbol}
-                earningsUpdatedAt={earningsAsOf}
-              />
-            </div>
-          </section>
+          <PortfolioHeatmap holdings={heatmapHoldings} activeSymbol={activeSymbol} onActiveSymbolChange={setActiveSymbol} />
         </section>
       </div>
 
