@@ -48,6 +48,17 @@ test("uses one compact header row for the brand and all primary views", async ()
   assert.doesNotMatch(html, /<header class="site-header"[\s\S]*?当前净值[\s\S]*?<\/header>/);
 });
 
+test("uses compact editorial density for macro and daily review pages", async () => {
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(css, /\.macro-hero \{[\s\S]*?grid-template-areas:\s*"label label" "title summary" "title asof";/);
+  assert.match(css, /\.macro-hero h1 \{[\s\S]*?font-size: clamp\(34px, 4vw, 52px\);[\s\S]*?line-height: 1\.04;/);
+  assert.match(css, /\.macro-hero > p \{[\s\S]*?font: 500 clamp\(15px, 1\.25vw, 17px\)\/1\.55 var\(--serif\);/);
+  assert.match(css, /\.daily-review-heading h2 \{[\s\S]*?font-size: clamp\(22px, 1\.8vw, 28px\);/);
+  assert.match(css, /\.daily-review-summary \{[\s\S]*?font: 500 14px\/1\.55 var\(--serif\);/);
+  assert.match(css, /\.review-driver-list li \{[\s\S]*?padding: 11px 0 11px 32px;/);
+});
+
 test("renders the independent macro dashboard without adding market charts to the homepage", async () => {
   const [homeResponse, macroResponse] = await Promise.all([render(), render("/macro")]);
   const [homeHtml, macroHtml] = await Promise.all([homeResponse.text(), macroResponse.text()]);
