@@ -1,11 +1,94 @@
 import type { PublishedSecReport } from "@/lib/sec-analysis";
 import type { SecFilingWithSummary, SecNodeResult, SecWorkflowNode } from "@/lib/sec";
+import type { ReactNode } from "react";
 import Link from "next/link";
+import { SecReportNavigator, type ReportSectionLink } from "./SecReportNavigator";
+
+type ReportSectionDefinition = ReportSectionLink & {
+  className?: string;
+  content: ReactNode;
+};
 
 export function SecReportDocument({ companyName, filing }: { companyName: string; filing: SecFilingWithSummary }) {
   const summary = filing.summary;
   const report = filing.analysis;
   const reportReady = Boolean(summary?.report);
+  const reportSections: ReportSectionDefinition[] = reportReady ? [
+    {
+      id: "sec-report-conclusions",
+      title: "核心结论",
+      description: "先看经营结果、主要驱动和对投资判断的直接含义。",
+      className: "sec-report-conclusions",
+      content: (
+        <>
+          <ConclusionList bullets={summary?.bullets ?? []} />
+          {summary?.analystView && <p className="sec-report-investment-view"><span>投资含义</span>{summary.analystView}</p>}
+        </>
+      ),
+    },
+    {
+      id: "sec-report-metrics",
+      title: "验证指标",
+      description: "集中查看已验证的关键财务指标与同比、环比变化。",
+      content: <VerifiedMetrics report={report} />,
+    },
+    {
+      id: "sec-report-body",
+      title: "完整正文",
+      description: "阅读基于 SEC 申报材料形成的连续分析叙述。",
+      content: (
+        <div className="sec-report-body">
+          {paragraphs(summary?.report ?? "").map((paragraph, index) => <p key={`${index}-${paragraph.slice(0, 24)}`}>{paragraph}</p>)}
+        </div>
+      ),
+    },
+    {
+      id: "sec-report-nodes",
+      title: "动态分段分析",
+      description: "按主题展开分析发现、叙述和对应的原文证据。",
+      content: (
+        <div className="sec-report-node-list">
+          {(summary?.nodes ?? []).map((node) => (
+            <details className="sec-report-node" key={node.id}>
+              <summary><span>{node.title}</span><small>{nodeStatus(node.status)}</small></summary>
+              <div>
+                {node.findings.length > 0 && <ConclusionList bullets={node.findings} />}
+                {node.narrative && <p>{node.narrative}</p>}
+                {node.error && <p className="sec-report-error">{node.error}</p>}
+                {node.evidence.length > 0 && (
+                  <details className="sec-report-evidence">
+                    <summary>原文摘录与位置 · {node.evidence.length}</summary>
+                    {node.evidence.map((evidence, index) => (
+                      <blockquote key={`${evidence.start}-${index}`}>
+                        <p>{evidence.excerpt}</p>
+                        <footer>字符 {evidence.start.toLocaleString("zh-CN")}–{evidence.end.toLocaleString("zh-CN")} · 相关性 {evidence.score}/100</footer>
+                      </blockquote>
+                    ))}
+                  </details>
+                )}
+              </div>
+            </details>
+          ))}
+        </div>
+      ),
+    },
+    {
+      id: "sec-report-quality",
+      title: "数据质量",
+      description: "检查证据覆盖率、验证状态和需要人工复核的提示。",
+      content: <DataQuality report={report} />,
+    },
+    {
+      id: "sec-report-workflow",
+      title: "全部 Workflow 节点",
+      description: "查看报告各分析环节的结果与异常。",
+      content: (
+        <div className="sec-workflow-list">
+          {(summary?.workflow?.nodes ?? []).map((node, index) => <WorkflowNodeView index={index + 1} key={node.id} node={node} />)}
+        </div>
+      ),
+    },
+  ] : [];
 
   return (
     <main className="sec-report-shell">
@@ -32,62 +115,25 @@ export function SecReportDocument({ companyName, filing }: { companyName: string
         </section>
       ) : (
         <>
-          <section className="sec-report-section sec-report-conclusions" aria-labelledby="sec-report-conclusions-title">
-            <SectionHeading index="01" title="核心结论" id="sec-report-conclusions-title" />
-            <ConclusionList bullets={summary?.bullets ?? []} />
-            {summary?.analystView && <p className="sec-report-investment-view"><span>投资含义</span>{summary.analystView}</p>}
-          </section>
-
-          <section className="sec-report-section" aria-labelledby="sec-report-metrics-title">
-            <SectionHeading index="02" title="验证指标" id="sec-report-metrics-title" />
-            <VerifiedMetrics report={report} />
-          </section>
-
-          <section className="sec-report-section" aria-labelledby="sec-report-body-title">
-            <SectionHeading index="03" title="完整正文" id="sec-report-body-title" />
-            <div className="sec-report-body">
-              {paragraphs(summary?.report ?? "").map((paragraph, index) => <p key={`${index}-${paragraph.slice(0, 24)}`}>{paragraph}</p>)}
-            </div>
-          </section>
-
-          <section className="sec-report-section" aria-labelledby="sec-report-nodes-title">
-            <SectionHeading index="04" title="动态分段分析" id="sec-report-nodes-title" />
-            <div className="sec-report-node-list">
-              {(summary?.nodes ?? []).map((node) => (
-                <details className="sec-report-node" key={node.id}>
-                  <summary><span>{node.title}</span><small>{nodeStatus(node.status)}</small></summary>
-                  <div>
-                    {node.findings.length > 0 && <ConclusionList bullets={node.findings} />}
-                    {node.narrative && <p>{node.narrative}</p>}
-                    {node.error && <p className="sec-report-error">{node.error}</p>}
-                    {node.evidence.length > 0 && (
-                      <details className="sec-report-evidence">
-                        <summary>原文摘录与位置 · {node.evidence.length}</summary>
-                        {node.evidence.map((evidence, index) => (
-                          <blockquote key={`${evidence.start}-${index}`}>
-                            <p>{evidence.excerpt}</p>
-                            <footer>字符 {evidence.start.toLocaleString("zh-CN")}–{evidence.end.toLocaleString("zh-CN")} · 相关性 {evidence.score}/100</footer>
-                          </blockquote>
-                        ))}
-                      </details>
-                    )}
-                  </div>
-                </details>
-              ))}
-            </div>
-          </section>
-
-          <section className="sec-report-section" aria-labelledby="sec-report-quality-title">
-            <SectionHeading index="05" title="数据质量" id="sec-report-quality-title" />
-            <DataQuality report={report} />
-          </section>
-
-          <section className="sec-report-section" aria-labelledby="sec-report-workflow-title">
-            <SectionHeading index="06" title="全部 Workflow 节点" id="sec-report-workflow-title" />
-            <div className="sec-workflow-list">
-              {(summary?.workflow?.nodes ?? []).map((node, index) => <WorkflowNodeView index={index + 1} key={node.id} node={node} />)}
-            </div>
-          </section>
+          <SecReportNavigator initialSections={reportSections.map(({ id, title, description }) => ({ id, title, description }))} />
+          <div data-report-sections>
+            {reportSections.map((section, index) => (
+              <section
+                key={section.id}
+                id={section.id}
+                tabIndex={-1}
+                data-report-section
+                data-report-index={String(index + 1).padStart(2, "0")}
+                data-report-title={section.title}
+                data-report-description={section.description}
+                className={`sec-report-section scroll-mt-24 ${section.className ?? ""}`}
+                aria-labelledby={`${section.id}-title`}
+              >
+                <SectionHeading index={String(index + 1).padStart(2, "0")} title={section.title} id={`${section.id}-title`} />
+                {section.content}
+              </section>
+            ))}
+          </div>
         </>
       )}
 

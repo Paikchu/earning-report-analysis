@@ -39,4 +39,10 @@ test("renders the complete report, dynamic evidence, and workflow trace", () => 
   assert.match(html, /全部 Workflow 节点/);
   assert.match(html, /Revenue increased 18%/);
   assert.match(html, /<details/);
+  assert.match(html, /aria-label="报告目录"/);
+  assert.match(html, /href="#sec-report-conclusions"/);
+  assert.match(html, /data-report-title="核心结论"/);
+  assert.match(html, /data-report-description="先看经营结果、主要驱动和对投资判断的直接含义。"/);
+  assert.equal((html.match(/data-report-section="true"/g) ?? []).length, 6);
+  assert.deepEqual([...html.matchAll(/data-report-index="(\d{2})"/g)].map((match) => match[1]), ["01", "02", "03", "04", "05", "06"]);
 });
