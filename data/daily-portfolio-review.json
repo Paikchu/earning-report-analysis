@@ -1,59 +1,90 @@
 {
   "version": 1,
-  "reviewDate": "2026-08-22",
-  "generatedAt": "2026-08-21T23:41:19.219Z",
-  "snapshotGeneratedAt": "2026-08-21T23:41:19.219Z",
+  "reviewDate": "2026-08-24",
+  "generatedAt": "2026-08-23T23:41:59.691Z",
+  "snapshotGeneratedAt": "2026-08-23T23:41:59.691Z",
   "tone": "cautious",
-  "headline": "AMZN 新仓加入 AI 资本开支链，现金降至 11.2% 后集中风险继续上升",
-  "summary": "最新 IBKR 快照净值为 60,802.36 美元，现金为 6,820.79 美元，约占净值 11.2%。8 月 21 日组合新买入 2 股 AMZN，当前约占净值 0.9%；MSFT 仍约占 27.9%，NVDA 正股与空头看跌期权合计净市值约占 11.2%。美股周五反弹，但纳斯达克全周仍下跌 2.1%，债券市场压力没有解除；NVIDIA 8 月 26 日财报仍是组合下一项主要催化剂。",
+  "headline": "周末快照未变，NVDA 财报与利率压力仍主导本组合",
+  "summary": "最新 IBKR 快照净值为 60,802.36 美元，现金为 6,820.79 美元，约占净值 11.2%；周末持仓与最近交易日相比没有新增交易。MSFT 约占净值 27.8%，仍是最大单一仓位；NVDA 正股与空头看跌期权合计净市值约占 11.3%。最近交易日纳斯达克反弹 0.4%，但全周仍下跌 2.1%，而 NVIDIA 8 月 26 日财报是组合下一项最直接的共同催化剂。",
   "drivers": [
     {
-      "title": "AMZN 新仓把组合进一步连到 AI 资本开支",
-      "detail": "披露事实：组合于 8 月 21 日买入 AMZN 2 股，当前市值约 519.18 美元。Amazon 第二季度 AWS 收入同比增长 37%，AWS 营业利润升至 166 亿美元；过去十二个月自由现金流转为流出 76 亿美元，主要因为 AI 相关资本支出增加。",
-      "implication": "组合含义：AMZN 当前仅约占净值 0.9%，直接影响有限；但其 AI 投资同时强化了组合对云需求和算力资本开支周期的依赖。",
-      "tickers": ["AMZN", "NVDA", "AVGO", "MRVL", "MSFT", "ORCL"]
+      "title": "NVDA 财报临近，影响不止单一仓位",
+      "detail": "披露事实：NVIDIA 将于 8 月 26 日美东时间下午 5 点讨论 FY2027 第二季度业绩，并在约下午 1:20 发布结果与 CFO 书面评论。组合当前持有 NVDA 正股，并卖出 1 张 2027 年 1 月 180 美元看跌期权。",
+      "implication": "组合含义：NVDA 的净市值暴露约占净值 11.3%；其数据中心需求、毛利率与指引还会重估 AVGO、MRVL、DRAM 及云软件持仓。",
+      "tickers": [
+        "NVDA",
+        "AVGO",
+        "MRVL",
+        "DRAM",
+        "MSFT",
+        "AMZN",
+        "ORCL"
+      ]
     },
     {
-      "title": "现金缓冲继续下降，MSFT 集中度维持高位",
-      "detail": "披露事实：现金由前次快照的 7,338.80 美元降至 6,820.79 美元，约占净值 11.2%；MSFT 市值约 16,948.00 美元，占净值约 27.9%。",
-      "implication": "组合含义：新增小仓并未分散第一大仓位风险，现金减少后，MSFT 的云增长、AI 回报和估值变化更容易主导日度净值。",
-      "tickers": ["MSFT"]
+      "title": "MSFT 集中度与现金缓冲均未变化",
+      "detail": "披露事实：MSFT 市值约 16,916.46 美元，占净值约 27.8%；现金为 6,820.79 美元，约占净值 11.2%。本次周末快照没有新增交易。",
+      "implication": "组合含义：现金能吸收部分波动，但无法抵消第一大仓位与 AI 资本开支链同步回撤时的集中风险。",
+      "tickers": [
+        "MSFT",
+        "NVDA",
+        "AVGO",
+        "MRVL",
+        "AMZN",
+        "ORCL"
+      ]
     },
     {
-      "title": "周五反弹没有解除利率压力",
-      "detail": "披露事实：AP 报道 8 月 21 日 S&P 500 和纳斯达克均上涨 0.4%，但纳斯达克全周仍下跌 2.1%；债券收益率继续上升，油价与通胀不确定性仍在。",
-      "implication": "组合含义：MSFT、NOW、ORCL、META、AMZN 和半导体仓位都对折现率敏感，单日反弹不足以证明高估值压力已经结束。",
-      "tickers": ["MSFT", "NOW", "ORCL", "META", "AMZN", "NVDA", "AVGO", "MRVL", "DRAM"]
+      "title": "周五反弹未扭转科技股周度压力",
+      "detail": "披露事实：AP 数据显示 8 月 21 日 S&P 500 与纳斯达克均上涨 0.4%，但纳斯达克全周下跌 2.1%；债券市场仍然波动并对估值形成压力。",
+      "implication": "组合含义：MSFT、NOW、META、AMZN、ORCL 与半导体仓位均对折现率敏感，单日反弹尚不足以解除组合的共同估值风险。",
+      "tickers": [
+        "MSFT",
+        "NOW",
+        "META",
+        "AMZN",
+        "ORCL",
+        "NVDA",
+        "AVGO",
+        "MRVL",
+        "DRAM"
+      ]
     },
     {
-      "title": "NVIDIA 财报仍是组合级事件",
-      "detail": "披露事实：NVIDIA 将于 8 月 26 日美东时间下午 5 点讨论 FY2027 第二季度业绩，并在约下午 1:20 发布结果和 CFO 书面评论。",
-      "implication": "组合含义：NVDA 净市值暴露约占净值 11.2%，其需求、毛利率与指引还会重估组合内多只 AI 基础设施、云和企业软件持仓。",
-      "tickers": ["NVDA", "AVGO", "MRVL", "DRAM", "AMZN", "ORCL", "MSFT"]
+      "title": "美联储纪要强化高利率尾部风险",
+      "detail": "披露事实：美联储 7 月会议纪要显示，多数与会者支持维持利率不变，三位投票者倾向加息 25 个基点；会议期间名义美债收益率上升约 25 至 30 个基点。",
+      "implication": "组合含义：若市场继续上调政策利率路径，高估值软件、云计算与半导体仓位可能同时承受估值压缩。",
+      "tickers": [
+        "MSFT",
+        "NOW",
+        "META",
+        "AMZN",
+        "ORCL",
+        "NVDA",
+        "AVGO",
+        "MRVL",
+        "DRAM"
+      ]
     }
   ],
   "watchItems": [
     {
       "label": "8 月 26 日 NVIDIA 财报",
-      "detail": "核对数据中心需求、毛利率、供应约束及下一季指引，并观察 AVGO、MRVL、DRAM、AMZN、ORCL 与 MSFT 的联动。"
+      "detail": "核对数据中心需求、毛利率、供应约束与下一季指引，并观察 AVGO、MRVL、DRAM、MSFT、AMZN 与 ORCL 的联动。"
     },
     {
-      "label": "AMZN 的增长与现金流落差",
-      "detail": "关注 AWS 高增长能否覆盖 AI 基础设施投入带来的自由现金流压力，避免只依据收入增速判断新仓质量。"
+      "label": "现金与组合集中度",
+      "detail": "现金约占 11.2%，MSFT 单一仓位约占 27.8%；关注两者在下一次交易发生后的变化。"
     },
     {
-      "label": "现金与长端收益率",
-      "detail": "现金约占 11.2%；若债券收益率继续抬升，现有缓冲不足以完全抵消 MSFT 与 AI 链的共同估值波动。"
+      "label": "长端收益率",
+      "detail": "关注债券收益率是否延续上行；这会同时影响组合内软件、云和半导体仓位的估值。"
     }
   ],
   "sources": [
     {
-      "title": "AP: US stocks rise even as the bond market applies more pressure",
-      "url": "https://apnews.com/article/96ef9586e1288e50843b4d2b1ccebc32"
-    },
-    {
-      "title": "Amazon announces second quarter 2026 results",
-      "url": "https://ir.aboutamazon.com/news-release/news-release-details/2026/Amazon-com-Announces-Second-Quarter-Results/default.aspx"
+      "title": "AP: How major US stock indexes fared Friday 8/21/2026",
+      "url": "https://apnews.com/article/09c079b43680c3e4564346892b5dc824"
     },
     {
       "title": "NVIDIA sets FY2027 Q2 earnings call",
@@ -61,7 +92,11 @@
     },
     {
       "title": "Federal Reserve: Minutes of the July 28-29, 2026 FOMC meeting",
-      "url": "https://www.federalreserve.gov/monetarypolicy/files/fomcminutes20260729.pdf"
+      "url": "https://www.federalreserve.gov/monetarypolicy/fomcminutes20260729.htm"
+    },
+    {
+      "title": "Amazon announces second quarter 2026 results",
+      "url": "https://ir.aboutamazon.com/news-release/news-release-details/2026/Amazon-com-Announces-Second-Quarter-Results/default.aspx"
     }
   ]
 }
