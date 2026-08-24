@@ -1,39 +1,12 @@
 {
   "version": 1,
-  "reviewDate": "2026-08-21",
-  "generatedAt": "2026-08-21T07:21:16.000Z",
-  "portfolioSnapshotGeneratedAt": "2026-08-19T23:46:12.240Z",
+  "reviewDate": "2026-08-24",
+  "generatedAt": "2026-08-24T00:48:00.000Z",
+  "portfolioSnapshotGeneratedAt": "2026-08-23T23:41:59.691Z",
   "coverageStatus": "complete",
-  "headline": "初请回落，30 年期 TIPS 实际收益率定于 2.973%",
-  "summary": "截至 8 月 15 日当周初请失业金人数降至 20.6 万，但截至 8 月 8 日当周持续申领人数升至 179.9 万；30 年期 TIPS 增发以 2.973% 的实际收益率成交，投标倍数为 2.82。裁员压力仍低，但再就业速度偏慢的风险没有消失；长期实际贴现率仍约束成长股估值，较高的间接投标吸收比例则缓和了当日供给压力。",
-  "impacts": [
-    {
-      "eventId": "dol-weekly-claims-2026-08-20",
-      "title": "每周失业金申请",
-      "fact": "美国劳工部披露，截至 8 月 15 日当周，季调后初请失业金人数为 20.6 万，较前值下降 0.6 万；四周移动平均为 20.4 万，上升 0.425 万。截至 8 月 8 日当周，持续申领人数为 179.9 万，上升 1.8 万，参保失业率维持 1.2%。",
-      "transmission": "初请回落说明新增裁员仍受控，支持短期增长；持续申领上升则指向再就业吸收偏慢。前者降低立即宽松的必要性，后者增加未来消费和就业走弱的风险，利率传导方向并不单一。",
-      "channels": ["growth", "rates"],
-      "direction": "mixed",
-      "horizon": "near_term",
-      "confidence": "high",
-      "tickers": ["VOO", "MSFT", "NVDA", "AVGO", "NOW", "TSLA"],
-      "implication": "组合的短期增长背景仍稳定，但长久期科技股没有获得明确的降息顺风；后续需要由就业报告和 PCE 确认方向。",
-      "sourceIds": ["dol-weekly-claims-2026-08-20"]
-    },
-    {
-      "eventId": "treasury-30y-tips-auction-2026-08-20",
-      "title": "30 年期 TIPS 增发拍卖",
-      "fact": "美国财政部披露，剩余期限 29 年 6 个月的 TIPS 增发拍卖以 2.973% 的最高实际收益率成交，投标倍数为 2.82；间接投标人获配 67.076 亿美元，占竞争性获配 79.427 亿美元的约 84%。",
-      "transmission": "2.973% 的长期实际收益率提高远期现金流的贴现门槛，对长久期资产不利；间接投标人吸收大部分竞争性获配，降低了拍卖供给在当日进一步放大利率波动的风险。",
-      "channels": ["rates", "inflation", "volatility"],
-      "direction": "mixed",
-      "horizon": "immediate",
-      "confidence": "medium",
-      "tickers": ["VOO", "MSFT", "NVDA", "AVGO", "MRVL", "NOW", "TSLA"],
-      "implication": "实际利率仍是组合估值的主要逆风，但本次拍卖结果没有显示出明显的需求断层；继续观察长端实际收益率能否维持稳定。",
-      "sourceIds": ["treasury-30y-tips-auction-2026-08-20"]
-    }
-  ],
+  "headline": "过去 24 小时无新增美国宏观发布",
+  "summary": "截至上海时间 8 月 24 日 08:48，过去 24 小时没有纳入范围的美国高、中影响宏观事件发布。未来七天的重点集中在新屋销售、耐用品订单、二季度 GDP 修订值、7 月 PCE 与每周初请失业金；本次不新增组合影响判断。",
+  "impacts": [],
   "upcomingEvents": [
     {
       "id": "new-home-sales-2026-07",
@@ -78,18 +51,6 @@
   ],
   "sources": [
     {
-      "id": "dol-weekly-claims-2026-08-20",
-      "title": "U.S. Department of Labor — Unemployment Insurance Weekly Claims, August 20, 2026",
-      "url": "https://www.dol.gov/newsroom/releases/eta/eta20260820",
-      "publishedAt": "2026-08-20T12:30:00.000Z"
-    },
-    {
-      "id": "treasury-30y-tips-auction-2026-08-20",
-      "title": "U.S. Treasury — 29-Year 6-Month TIPS Auction Results, August 20, 2026",
-      "url": "https://www.treasurydirect.gov/instit/annceresult/press/preanre/2026/R_20260820_3.pdf",
-      "publishedAt": "2026-08-20T17:00:00.000Z"
-    },
-    {
       "id": "census-calendar",
       "title": "U.S. Census Bureau — Economic Indicator Release Schedule",
       "url": "https://www.census.gov/economic-indicators/calendar-listview.html"
@@ -103,6 +64,21 @@
       "id": "dol-claims-schedule",
       "title": "U.S. Department of Labor — Weekly Claims Publication Schedule",
       "url": "https://oui.doleta.gov/unemploy/claims_arch.asp"
+    },
+    {
+      "id": "bls-august-calendar",
+      "title": "U.S. Bureau of Labor Statistics — August 2026 Release Calendar",
+      "url": "https://www.bls.gov/schedule/2026/08_sched_list.htm"
+    },
+    {
+      "id": "fed-august-calendar",
+      "title": "Federal Reserve — August 2026 Calendar",
+      "url": "https://www.federalreserve.gov/newsevents/2026-august.htm"
+    },
+    {
+      "id": "treasury-q3-auction-schedule",
+      "title": "U.S. Treasury — Tentative Auction Schedule, Third Quarter 2026",
+      "url": "https://home.treasury.gov/system/files/221/TentativeAuctionScheduleQ32026.pdf"
     }
   ]
 }
