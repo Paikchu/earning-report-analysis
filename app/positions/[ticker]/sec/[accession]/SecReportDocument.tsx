@@ -13,6 +13,14 @@ export function SecReportDocument({ companyName, filing }: { companyName: string
   const summary = filing.summary;
   const report = filing.analysis;
   const reportReady = Boolean(summary?.report);
+  const nodeLinks: ReportSectionLink[] = (summary?.nodes ?? []).map((node, index) => ({
+    id: `sec-report-node-${index + 1}`,
+    index: `04.${String(index + 1).padStart(2, "0")}`,
+    title: node.title,
+    description: node.narrative || node.findings[0]?.detail || "展开查看该主题的分析发现与原文证据。",
+    depth: 1,
+    parentTitle: "动态分段分析",
+  }));
   const reportSections: ReportSectionDefinition[] = reportReady ? [
     {
       id: "sec-report-conclusions",
@@ -48,8 +56,19 @@ export function SecReportDocument({ companyName, filing }: { companyName: string
       description: "按主题展开分析发现、叙述和对应的原文证据。",
       content: (
         <div className="sec-report-node-list">
-          {(summary?.nodes ?? []).map((node) => (
-            <details className="sec-report-node" key={node.id}>
+          {(summary?.nodes ?? []).map((node, index) => (
+            <details
+              id={nodeLinks[index].id}
+              tabIndex={-1}
+              data-report-nav-item
+              data-report-index={nodeLinks[index].index}
+              data-report-title={nodeLinks[index].title}
+              data-report-description={nodeLinks[index].description}
+              data-report-depth="1"
+              data-report-parent-title="动态分段分析"
+              className="sec-report-node scroll-mt-24"
+              key={node.id}
+            >
               <summary><span>{node.title}</span><small>{nodeStatus(node.status)}</small></summary>
               <div>
                 {node.findings.length > 0 && <ConclusionList bullets={node.findings} />}
@@ -89,6 +108,10 @@ export function SecReportDocument({ companyName, filing }: { companyName: string
       ),
     },
   ] : [];
+  const navigationSections: ReportSectionLink[] = reportSections.flatMap((section, index) => {
+    const sectionLink = { id: section.id, index: String(index + 1).padStart(2, "0"), title: section.title, description: section.description, depth: 0 as const };
+    return section.id === "sec-report-nodes" ? [sectionLink, ...nodeLinks] : [sectionLink];
+  });
 
   return (
     <main className="sec-report-shell">
@@ -115,7 +138,7 @@ export function SecReportDocument({ companyName, filing }: { companyName: string
         </section>
       ) : (
         <>
-          <SecReportNavigator initialSections={reportSections.map(({ id, title, description }) => ({ id, title, description }))} />
+          <SecReportNavigator initialSections={navigationSections} />
           <div data-report-sections>
             {reportSections.map((section, index) => (
               <section
@@ -123,9 +146,11 @@ export function SecReportDocument({ companyName, filing }: { companyName: string
                 id={section.id}
                 tabIndex={-1}
                 data-report-section
+                data-report-nav-item
                 data-report-index={String(index + 1).padStart(2, "0")}
                 data-report-title={section.title}
                 data-report-description={section.description}
+                data-report-depth="0"
                 className={`sec-report-section scroll-mt-24 ${section.className ?? ""}`}
                 aria-labelledby={`${section.id}-title`}
               >
