@@ -1,16 +1,16 @@
 {
   "version": 1,
-  "reviewDate": "2026-08-24",
-  "generatedAt": "2026-08-23T23:41:59.691Z",
-  "snapshotGeneratedAt": "2026-08-23T23:41:59.691Z",
+  "reviewDate": "2026-08-25",
+  "generatedAt": "2026-08-24T23:32:23.306Z",
+  "snapshotGeneratedAt": "2026-08-24T23:32:23.306Z",
   "tone": "cautious",
-  "headline": "周末快照未变，NVDA 财报与利率压力仍主导本组合",
-  "summary": "最新 IBKR 快照净值为 60,802.36 美元，现金为 6,820.79 美元，约占净值 11.2%；周末持仓与最近交易日相比没有新增交易。MSFT 约占净值 27.8%，仍是最大单一仓位；NVDA 正股与空头看跌期权合计净市值约占 11.3%。最近交易日纳斯达克反弹 0.4%，但全周仍下跌 2.1%，而 NVIDIA 8 月 26 日财报是组合下一项最直接的共同催化剂。",
+  "headline": "净值回落 1.6%，NVDA 财报前 AI 链与 MSFT 集中度放大波动",
+  "summary": "最新 IBKR 快照净值为 59,813.33 美元，较上一日减少 989.03 美元，现金维持 6,820.79 美元，约占净值 11.4%。MSFT 约占净值 28.5%，仍是最大单一仓位；NVDA 正股与空头看跌期权合计净市值约占 10.9%。8 月 24 日纳斯达克下跌 0.8%，本组合的半导体与高估值科技暴露同步承压，而 NVIDIA 8 月 26 日财报仍是近期最关键的组合级事件。",
   "drivers": [
     {
-      "title": "NVDA 财报临近，影响不止单一仓位",
-      "detail": "披露事实：NVIDIA 将于 8 月 26 日美东时间下午 5 点讨论 FY2027 第二季度业绩，并在约下午 1:20 发布结果与 CFO 书面评论。组合当前持有 NVDA 正股，并卖出 1 张 2027 年 1 月 180 美元看跌期权。",
-      "implication": "组合含义：NVDA 的净市值暴露约占净值 11.3%；其数据中心需求、毛利率与指引还会重估 AVGO、MRVL、DRAM 及云软件持仓。",
+      "title": "NVDA 财报前，组合 AI 链共同承压",
+      "detail": "披露事实：NVIDIA 将于 8 月 26 日美东时间下午 5 点讨论 FY2027 第二季度业绩，并在约下午 1:20 发布结果与 CFO 书面评论。组合持有 NVDA 正股，并卖出 1 张 2027 年 1 月 180 美元看跌期权。",
+      "implication": "组合含义：NVDA 净市值暴露约占净值 10.9%；财报中的数据中心需求、毛利率与指引也会影响 AVGO、MRVL、DRAM 以及云软件持仓的估值。",
       "tickers": [
         "NVDA",
         "AVGO",
@@ -22,48 +22,35 @@
       ]
     },
     {
-      "title": "MSFT 集中度与现金缓冲均未变化",
-      "detail": "披露事实：MSFT 市值约 16,916.46 美元，占净值约 27.8%；现金为 6,820.79 美元，约占净值 11.2%。本次周末快照没有新增交易。",
-      "implication": "组合含义：现金能吸收部分波动，但无法抵消第一大仓位与 AI 资本开支链同步回撤时的集中风险。",
+      "title": "科技股回撤直接击中组合高权重区域",
+      "detail": "披露事实：AP 数据显示 8 月 24 日 S&P 500 下跌 0.3%，纳斯达克下跌 0.8%；科技股领跌，市场关注 AI 投资能否转化为足够利润。",
+      "implication": "组合含义：MSFT、NVDA、AVGO、DRAM、NOW、ORCL 与 AMZN 同属组合核心暴露，科技股共振下跌时，VOO 与现金只能提供有限缓冲。",
       "tickers": [
         "MSFT",
         "NVDA",
         "AVGO",
-        "MRVL",
+        "DRAM",
+        "NOW",
+        "ORCL",
         "AMZN",
-        "ORCL"
+        "VOO"
       ]
     },
     {
-      "title": "周五反弹未扭转科技股周度压力",
-      "detail": "披露事实：AP 数据显示 8 月 21 日 S&P 500 与纳斯达克均上涨 0.4%，但纳斯达克全周下跌 2.1%；债券市场仍然波动并对估值形成压力。",
-      "implication": "组合含义：MSFT、NOW、META、AMZN、ORCL 与半导体仓位均对折现率敏感，单日反弹尚不足以解除组合的共同估值风险。",
+      "title": "MSFT 集中度升至约 28.5%",
+      "detail": "披露事实：MSFT 市值约 17,068.56 美元，占净值约 28.5%；现金为 6,820.79 美元，占净值约 11.4%。本次交易同步未发现新增交易。",
+      "implication": "组合含义：净值下降后第一大仓位占比被动抬升，MSFT 的云增长、AI 回报与估值变化将继续主导组合波动。",
       "tickers": [
-        "MSFT",
-        "NOW",
-        "META",
-        "AMZN",
-        "ORCL",
-        "NVDA",
-        "AVGO",
-        "MRVL",
-        "DRAM"
+        "MSFT"
       ]
     },
     {
-      "title": "美联储纪要强化高利率尾部风险",
-      "detail": "披露事实：美联储 7 月会议纪要显示，多数与会者支持维持利率不变，三位投票者倾向加息 25 个基点；会议期间名义美债收益率上升约 25 至 30 个基点。",
-      "implication": "组合含义：若市场继续上调政策利率路径，高估值软件、云计算与半导体仓位可能同时承受估值压缩。",
+      "title": "DRAM 与 TSLA 的未实现亏损扩大",
+      "detail": "披露事实：DRAM 未实现亏损约 573.33 美元，TSLA 未实现亏损约 566.25 美元，是当前正股中较大的浮亏来源；两者合计市值约占净值 15.7%。",
+      "implication": "组合含义：除 NVDA 财报外，存储周期与电动车个股风险正在形成第二条回撤来源，组合风险并非只集中于单一事件。",
       "tickers": [
-        "MSFT",
-        "NOW",
-        "META",
-        "AMZN",
-        "ORCL",
-        "NVDA",
-        "AVGO",
-        "MRVL",
-        "DRAM"
+        "DRAM",
+        "TSLA"
       ]
     }
   ],
@@ -73,18 +60,22 @@
       "detail": "核对数据中心需求、毛利率、供应约束与下一季指引，并观察 AVGO、MRVL、DRAM、MSFT、AMZN 与 ORCL 的联动。"
     },
     {
-      "label": "现金与组合集中度",
-      "detail": "现金约占 11.2%，MSFT 单一仓位约占 27.8%；关注两者在下一次交易发生后的变化。"
+      "label": "MSFT 集中度",
+      "detail": "MSFT 约占净值 28.5%；关注净值变化是否继续被单一仓位主导。"
     },
     {
-      "label": "长端收益率",
-      "detail": "关注债券收益率是否延续上行；这会同时影响组合内软件、云和半导体仓位的估值。"
+      "label": "利率与科技股估值",
+      "detail": "美联储纪要显示通胀仍高于目标；关注长端收益率变化是否继续压制软件、云与半导体仓位。"
     }
   ],
   "sources": [
     {
-      "title": "AP: How major US stock indexes fared Friday 8/21/2026",
-      "url": "https://apnews.com/article/09c079b43680c3e4564346892b5dc824"
+      "title": "AP: How major US stock indexes fared Monday 8/24/2026",
+      "url": "https://apnews.com/article/8313c751e57d70d1556f679eb0f2a8cb"
+    },
+    {
+      "title": "AP: Wall Street drifts ahead of market-moving events",
+      "url": "https://apnews.com/article/8ab800029c559c5e751058ac1a8ef932"
     },
     {
       "title": "NVIDIA sets FY2027 Q2 earnings call",
@@ -93,10 +84,6 @@
     {
       "title": "Federal Reserve: Minutes of the July 28-29, 2026 FOMC meeting",
       "url": "https://www.federalreserve.gov/monetarypolicy/fomcminutes20260729.htm"
-    },
-    {
-      "title": "Amazon announces second quarter 2026 results",
-      "url": "https://ir.aboutamazon.com/news-release/news-release-details/2026/Amazon-com-Announces-Second-Quarter-Results/default.aspx"
     }
   ]
 }

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-23T23:41:59.691Z",
+  "generatedAt": "2026-08-24T23:32:23.306Z",
   "account": {
     "currency": "USD",
-    "netLiquidation": 60802.36,
+    "netLiquidation": 59813.33,
     "cashBalance": 6820.79,
     "netDeposits": 70000
   },
@@ -15,10 +15,10 @@
       "assetClass": "STK",
       "quantity": 2,
       "averagePrice": 259.00405,
-      "marketPrice": 259.2200012,
-      "marketValue": 518.4400024,
+      "marketPrice": 262.8800049,
+      "marketValue": 525.7600098,
       "costBasis": 518.0081,
-      "unrealizedPnl": 0.4319024
+      "unrealizedPnl": 7.7519098
     },
     {
       "positionKey": "STK:313130367",
@@ -27,10 +27,10 @@
       "assetClass": "STK",
       "quantity": 7.0061,
       "averagePrice": 384.11674113,
-      "marketPrice": 368.0299988,
-      "marketValue": 2578.45497459,
+      "marketPrice": 359,
+      "marketValue": 2515.1899,
       "costBasis": 2691.160300030893,
-      "unrealizedPnl": -112.70532541
+      "unrealizedPnl": -175.9704
     },
     {
       "positionKey": "STK:870556708",
@@ -39,10 +39,10 @@
       "assetClass": "STK",
       "quantity": 70,
       "averagePrice": 62.19048714,
-      "marketPrice": 57.58000185,
-      "marketValue": 4030.6001295,
+      "marketPrice": 54,
+      "marketValue": 3780,
       "costBasis": 4353.3340998,
-      "unrealizedPnl": -322.7339705
+      "unrealizedPnl": -573.3341
     },
     {
       "positionKey": "OPT:845712739",
@@ -51,10 +51,10 @@
       "assetClass": "OPT",
       "quantity": -1,
       "averagePrice": 5.489521,
-      "marketPrice": 3.31744005,
-      "marketValue": -331.744005,
+      "marketPrice": 3.5213189,
+      "marketValue": -352.13189,
       "costBasis": -548.9521,
-      "unrealizedPnl": 217.208095
+      "unrealizedPnl": 196.82021
     },
     {
       "positionKey": "STK:107113386",
@@ -63,10 +63,10 @@
       "assetClass": "STK",
       "quantity": 1,
       "averagePrice": 543.1305,
-      "marketPrice": 551.2800293,
-      "marketValue": 551.2800293,
+      "marketPrice": 561.5499878,
+      "marketValue": 561.5499878,
       "costBasis": 543.1305,
-      "unrealizedPnl": 8.1495293
+      "unrealizedPnl": 18.4194878
     },
     {
       "positionKey": "STK:483492393",
@@ -75,10 +75,10 @@
       "assetClass": "STK",
       "quantity": 5.001,
       "averagePrice": 267.65658868,
-      "marketPrice": 235.5,
-      "marketValue": 1177.7355,
+      "marketPrice": 229.2400055,
+      "marketValue": 1146.42926751,
       "costBasis": 1338.5505999886802,
-      "unrealizedPnl": -160.8151
+      "unrealizedPnl": -192.12133249
     },
     {
       "positionKey": "STK:272093",
@@ -87,10 +87,10 @@
       "assetClass": "STK",
       "quantity": 35.0455,
       "averagePrice": 429.83701474,
-      "marketPrice": 482.7000122,
-      "marketValue": 16916.46327756,
+      "marketPrice": 487.04000855,
+      "marketValue": 17068.56061964,
       "costBasis": 15063.853100070668,
-      "unrealizedPnl": 1852.61017756
+      "unrealizedPnl": 2004.70751964
     },
     {
       "positionKey": "STK:272110",
@@ -99,10 +99,10 @@
       "assetClass": "STK",
       "quantity": 13,
       "averagePrice": 118.95311538,
-      "marketPrice": 120.5,
-      "marketValue": 1566.5,
+      "marketPrice": 125.30999755,
+      "marketValue": 1629.02996815,
       "costBasis": 1546.39049994,
-      "unrealizedPnl": 20.1095
+      "unrealizedPnl": 82.63946815
     },
     {
       "positionKey": "STK:109911821",
@@ -111,10 +111,10 @@
       "assetClass": "STK",
       "quantity": 20,
       "averagePrice": 107.699015,
-      "marketPrice": 128.30999755,
-      "marketValue": 2566.199951,
+      "marketPrice": 127.30999755,
+      "marketValue": 2546.199951,
       "costBasis": 2153.9803,
-      "unrealizedPnl": 412.219651
+      "unrealizedPnl": 392.219651
     },
     {
       "positionKey": "STK:4815747",
@@ -123,10 +123,10 @@
       "assetClass": "STK",
       "quantity": 35.0179,
       "averagePrice": 203.64195169,
-      "marketPrice": 216.25,
-      "marketValue": 7572.620875,
+      "marketPrice": 208.91000365,
+      "marketValue": 7315.58961682,
       "costBasis": 7131.113500085251,
-      "unrealizedPnl": 441.507375
+      "unrealizedPnl": 184.47611682
     },
     {
       "positionKey": "OPT:730765112",
@@ -135,10 +135,10 @@
       "assetClass": "OPT",
       "quantity": -1,
       "averagePrice": 17.339127,
-      "marketPrice": 7.0369501,
-      "marketValue": -703.69501,
+      "marketPrice": 7.83539485,
+      "marketValue": -783.539485,
       "costBasis": -1733.9127,
-      "unrealizedPnl": 1030.21769
+      "unrealizedPnl": 950.373215
     },
     {
       "positionKey": "STK:272800",
@@ -147,10 +147,10 @@
       "assetClass": "STK",
       "quantity": 32.0655,
       "averagePrice": 142.4036862,
-      "marketPrice": 146.69999695,
-      "marketValue": 4704.0087522,
+      "marketPrice": 142.6799927,
+      "marketValue": 4575.10530592,
       "costBasis": 4566.245399846101,
-      "unrealizedPnl": 137.7633522
+      "unrealizedPnl": 8.85990592
     },
     {
       "positionKey": "STK:890493863",
@@ -159,10 +159,10 @@
       "assetClass": "STK",
       "quantity": 20,
       "averagePrice": 126.351415,
-      "marketPrice": 135.97999575,
-      "marketValue": 2719.599915,
+      "marketPrice": 135.30000305,
+      "marketValue": 2706.000061,
       "costBasis": 2527.0283,
-      "unrealizedPnl": 192.571615
+      "unrealizedPnl": 178.971761
     },
     {
       "positionKey": "STK:76792991",
@@ -171,10 +171,10 @@
       "assetClass": "STK",
       "quantity": 16,
       "averagePrice": 385.39089375,
-      "marketPrice": 365.70999145,
-      "marketValue": 5851.3598632,
+      "marketPrice": 350,
+      "marketValue": 5600,
       "costBasis": 6166.2543,
-      "unrealizedPnl": -314.8944368
+      "unrealizedPnl": -566.2543
     },
     {
       "positionKey": "STK:136155102",
@@ -183,10 +183,10 @@
       "assetClass": "STK",
       "quantity": 6,
       "averagePrice": 709.99628333,
-      "marketPrice": 703.7000122,
-      "marketValue": 4222.2000732,
+      "marketPrice": 702.39001465,
+      "marketValue": 4214.3400879,
       "costBasis": 4259.97769998,
-      "unrealizedPnl": -37.7776268
+      "unrealizedPnl": -45.6376121
     }
   ],
   "trades": [
@@ -202,7 +202,7 @@
       "commission": 0.348063,
       "netAmount": 517.66,
       "realizedPnl": 0,
-      "exchange": "ISLAND",
+      "exchange": "NASDAQ",
       "orderId": "2146917617"
     },
     {
@@ -232,7 +232,7 @@
       "commission": 0.344772,
       "netAmount": 655.3,
       "realizedPnl": 0,
-      "exchange": "ISLAND",
+      "exchange": "NASDAQ",
       "orderId": "375006593"
     },
     {
@@ -247,7 +247,7 @@
       "commission": 0.359019,
       "netAmount": 1082.1,
       "realizedPnl": -141.092819,
-      "exchange": "ISLAND",
+      "exchange": "NASDAQ",
       "orderId": "375005897"
     },
     {
