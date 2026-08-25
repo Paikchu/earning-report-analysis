@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "reviewDate": "2026-08-24",
-  "generatedAt": "2026-08-24T00:48:00.000Z",
-  "portfolioSnapshotGeneratedAt": "2026-08-23T23:41:59.691Z",
+  "reviewDate": "2026-08-25",
+  "generatedAt": "2026-08-25T01:17:28.000Z",
+  "portfolioSnapshotGeneratedAt": "2026-08-24T23:32:23.306Z",
   "coverageStatus": "complete",
   "headline": "过去 24 小时无新增美国宏观发布",
-  "summary": "截至上海时间 8 月 24 日 08:48，过去 24 小时没有纳入范围的美国高、中影响宏观事件发布。未来七天的重点集中在新屋销售、耐用品订单、二季度 GDP 修订值、7 月 PCE 与每周初请失业金；本次不新增组合影响判断。",
+  "summary": "截至上海时间 8 月 25 日 09:17，过去 24 小时没有纳入范围的美国高、中影响宏观事件发布。未来七天将依次关注新屋销售、耐用品订单、二季度 GDP 修订值、7 月 PCE、每周初请失业金和 7 月 JOLTS；本次不新增组合影响判断。",
   "impacts": [],
   "upcomingEvents": [
     {
@@ -47,6 +47,14 @@
       "importance": "medium",
       "status": "scheduled",
       "sourceIds": ["dol-claims-schedule"]
+    },
+    {
+      "id": "jolts-2026-07",
+      "title": "7 月职位空缺与劳动力流动调查（JOLTS）",
+      "scheduledAt": "2026-09-01T14:00:00.000Z",
+      "importance": "high",
+      "status": "scheduled",
+      "sourceIds": ["bls-september-calendar"]
     }
   ],
   "sources": [
@@ -69,6 +77,11 @@
       "id": "bls-august-calendar",
       "title": "U.S. Bureau of Labor Statistics — August 2026 Release Calendar",
       "url": "https://www.bls.gov/schedule/2026/08_sched_list.htm"
+    },
+    {
+      "id": "bls-september-calendar",
+      "title": "U.S. Bureau of Labor Statistics — September 2026 Release Calendar",
+      "url": "https://www.bls.gov/schedule/2026/09_sched_list.htm"
     },
     {
       "id": "fed-august-calendar",
