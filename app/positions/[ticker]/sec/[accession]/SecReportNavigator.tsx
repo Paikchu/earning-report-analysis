@@ -179,7 +179,7 @@ export function SecReportNavigator({ initialSections }: { initialSections: Repor
         onBlur={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPreviewId(null);
         }}
-        className="fixed left-[max(12px,calc((100vw-1280px)/2-64px))] top-1/2 z-40 hidden -translate-y-1/2 [@media(hover:hover)_and_(min-width:1360px)]:block"
+        className="fixed left-0 top-1/2 z-40 hidden -translate-y-1/2 [@media(hover:hover)_and_(min-width:1360px)]:block"
       >
         <ul ref={railRef} className="m-0 flex max-h-[52dvh] w-10 list-none flex-col items-start overflow-y-auto p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {sections.map((section, index) => {
@@ -207,9 +207,11 @@ export function SecReportNavigator({ initialSections }: { initialSections: Repor
                 >
                   <motion.span
                     aria-hidden="true"
-                    animate={{ scaleX: previewed ? 0.78 : active ? 1 : 0.46, opacity: previewed || active ? 1 : 0.42 }}
-                    transition={{ duration: reduceMotion ? 0 : 0.24, ease: easeOutExpo }}
-                    className={`h-[2px] origin-left ${nested ? "ml-2 w-4" : "w-8"} ${active || previewed ? "bg-[var(--color-loss)]" : "bg-[var(--ink-muted)]"}`}
+                    data-report-bar-state={previewed ? "expanded" : "resting"}
+                    initial={false}
+                    animate={{ scaleX: previewed ? 1 : 0.38, opacity: previewed ? 0.78 : active ? 0.5 : 0.3 }}
+                    transition={{ duration: reduceMotion ? 0 : 0.22, ease: easeOutExpo }}
+                    className={`h-[2px] w-8 origin-left scale-x-[.38] opacity-30 ${active || previewed ? "bg-[var(--color-loss)]" : "bg-[var(--ink-muted)]"}`}
                   />
                   <span className="sr-only">{displayIndex(section, index)} {section.title}</span>
                 </a>

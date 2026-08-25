@@ -53,7 +53,10 @@ test("renders the complete report, dynamic evidence, and workflow trace", () => 
   assert.equal((html.match(/data-report-section="true"/g) ?? []).length, 6);
   assert.deepEqual([...html.matchAll(/data-report-index="(\d{2})"/g)].map((match) => match[1]), ["01", "02", "03", "04", "05", "06"]);
   assert.match(html, /data-report-rail-density="compact"/);
+  assert.match(html, /class="fixed left-0 top-1\/2/);
   assert.match(html, /max-h-\[52dvh\] w-10/);
   assert.equal((html.match(/data-report-nav-depth="section"/g) ?? []).length, 6);
   assert.equal((html.match(/data-report-nav-depth="subsection"/g) ?? []).length, 2);
+  assert.equal((html.match(/data-report-bar-state="resting"/g) ?? []).length, 8);
+  assert.equal((html.match(/h-\[2px\] w-8 origin-left scale-x-\[\.38\] opacity-30/g) ?? []).length, 8);
 });
