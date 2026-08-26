@@ -263,6 +263,49 @@ test("Manager repair loop uses deterministic round names and never exceeds two r
   assert.equal(steps.some((name) => name.includes("round:3")), false);
 });
 
+test("Manager repair loop executes repair steps sequentially", async () => {
+  let activeRepairSteps = 0;
+  let maxActiveRepairSteps = 0;
+  const step: WorkflowStepLike = {
+    async do<T>(name: string, callback: () => Promise<T>) {
+      if (!name.startsWith("repair-node:")) return callback();
+      activeRepairSteps += 1;
+      maxActiveRepairSteps = Math.max(maxActiveRepairSteps, activeRepairSteps);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return await callback();
+      } finally {
+        activeRepairSteps -= 1;
+      }
+    },
+  };
+  const plan: SecNodePlan = {
+    nodes: [{ id: "growth", title: "Growth", question: "What changed?", sectionIds: ["section-1"], historySeriesIds: [], memoryIds: [], acceptanceCriteria: ["answer"], materiality: "high" }],
+    outlineSections: 1,
+  };
+  let reviews = 0;
+  await runManagerRepairLoop("filing-sequential", step, plan, [], {
+    async review() {
+      reviews += 1;
+      if (reviews > 1) return {
+        status: "complete", questions: [], repairTasks: [], unresolvedQuestions: [], coverageScore: 1, stopReason: "complete",
+      };
+      return {
+        status: "needs_repair", questions: [], unresolvedQuestions: ["growth", "margin"], coverageScore: 0, stopReason: null,
+        repairTasks: ["growth", "margin"].map((id) => ({
+          id: `repair-${id}`, questionId: `q-${id}`, targetNodeId: id, title: id, question: id,
+          sectionIds: ["section-1"], keywords: [], historySeriesIds: [], memoryIds: [], acceptanceCriteria: ["answer"], materiality: "high" as const, missingEvidence: [id],
+        })),
+      };
+    },
+    async repair(task) {
+      return { id: task.targetNodeId, title: task.title, status: "complete", findings: [], narrative: "repaired", evidence: [] };
+    },
+  });
+
+  assert.equal(maxActiveRepairSteps, 1);
+});
+
 test("Manager repair loop stops early when unresolved work makes no progress", async () => {
   const step: WorkflowStepLike = { async do<T>(_name: string, callback: () => Promise<T>) { return callback(); } };
   const plan: SecNodePlan = { nodes: [], outlineSections: 1 };

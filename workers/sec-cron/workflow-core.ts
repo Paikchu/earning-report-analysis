@@ -53,10 +53,13 @@ export async function runManagerRepairLoop(
       break;
     }
     rounds += 1;
-    const repaired = await Promise.all(tasks.map((task, index) => step.do(
-      `repair-node:${accessionNumber}:round:${rounds}:${index}:${task.id}`,
-      () => runtime.repair(task, rounds),
-    )));
+    const repaired: SecNodeResult[] = [];
+    for (const [index, task] of tasks.entries()) {
+      repaired.push(await step.do(
+        `repair-node:${accessionNumber}:round:${rounds}:${index}:${task.id}`,
+        () => runtime.repair(task, rounds),
+      ));
+    }
     for (const result of repaired) {
       const index = nodes.findIndex((node) => node.id === result.id);
       if (index >= 0) nodes[index] = result;
