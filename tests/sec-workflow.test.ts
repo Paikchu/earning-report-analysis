@@ -330,6 +330,19 @@ test("degrades one exhausted module to analysis-incomplete and continues with re
   assert.ok(unresolved.includes("module:capital_allocation"));
 });
 
+test("classifies an exhausted Manager Review as a hard failure", async () => {
+  let errorCode = "";
+  const ops = operations({
+    async review() { throw new Error("DeepSeek manager-review:0 HTTP 524"); },
+    async updateJob(job) { errorCode = job.errorCode ?? errorCode; },
+  });
+
+  const result = await executeSecAnalysisWorkflow({ ticker: "TESTCO", requestedBy: "manual" }, "workflow-review-hard", stepRecorder([]), ops);
+
+  assert.deepEqual(result.failed, [filing.accessionNumber]);
+  assert.equal(errorCode, "hard_failure");
+});
+
 test("does not change a published report when asynchronous Memory launch fails", async () => {
   let published = 0;
   const ops = operations({

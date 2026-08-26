@@ -280,7 +280,7 @@ export async function executeSecAnalysisWorkflow(
       analyzed.push(accession);
     } catch (error) {
       const detail = error instanceof Error ? error.message.slice(0, 500) : "Unknown pipeline error";
-      const hardFailure = /No core facts|illegal evidence|Conflicting (fact|history) units|Manager (Review|planned)|Claim verification|Synthesis|final publish|R2 memory source/i.test(detail);
+      const hardFailure = /No core facts|illegal evidence|Conflicting (fact|history) units|Manager[- ](Review|planned)|Claim verification|Synthesis|final publish|R2 memory source/i.test(detail);
       await step.do(`job:${accession}:error`, () => operations.updateJob({
         ...baseJob,
         status: "failed",
