@@ -596,7 +596,7 @@ export function verifyClaimLedger(ledger: ClaimLedger, metrics: PublishedSecRepo
   for (const metric of metrics) {
     const entries = ledger.entries.filter((entry) => entry.kind === "fact" && entry.metricKey === metric.metricKey);
     if (!entries.length) unmatchedMetricKeys.push(metric.metricKey);
-    else if (!entries.some((entry) => entry.value === metric.currentValue)) mismatchedValues.push(metric.metricKey);
+    else if (!entries.some((entry) => claimValueMatches(entry, metric.currentValue))) mismatchedValues.push(metric.metricKey);
   }
   return {
     status: invalidEvidenceIds.length || unmatchedMetricKeys.length || mismatchedValues.length ? "failed" : "verified",
@@ -1028,6 +1028,15 @@ function numericValue(value: string): number | null {
   const normalized = String(value).replace(/[$,%\s,]/g, "");
   const result = Number(normalized);
   return Number.isFinite(result) ? result : null;
+}
+
+function claimValueMatches(entry: ClaimLedgerEntry, reportedValue: string): boolean {
+  if (entry.value === reportedValue) return true;
+  const entryValue = numericValue(entry.value ?? "");
+  const reportValue = numericValue(reportedValue);
+  if (entryValue === null || reportValue === null || entryValue !== reportValue) return false;
+  if (!reportedValue.includes("%")) return true;
+  return entry.value?.includes("%") || /^(?:%|percent|percentage|pct)$/i.test(entry.unit ?? "");
 }
 
 function canonicalSeriesId(metricKey: string): SecCanonicalSeriesId | null {

@@ -174,6 +174,30 @@ test("rejects report metrics that are absent from the claim ledger", () => {
   assert.deepEqual(checked.invalidEvidenceIds, ["ev:invented"]);
 });
 
+test("matches harmless numeric formatting differences against Claim Ledger facts", () => {
+  const ledger = {
+    version: "sec-claim-ledger.v1" as const,
+    entries: [
+      { claimId: "fact:cash", kind: "fact" as const, metricKey: "cash", value: "12874", unit: "USD millions", currency: "USD", basis: "gaap", periodId: "TESTCO:2026-06-30:quarter", evidenceIds: ["ev:cash"] },
+      { claimId: "fact:margin", kind: "fact" as const, metricKey: "operating_margin", value: "-4.5", unit: "percent", currency: "", basis: "derived", periodId: "TESTCO:2026-06-30:quarter", evidenceIds: ["ev:margin"] },
+    ],
+    validEvidenceIds: ["ev:cash", "ev:margin"],
+  };
+
+  const checked = verifyClaimLedger(ledger, [
+    { metricKey: "cash", currentValue: "12,874", status: "verified", evidenceIds: ["ev:cash"] },
+    { metricKey: "operating_margin", currentValue: "-4.5%", status: "verified", evidenceIds: ["ev:margin"] },
+  ]);
+
+  assert.equal(checked.status, "verified");
+  assert.deepEqual(checked.mismatchedValues, []);
+
+  const wrongUnit = verifyClaimLedger(ledger, [
+    { metricKey: "cash", currentValue: "12,874%", status: "verified", evidenceIds: ["ev:cash"] },
+  ]);
+  assert.equal(wrongUnit.status, "failed");
+});
+
 test("fails reverse Claim verification when the report contains an unsupported numeric claim", () => {
   const result = normalizeReverseClaimCheck({
     claims: [{ claimId: "fact:known", evidenceIds: ["ev:known"] }],
