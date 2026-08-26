@@ -167,10 +167,24 @@ export async function executeSecAnalysisWorkflow(
       await markJobStage(step, operations, baseJob, "router");
       const router = await step.do(`router:${accession}`, () => operations.route(filing, prepared, context));
       await markJobStage(step, operations, baseJob, "modules");
-      const modules = await Promise.all(SEC_ANALYSIS_MODULES.map((module) => step.do(
-        `module:${accession}:${module.key}`,
-        () => operations.analyzeModule(module.key, filing, prepared, context, router),
-      )));
+      const modules = await Promise.all(SEC_ANALYSIS_MODULES.map(async (module) => {
+        try {
+          return await step.do(
+            `module:${accession}:${module.key}`,
+            () => operations.analyzeModule(module.key, filing, prepared, context, router),
+          );
+        } catch {
+          return {
+            moduleKey: module.key,
+            facts: [],
+            claims: [],
+            memoryCandidates: [],
+            missingFields: [...module.fields],
+            evidenceCoverage: 0,
+            verificationStatus: "failed" as const,
+          };
+        }
+      }));
       await markJobStage(step, operations, baseJob, "brief");
       const brief = await step.do(`brief:${accession}`, async () => operations.buildBrief
         ? operations.buildBrief(filing, prepared, context, modules)
@@ -191,19 +205,32 @@ export async function executeSecAnalysisWorkflow(
           : Promise.resolve(fallbackManagerReview(plan, currentNodes)),
         repair: (task, round) => operations.analyzeNode({ ...task, id: task.targetNodeId }, filing, prepared, brief, round),
       });
+      const managerReview: ManagerReview = brief.evidenceQuality.failedModules.length
+        ? {
+          ...loop.review,
+          status: "partial",
+          unresolvedQuestions: [...new Set([
+            ...loop.review.unresolvedQuestions,
+            ...brief.evidenceQuality.failedModules.map((moduleKey) => `module:${moduleKey}`),
+          ])],
+          stopReason: loop.review.stopReason === "no_progress" || loop.review.stopReason === "max_rounds"
+            ? loop.review.stopReason
+            : "analysis_incomplete",
+        }
+        : loop.review;
       await markJobStage(step, operations, baseJob, "claim-ledger");
       const ledger = await step.do(`claim-ledger:${accession}`, () => operations.buildClaimLedger
         ? operations.buildClaimLedger(filing, prepared, brief, loop.nodes)
         : Promise.resolve(buildClaimLedger(brief, loop.nodes.map((node) => ({ id: node.id, findings: node.findings, narrative: node.narrative, evidenceIds: node.evidenceIds })), [])));
       await markJobStage(step, operations, baseJob, "synthesis");
-      let result = await step.do(`synthesis:${accession}`, () => operations.summarize(filing, prepared, context, router, modules, plan, loop.nodes, brief, loop.review, ledger));
+      let result = await step.do(`synthesis:${accession}`, () => operations.summarize(filing, prepared, context, router, modules, plan, loop.nodes, brief, managerReview, ledger));
       await markJobStage(step, operations, baseJob, "claim-check");
       let claimCheck = await step.do(`claim-check:${accession}:attempt:0`, () => operations.checkClaims
         ? operations.checkClaims(result.artifact, ledger, result.summary)
         : Promise.resolve(verifyClaimLedger(ledger, result.artifact.report.keyMetrics)));
       if (claimCheck.status === "failed") {
         if (!operations.repairSynthesis) throw new Error("Claim verification failed after synthesis");
-        result = await step.do(`synthesis-repair:${accession}`, () => operations.repairSynthesis!(filing, prepared, context, router, modules, plan, loop.nodes, brief, loop.review, ledger, claimCheck));
+        result = await step.do(`synthesis-repair:${accession}`, () => operations.repairSynthesis!(filing, prepared, context, router, modules, plan, loop.nodes, brief, managerReview, ledger, claimCheck));
         claimCheck = await step.do(`claim-check:${accession}:attempt:1`, () => operations.checkClaims
           ? operations.checkClaims(result.artifact, ledger, result.summary)
           : Promise.resolve(verifyClaimLedger(ledger, result.artifact.report.keyMetrics)));
@@ -211,11 +238,11 @@ export async function executeSecAnalysisWorkflow(
       }
       result.artifact.report.dataQuality = {
         ...result.artifact.report.dataQuality,
-        analysisStatus: loop.review.status === "complete" ? "complete" : "partial",
-        unresolvedQuestions: loop.review.unresolvedQuestions,
+        analysisStatus: managerReview.status === "complete" ? "complete" : "partial",
+        unresolvedQuestions: managerReview.unresolvedQuestions,
         failedNodeIds: loop.nodes.filter((node) => node.status !== "complete").map((node) => node.id),
-        stopReason: loop.review.stopReason,
-        managerCoverageScore: loop.review.coverageScore,
+        stopReason: managerReview.stopReason,
+        managerCoverageScore: managerReview.coverageScore,
       };
       if (result.artifact.report.dataQuality.verificationStatus === "failed") {
         await step.do(`job:${accession}:failed`, () => operations.updateJob({
@@ -234,7 +261,7 @@ export async function executeSecAnalysisWorkflow(
         ...result.summary,
         plan,
         nodes: loop.nodes,
-        managerReview: loop.review,
+        managerReview,
         repairRounds: loop.rounds,
         workflow: buildWorkflowTrace(filing, plan, modules, loop.nodes, result.summary),
       } : null;

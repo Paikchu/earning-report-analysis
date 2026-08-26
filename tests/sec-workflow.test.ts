@@ -305,6 +305,31 @@ test("treats missing core facts as a hard failure and keeps the last successful 
   assert.equal(published, 0);
 });
 
+test("degrades one exhausted module to analysis-incomplete and continues with remaining facts", async () => {
+  const base = operations();
+  let published = 0;
+  let analysisStatus = "";
+  let unresolved: string[] = [];
+  const ops = operations({
+    async analyzeModule(moduleKey, ...args) {
+      if (moduleKey === "capital_allocation") throw new Error("provider timeout");
+      return base.analyzeModule(moduleKey, ...args);
+    },
+    async publish(artifact) {
+      published += 1;
+      analysisStatus = artifact.report.dataQuality.analysisStatus ?? "";
+      unresolved = artifact.report.dataQuality.unresolvedQuestions ?? [];
+    },
+  });
+
+  const result = await executeSecAnalysisWorkflow({ ticker: "TESTCO", requestedBy: "manual" }, "workflow-module-partial", stepRecorder([]), ops);
+
+  assert.deepEqual(result.analyzed, [filing.accessionNumber]);
+  assert.equal(published, 1);
+  assert.equal(analysisStatus, "partial");
+  assert.ok(unresolved.includes("module:capital_allocation"));
+});
+
 test("does not change a published report when asynchronous Memory launch fails", async () => {
   let published = 0;
   const ops = operations({
