@@ -1,21 +1,27 @@
 {
   "version": 1,
-  "reviewDate": "2026-08-25",
-  "generatedAt": "2026-08-25T01:17:28.000Z",
+  "reviewDate": "2026-08-26",
+  "generatedAt": "2026-08-26T00:48:35.000Z",
   "portfolioSnapshotGeneratedAt": "2026-08-24T23:32:23.306Z",
   "coverageStatus": "complete",
-  "headline": "过去 24 小时无新增美国宏观发布",
-  "summary": "截至上海时间 8 月 25 日 09:17，过去 24 小时没有纳入范围的美国高、中影响宏观事件发布。未来七天将依次关注新屋销售、耐用品订单、二季度 GDP 修订值、7 月 PCE、每周初请失业金和 7 月 JOLTS；本次不新增组合影响判断。",
-  "impacts": [],
-  "upcomingEvents": [
+  "headline": "新屋销售回落但误差较大，今晚转向 GDP 与 PCE",
+  "summary": "7 月新屋销售折年率降至 60.7 万套，库存升至 48.8 万套、可售月数升至 9.6 个月；但销量环比降幅未达到统计显著。住房降温对增长偏弱、对利率敏感型成长仓位的估值影响偏正面，净效应仍属混合；今晚 GDP 修订值与 PCE 将提供更强确认。",
+  "impacts": [
     {
-      "id": "new-home-sales-2026-07",
+      "eventId": "new-home-sales-2026-07",
       "title": "7 月新屋销售",
-      "scheduledAt": "2026-08-25T14:00:00.000Z",
-      "importance": "medium",
-      "status": "scheduled",
-      "sourceIds": ["census-calendar"]
-    },
+      "fact": "美国人口普查局与住房和城市发展部披露，7 月新建独栋住宅销售折年率为 60.7 万套，较 6 月的 67.8 万套低 10.5%（误差范围 ±14.0%）；期末待售住房为 48.8 万套，环比增加 1.9%，按当前销售速度对应 9.6 个月供应。",
+      "transmission": "销量回落、库存和供应月数上升表明利率敏感型住房需求降温，通常压低住宅投资、相关价格压力与长期利率预期；但单月销量降幅未达到统计显著，不能据此确认增长趋势已经转弱。",
+      "channels": ["growth", "inflation", "rates"],
+      "direction": "mixed",
+      "horizon": "near_term",
+      "confidence": "medium",
+      "tickers": ["VOO", "MSFT", "NVDA", "AVGO", "META", "AMZN", "TSLA"],
+      "implication": "若今晚 GDP 与 PCE 同样偏软，利率端可能为 MSFT、NVDA、AVGO 和 META 等长久期成长仓位提供估值顺风；对 VOO、AMZN 与 TSLA，住房需求走弱所反映的增长压力构成对冲。",
+      "sourceIds": ["census-new-home-sales-2026-07"]
+    }
+  ],
+  "upcomingEvents": [
     {
       "id": "durable-goods-2026-07",
       "title": "7 月耐用品订单",
@@ -58,6 +64,12 @@
     }
   ],
   "sources": [
+    {
+      "id": "census-new-home-sales-2026-07",
+      "title": "U.S. Census Bureau — Monthly New Residential Sales, July 2026",
+      "url": "https://www.census.gov/construction/nrs/current/",
+      "publishedAt": "2026-08-25T14:00:00.000Z"
+    },
     {
       "id": "census-calendar",
       "title": "U.S. Census Bureau — Economic Indicator Release Schedule",
