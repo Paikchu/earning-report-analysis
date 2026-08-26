@@ -17,22 +17,19 @@ async function loadModule<T>(path: string): Promise<T> {
   }
 }
 
-test("renders the checked-in macro dashboard as delayed when the portfolio snapshot advances", async () => {
+test("renders the checked-in macro dashboard against the current portfolio snapshot", async () => {
   const macro = await loadModule<typeof import("../lib/macro-dashboard.ts")>("../lib/macro-dashboard.ts");
   const [dashboard, snapshot] = await Promise.all([
     readFile(new URL("data/macro-dashboard.json", projectRoot), "utf8").then(JSON.parse),
     readFile(new URL("data/portfolio-snapshot.json", projectRoot), "utf8").then(JSON.parse),
   ]);
 
-  assert.deepEqual(macro.validateMacroDashboard(dashboard, snapshot), [
-    "portfolioSnapshotGeneratedAt 必须匹配当前持仓快照。",
-  ]);
+  assert.deepEqual(macro.validateMacroDashboard(dashboard, snapshot), []);
   assert.equal(typeof macro.prepareMacroDashboardForDisplay, "function");
 
   const prepared = macro.prepareMacroDashboardForDisplay(dashboard, snapshot);
   assert.deepEqual(prepared.errors, []);
-  assert.equal(prepared.dashboard.coverageStatus, "partial");
-  assert.match(prepared.dashboard.coverageNote ?? "", /上一份持仓快照/);
+  assert.equal(prepared.dashboard.coverageStatus, "complete");
   assert.equal(dashboard.coverageStatus, "complete");
 });
 
@@ -116,14 +113,12 @@ test("defines the fixed TradingView universes and locked technical-analysis conf
   assert.throws(() => tradingView.buildTradingViewConfig("NASDAQ:NVDA"), /不支持/);
 });
 
-test("keeps the command-line freshness gate strict when the portfolio snapshot advances", async () => {
-  await assert.rejects(execFileAsync(process.execPath, [
+test("accepts the checked-in macro dashboard when its portfolio provenance is current", async () => {
+  const result = await execFileAsync(process.execPath, [
     "--experimental-strip-types",
     "scripts/validate-macro-dashboard.ts",
-  ], { cwd: projectRoot }), (error: unknown) => {
-    assert.match(String((error as { stderr?: string }).stderr), /portfolioSnapshotGeneratedAt/);
-    return true;
-  });
+  ], { cwd: projectRoot });
+  assert.match(result.stdout, /is valid/);
 });
 
 test("rejects an invalid candidate without replacing the last good dashboard", async () => {

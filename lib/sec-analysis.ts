@@ -1,5 +1,160 @@
-export const SEC_ANALYSIS_SCHEMA_VERSION = "sec-analysis.v2";
-export const SEC_ANALYSIS_PROMPT_VERSION = "sec-analysis-prompt.v1";
+export const SEC_ANALYSIS_SCHEMA_VERSION = "sec-analysis.v3";
+export const SEC_ANALYSIS_PROMPT_VERSION = "sec-analysis-prompt.v3";
+export const MAX_REPAIR_ROUNDS = 2;
+export const MAX_REPAIR_NODES_PER_ROUND = 4;
+
+export type SecCanonicalSeriesId =
+  | "revenue"
+  | "gross_profit"
+  | "gross_margin"
+  | "operating_income"
+  | "operating_margin"
+  | "net_income"
+  | "diluted_eps"
+  | "operating_cash_flow"
+  | "capex"
+  | "free_cash_flow"
+  | "cash"
+  | "debt"
+  | "shares";
+
+export type HistoricalObservation = {
+  observationId: string;
+  seriesId: SecCanonicalSeriesId;
+  metricKey: string;
+  value: string;
+  unit: string;
+  currency?: string;
+  basis: "gaap" | "derived";
+  periodScope: "quarter" | "annual";
+  startDate?: string;
+  endDate: string;
+  sourceAccession: string;
+  sourceFiledAt: string;
+  sourceVersion: string;
+  qualityStatus: "validated_xbrl";
+  xbrlConcept?: string;
+  derivationFormula?: string;
+};
+
+export type SecHistorySeries = {
+  seriesId: SecCanonicalSeriesId;
+  quarters: HistoricalObservation[];
+  annual: HistoricalObservation[];
+};
+
+export type SecHistorySnapshot = {
+  registryVersion: string;
+  series: SecHistorySeries[];
+};
+
+export type CompanyMemoryStatus = "provisional" | "active" | "stale" | "resolved" | "contradicted" | "superseded" | "rejected";
+
+export type CompanyMemoryItem = {
+  memoryId: string;
+  ticker: string;
+  kind: "fact" | "judgment";
+  topicKey: string;
+  statement: string;
+  status: CompanyMemoryStatus;
+  materialityScore: number;
+  confidence: "high" | "medium" | "low";
+  evidenceIds: string[];
+  firstSeenPeriod: string;
+  lastConfirmedPeriod: string;
+  horizon?: string;
+  nextTest?: string;
+  falsifier?: string;
+  duePeriod?: string;
+  sourceJobIds?: string[];
+};
+
+export type SecAnalysisBrief = {
+  version: "sec-analysis-brief.v1";
+  ticker: string;
+  filingId: string;
+  periodId: string;
+  periodScope: "quarter" | "annual";
+  currentFacts: AnalysisFact[];
+  currentClaims: AnalysisClaim[];
+  history: SecHistorySnapshot;
+  comparisons: Array<{
+    seriesId: SecCanonicalSeriesId;
+    comparisonType: "qoq" | "yoy";
+    currentValue: string;
+    priorValue: string;
+    percentageDelta?: string;
+    unit: string;
+    currency?: string;
+    basis: string;
+    currentEndDate: string;
+    priorEndDate: string;
+  }>;
+  companyMemorySummary: string;
+  memoryItems: CompanyMemoryItem[];
+  missingFields: string[];
+  evidenceQuality: {
+    coverage: number;
+    invalidEvidenceIds: string[];
+    failedModules: SecAnalysisModuleKey[];
+  };
+};
+
+export type SecNodeSpecV2 = {
+  id: string;
+  title: string;
+  question: string;
+  sectionIds: string[];
+  keywords?: string[];
+  historySeriesIds: SecCanonicalSeriesId[];
+  memoryIds: string[];
+  acceptanceCriteria: string[];
+  materiality: "high" | "medium" | "low";
+};
+
+export type ManagerQuestionStatus = "answered" | "partial" | "unanswered" | "not_disclosed";
+
+export type ManagerRepairTask = SecNodeSpecV2 & {
+  questionId: string;
+  targetNodeId: string;
+  missingEvidence: string[];
+};
+
+export type ManagerReview = {
+  status: "complete" | "needs_repair" | "partial";
+  questions: Array<{ questionId: string; status: ManagerQuestionStatus; explanation: string }>;
+  repairTasks: ManagerRepairTask[];
+  unresolvedQuestions: string[];
+  coverageScore: number;
+  stopReason: "complete" | "max_rounds" | "no_progress" | "analysis_incomplete" | null;
+};
+
+export type ClaimLedgerEntry = {
+  claimId: string;
+  kind: "fact" | "claim" | "comparison";
+  metricKey?: string;
+  statement?: string;
+  value?: string;
+  unit?: string;
+  currency?: string;
+  basis?: string;
+  periodId?: string;
+  evidenceIds: string[];
+};
+
+export type ClaimLedger = {
+  version: "sec-claim-ledger.v1";
+  entries: ClaimLedgerEntry[];
+  validEvidenceIds: string[];
+};
+
+export type ClaimCheckResult = {
+  status: "verified" | "failed";
+  invalidEvidenceIds: string[];
+  unmatchedMetricKeys: string[];
+  mismatchedValues: string[];
+  unsupportedClaims?: string[];
+};
 
 export const SEC_DATA_NEEDS = {
   coreFacts: [
@@ -230,8 +385,246 @@ export type PublishedSecReport = {
     coverage: number;
     verificationStatus: "verified" | "partial" | "failed";
     warnings: string[];
+    analysisStatus?: "complete" | "partial";
+    unresolvedQuestions?: string[];
+    failedNodeIds?: string[];
+    stopReason?: ManagerReview["stopReason"];
+    managerCoverageScore?: number;
   };
 };
+
+export function buildSecAnalysisBrief(args: {
+  ticker: string;
+  filingId: string;
+  periodId: string;
+  periodScope: "quarter" | "annual";
+  modules: ModuleAnalysis[];
+  history: SecHistorySnapshot;
+  memorySummary: string;
+  memoryItems: CompanyMemoryItem[];
+  validEvidenceIds: Set<string>;
+}): SecAnalysisBrief {
+  const currentFacts = args.modules.flatMap((module) => module.facts);
+  const currentClaims = args.modules.flatMap((module) => module.claims);
+  const suppliedEvidence = [...currentFacts, ...currentClaims].flatMap((item) => item.evidenceIds);
+  const invalidEvidenceIds = [...new Set(suppliedEvidence.filter((id) => !args.validEvidenceIds.has(id)))].sort();
+  const validCitations = suppliedEvidence.filter((id) => args.validEvidenceIds.has(id)).length;
+  const comparisons: SecAnalysisBrief["comparisons"] = [];
+  for (const fact of currentFacts) {
+    const seriesId = canonicalSeriesId(fact.metricKey);
+    if (!seriesId) continue;
+    const series = args.history.series.find((item) => item.seriesId === seriesId);
+    const currentEndDate = periodEnd(args.periodId);
+    const observations = (args.periodScope === "annual" ? series?.annual ?? [] : series?.quarters ?? []).filter((item) => item.endDate < currentEndDate);
+    for (const comparisonType of ["qoq", "yoy"] as const) {
+      const prior = comparisonType === "qoq"
+        ? observations[0]
+        : observations.find((item) => dateDistanceDays(item.endDate, currentEndDate) >= 300 && dateDistanceDays(item.endDate, currentEndDate) <= 450);
+      if (!prior || fact.unit !== prior.unit || (fact.currency ?? "") !== (prior.currency ?? "") || fact.basis !== prior.basis) continue;
+      const currentNumber = numericValue(fact.value);
+      const priorNumber = numericValue(prior.value);
+      comparisons.push({
+        seriesId,
+        comparisonType,
+        currentValue: fact.value,
+        priorValue: prior.value,
+        percentageDelta: currentNumber !== null && priorNumber !== null && priorNumber !== 0 ? String((currentNumber - priorNumber) / Math.abs(priorNumber)) : undefined,
+        unit: fact.unit,
+        currency: fact.currency,
+        basis: fact.basis,
+        currentEndDate,
+        priorEndDate: prior.endDate,
+      });
+    }
+  }
+  return {
+    version: "sec-analysis-brief.v1",
+    ticker: args.ticker,
+    filingId: args.filingId,
+    periodId: args.periodId,
+    periodScope: args.periodScope,
+    currentFacts,
+    currentClaims,
+    history: {
+      registryVersion: args.history.registryVersion,
+      series: args.history.series.map((series) => ({ ...series, quarters: series.quarters.slice(0, 8), annual: series.annual.slice(0, 5) })),
+    },
+    comparisons,
+    companyMemorySummary: args.memorySummary.slice(0, 2_500),
+    memoryItems: args.memoryItems.filter((item) => item.status === "active" || item.status === "provisional" || (item.status === "stale" && item.duePeriod)).slice(0, 20),
+    missingFields: [...new Set(args.modules.flatMap((module) => module.missingFields))].sort(),
+    evidenceQuality: {
+      coverage: suppliedEvidence.length ? validCitations / suppliedEvidence.length : 0,
+      invalidEvidenceIds,
+      failedModules: args.modules.filter((module) => module.verificationStatus === "failed").map((module) => module.moduleKey),
+    },
+  };
+}
+
+export function normalizeManagerReview(value: unknown, validNodeIds: Set<string>, validSectionIds: Set<string>): ManagerReview {
+  const root = asRecord(value);
+  if (!root) throw new Error("Manager Review schema is invalid");
+  const questions = Array.isArray(root.questions) ? root.questions.flatMap((raw) => {
+    const item = asRecord(raw);
+    const questionId = String(item?.questionId ?? "").trim();
+    if (!validNodeIds.has(questionId)) return [];
+    const allowed = ["answered", "partial", "unanswered", "not_disclosed"] as const;
+    const status = allowed.includes(item?.status as typeof allowed[number]) ? item?.status as ManagerQuestionStatus : "unanswered";
+    return [{ questionId, status, explanation: String(item?.explanation ?? "").slice(0, 500) }];
+  }) : [];
+  if (new Set(questions.map((question) => question.questionId)).size !== validNodeIds.size) throw new Error("Manager Review does not cover every planned question");
+  const repairTasks = Array.isArray(root.repairTasks) ? root.repairTasks.flatMap((raw): ManagerRepairTask[] => {
+    const item = asRecord(raw);
+    const targetNodeId = String(item?.targetNodeId ?? "").trim();
+    const questionId = String(item?.questionId ?? "").trim();
+    const sectionIds = Array.isArray(item?.sectionIds) ? item.sectionIds.map(String).filter((id) => validSectionIds.has(id)) : [];
+    if (!validNodeIds.has(questionId) || questionId !== targetNodeId || !validNodeIds.has(targetNodeId) || !sectionIds.length) return [];
+    const materiality = item?.materiality === "high" || item?.materiality === "low" ? item.materiality : "medium";
+    return [{
+      id: String(item?.id ?? `repair-${targetNodeId}`).replace(/[^a-z0-9-]/gi, "-").toLowerCase(),
+      questionId,
+      targetNodeId,
+      title: String(item?.title ?? targetNodeId).slice(0, 120),
+      question: String(item?.question ?? "").slice(0, 500),
+      sectionIds,
+      keywords: Array.isArray(item?.keywords) ? item.keywords.map(String).slice(0, 12) : [],
+      historySeriesIds: canonicalSeriesIds(item?.historySeriesIds),
+      memoryIds: Array.isArray(item?.memoryIds) ? item.memoryIds.map(String).slice(0, 20) : [],
+      acceptanceCriteria: Array.isArray(item?.acceptanceCriteria) ? item.acceptanceCriteria.map(String).filter(Boolean).slice(0, 8) : [],
+      materiality,
+      missingEvidence: Array.isArray(item?.missingEvidence) ? item.missingEvidence.map(String).filter(Boolean).slice(0, 12) : [],
+    }];
+  }).slice(0, MAX_REPAIR_NODES_PER_ROUND) : [];
+  const requestedStatus = root.status === "complete" || root.status === "partial" ? root.status : "needs_repair";
+  const suppliedUnresolved = Array.isArray(root.unresolvedQuestions) ? root.unresolvedQuestions.map(String).filter(Boolean) : [];
+  const unresolvedQuestions = [...new Set([
+    ...suppliedUnresolved,
+    ...questions.filter((question) => question.status === "partial" || question.status === "unanswered").map((question) => question.questionId),
+  ])].slice(0, 30);
+  const hasUnresolved = questions.some((question) => question.status === "partial" || question.status === "unanswered");
+  const status = requestedStatus === "needs_repair" && !repairTasks.length
+    ? "partial"
+    : requestedStatus === "complete" && hasUnresolved ? "partial" : requestedStatus;
+  const allowedStops: Array<NonNullable<ManagerReview["stopReason"]>> = ["complete", "max_rounds", "no_progress", "analysis_incomplete"];
+  const stopReason = allowedStops.includes(root.stopReason as NonNullable<ManagerReview["stopReason"]>)
+    ? root.stopReason as NonNullable<ManagerReview["stopReason"]>
+    : status === "complete" ? "complete" : null;
+  return { status, questions, repairTasks, unresolvedQuestions, coverageScore: clamp(Number(root.coverageScore ?? 0), 0, 1), stopReason };
+}
+
+export function unresolvedFingerprint(review: ManagerReview): string {
+  const unresolved = review.questions
+    .filter((question) => question.status === "partial" || question.status === "unanswered")
+    .map((question) => `${question.questionId}:${question.status}`)
+    .sort();
+  return hashString(JSON.stringify(unresolved));
+}
+
+export function buildClaimLedger(
+  brief: SecAnalysisBrief,
+  nodeFindings: Array<{ id: string; findings: Array<{ label: string; detail: string }>; narrative?: string; evidenceIds?: string[] }>,
+  comparisons: ComparisonResult[],
+): ClaimLedger {
+  const entries: ClaimLedgerEntry[] = [];
+  for (const fact of brief.currentFacts) {
+    entries.push({
+      claimId: fact.factId ?? `fact:${hashString(JSON.stringify(fact))}`,
+      kind: "fact",
+      metricKey: fact.metricKey,
+      value: fact.value,
+      unit: fact.unit,
+      currency: fact.currency,
+      basis: fact.basis,
+      periodId: brief.periodId,
+      evidenceIds: fact.evidenceIds,
+    });
+  }
+  for (const claim of brief.currentClaims) {
+    entries.push({ claimId: claim.claimId ?? `claim:${hashString(JSON.stringify(claim))}`, kind: "claim", statement: claim.statement, periodId: claim.targetPeriodId ?? brief.periodId, evidenceIds: claim.evidenceIds });
+  }
+  for (const comparison of brief.comparisons) {
+    entries.push({
+      claimId: `brief-comparison:${hashString(JSON.stringify(comparison))}`,
+      kind: "comparison",
+      metricKey: comparison.seriesId,
+      statement: `${comparison.comparisonType}:${comparison.currentValue}:${comparison.priorValue}:${comparison.percentageDelta ?? ""}`,
+      value: comparison.currentValue,
+      unit: comparison.unit,
+      currency: comparison.currency,
+      basis: comparison.basis,
+      periodId: brief.periodId,
+      evidenceIds: [],
+    });
+  }
+  for (const comparison of comparisons) {
+    for (const delta of comparison.metricDeltas) {
+      entries.push({
+        claimId: `comparison:${hashString(JSON.stringify({ comparison, delta }))}`,
+        kind: "comparison",
+        metricKey: delta.metricKey,
+        statement: `${comparison.comparisonType}:${delta.currentValue}:${delta.priorValue}:${delta.percentageDelta ?? ""}`,
+        value: delta.currentValue,
+        periodId: comparison.currentPeriodId,
+        evidenceIds: [],
+      });
+    }
+  }
+  for (const node of nodeFindings) {
+    for (const finding of node.findings) entries.push({
+      claimId: `node:${node.id}:${hashString(`${finding.label}:${finding.detail}`)}`,
+      kind: "claim",
+      statement: `${finding.label}: ${finding.detail}`,
+      periodId: brief.periodId,
+      evidenceIds: node.evidenceIds ?? [],
+    });
+    if (node.narrative) entries.push({
+      claimId: `node:${node.id}:narrative:${hashString(node.narrative)}`,
+      kind: "claim",
+      statement: node.narrative,
+      periodId: brief.periodId,
+      evidenceIds: node.evidenceIds ?? [],
+    });
+  }
+  return { version: "sec-claim-ledger.v1", entries, validEvidenceIds: [...new Set(entries.flatMap((entry) => entry.evidenceIds))].sort() };
+}
+
+export function verifyClaimLedger(ledger: ClaimLedger, metrics: PublishedSecReport["keyMetrics"]): ClaimCheckResult {
+  const validEvidence = new Set(ledger.validEvidenceIds);
+  const invalidEvidenceIds = [...new Set(metrics.flatMap((metric) => metric.evidenceIds).filter((id) => !validEvidence.has(id)))].sort();
+  const unmatchedMetricKeys: string[] = [];
+  const mismatchedValues: string[] = [];
+  for (const metric of metrics) {
+    const entries = ledger.entries.filter((entry) => entry.kind === "fact" && entry.metricKey === metric.metricKey);
+    if (!entries.length) unmatchedMetricKeys.push(metric.metricKey);
+    else if (!entries.some((entry) => entry.value === metric.currentValue)) mismatchedValues.push(metric.metricKey);
+  }
+  return {
+    status: invalidEvidenceIds.length || unmatchedMetricKeys.length || mismatchedValues.length ? "failed" : "verified",
+    invalidEvidenceIds,
+    unmatchedMetricKeys: [...new Set(unmatchedMetricKeys)].sort(),
+    mismatchedValues: [...new Set(mismatchedValues)].sort(),
+  };
+}
+
+export function normalizeReverseClaimCheck(value: unknown, ledger: ClaimLedger): ClaimCheckResult {
+  const root = asRecord(value);
+  const ledgerEntries = new Map(ledger.entries.map((entry) => [entry.claimId, entry]));
+  const claims = Array.isArray(root?.claims) ? root.claims.map(asRecord).filter((item): item is Record<string, unknown> => Boolean(item)) : [];
+  const unmatchedMetricKeys = claims.map((claim) => String(claim.claimId ?? "")).filter((claimId) => !ledgerEntries.has(claimId));
+  const invalidEvidenceIds = claims.flatMap((claim) => {
+    const entry = ledgerEntries.get(String(claim.claimId ?? ""));
+    const allowed = new Set(entry?.evidenceIds ?? []);
+    return Array.isArray(claim.evidenceIds) ? claim.evidenceIds.map(String).filter((id) => !allowed.has(id)) : [];
+  });
+  const unsupportedClaims = Array.isArray(root?.unsupportedClaims) ? root.unsupportedClaims.map(String).filter(Boolean).slice(0, 30) : ["Reverse Claim check returned no unsupportedClaims decision"];
+  return {
+    status: unmatchedMetricKeys.length || invalidEvidenceIds.length || unsupportedClaims.length ? "failed" : "verified",
+    invalidEvidenceIds: [...new Set(invalidEvidenceIds)].sort(),
+    unmatchedMetricKeys: [...new Set(unmatchedMetricKeys)].sort(),
+    mismatchedValues: [],
+    unsupportedClaims,
+  };
+}
 
 export function buildFilingBlocks(text: string, accessionNumber: string): FilingBlock[] {
   const lines = String(text ?? "")
@@ -488,7 +881,7 @@ export function compareSnapshots(
   prior: PriorSnapshotContext,
 ): ComparisonResult {
   const priorFacts = new Map(prior.facts.map((fact) => [`${fact.metricKey}:${fact.unit}:${fact.basis}:${fact.definitionHash ?? ""}`, fact]));
-  const metricDeltas: ComparisonResult["metricDeltas"] = current.facts.flatMap((fact) => {
+  const metricDeltas: ComparisonResult["metricDeltas"] = current.facts.flatMap((fact): ComparisonResult["metricDeltas"] => {
     const match = priorFacts.get(`${fact.metricKey}:${fact.unit}:${fact.basis}:${fact.definitionHash ?? ""}`);
     if (!match) return [];
     const currentNumber = numericValue(fact.value);
@@ -635,6 +1028,40 @@ function numericValue(value: string): number | null {
   const normalized = String(value).replace(/[$,%\s,]/g, "");
   const result = Number(normalized);
   return Number.isFinite(result) ? result : null;
+}
+
+function canonicalSeriesId(metricKey: string): SecCanonicalSeriesId | null {
+  const aliases: Record<string, SecCanonicalSeriesId> = {
+    revenue: "revenue",
+    gross_profit: "gross_profit",
+    gross_margin: "gross_margin",
+    operating_income: "operating_income",
+    operating_margin: "operating_margin",
+    net_income: "net_income",
+    eps: "diluted_eps",
+    diluted_eps: "diluted_eps",
+    operating_cash_flow: "operating_cash_flow",
+    capex: "capex",
+    free_cash_flow: "free_cash_flow",
+    cash: "cash",
+    debt: "debt",
+    shares: "shares",
+  };
+  return aliases[metricKey] ?? null;
+}
+
+function canonicalSeriesIds(value: unknown): SecCanonicalSeriesId[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map(String).map(canonicalSeriesId).filter((item): item is SecCanonicalSeriesId => Boolean(item)))].slice(0, 12);
+}
+
+function periodEnd(periodId: string): string {
+  return periodId.split(":")[1] ?? "";
+}
+
+function dateDistanceDays(left: string, right: string): number {
+  const difference = new Date(`${right}T00:00:00Z`).getTime() - new Date(`${left}T00:00:00Z`).getTime();
+  return Math.round(difference / 86_400_000);
 }
 
 function confidence(value: unknown): "high" | "medium" | "low" {

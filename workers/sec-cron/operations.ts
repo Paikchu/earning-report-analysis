@@ -1,9 +1,12 @@
 import {
   analyzePreparedSecNode,
   analyzePreparedSecModule,
+  buildPreparedClaimLedger,
+  buildPreparedSecBrief,
   discoverSecTicker,
   planPreparedSecFiling,
   prepareSecFiling,
+  reviewPreparedSecAnalysis,
   routePreparedSecFiling,
   summarizePreparedSecEvent,
   summarizePreparedSecFiling,
@@ -12,7 +15,18 @@ import {
 } from "../../lib/sec-pipeline.ts";
 import type { SecAnalysisArtifact } from "../../lib/sec-service.ts";
 import type { SecFilingSummary, SecNodePlan, SecNodeResult, SecNodeSpec } from "../../lib/sec.ts";
-import { SEC_ANALYSIS_MODULES, SEC_ANALYSIS_SCHEMA_VERSION } from "../../lib/sec-analysis.ts";
+import {
+  fallbackRouterResult,
+  normalizeReverseClaimCheck,
+  SEC_ANALYSIS_MODULES,
+  SEC_ANALYSIS_SCHEMA_VERSION,
+  verifyClaimLedger,
+  type ClaimCheckResult,
+  type ClaimLedger,
+  type ManagerReview,
+  type SecAnalysisBrief,
+} from "../../lib/sec-analysis.ts";
+import { normalizeCompanyFacts } from "../../lib/sec-history.ts";
 import { decryptSecModelKey } from "../../lib/sec-key-bootstrap.ts";
 import { siteHeaders, type SecCronEnv } from "./core.ts";
 import type { PreparedFilingReference, SecPipelineOperations } from "./workflow-core.ts";
@@ -37,7 +51,14 @@ const PUBLISH_MEMORY_CHUNK_SIZE = 15;
 const PUBLISH_COMPARISON_CHUNK_SIZE = 30;
 
 export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof fetch = fetch): SecPipelineOperations {
-  const model: SecModelCall = (stage, system, payload) => callWorkerSecModel(env, fetcher, stage, system, payload);
+  const model: SecModelCall = async (stage, system, payload) => {
+    try {
+      return await callWorkerSecModel(env, fetcher, stage, system, payload);
+    } catch (error) {
+      if (!(error instanceof SyntaxError) && !String(error).includes("JSON object")) throw error;
+      return callWorkerSecModel(env, fetcher, `${stage}:schema-retry`, `${system}\nYour previous response violated the JSON schema. Return one valid JSON object only.`, payload);
+    }
+  };
   return {
     discover: (ticker) => discoverSecTicker(ticker, { userAgent: env.SEC_USER_AGENT, fetcher }),
     publishFeed: (feed) => sitePost(env, fetcher, "/api/internal/sec/feed", { feed }).then(() => undefined),
@@ -61,7 +82,7 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
     },
     route: async (_filing, reference, context) => {
       const prepared = await readPrepared(env.SEC_FILINGS, reference);
-      const router = await routePreparedSecFiling(prepared, context, model);
+      const router = await routePreparedSecFiling(prepared, context, model).catch(() => fallbackRouterResult(prepared.blocks));
       await Promise.all(SEC_ANALYSIS_MODULES.map(async (module) => {
         const selected = new Set(router.selections.find((selection) => selection.moduleKey === module.key)?.blockIds ?? []);
         const slice: PreparedSecFiling = {
@@ -72,15 +93,68 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
         };
         await env.SEC_FILINGS.put(modulePreparedKey(reference, module.key), JSON.stringify(slice), { httpMetadata: { contentType: "application/json" } });
       }));
+      await putArtifact(env.SEC_FILINGS, reference, "router", router);
       return router;
     },
-    analyzeModule: async (moduleKey, _filing, reference, context, router) => analyzePreparedSecModule(moduleKey, await readPrepared(env.SEC_FILINGS, { ...reference, key: modulePreparedKey(reference, moduleKey) }), context, router, model),
-    plan: async (_filing, reference): Promise<SecNodePlan> => planPreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), model),
-    analyzeNode: async (spec: SecNodeSpec, _filing, reference): Promise<SecNodeResult> => analyzePreparedSecNode(await readPrepared(env.SEC_FILINGS, reference), spec, model),
+    analyzeModule: async (moduleKey, _filing, reference, context, router) => {
+      const result = await analyzePreparedSecModule(moduleKey, await readPrepared(env.SEC_FILINGS, { ...reference, key: modulePreparedKey(reference, moduleKey) }), context, router, model);
+      await putArtifact(env.SEC_FILINGS, reference, `modules/${moduleKey}`, result);
+      return result;
+    },
+    buildBrief: async (filing, reference, context, modules) => {
+      const prepared = await readPrepared(env.SEC_FILINGS, reference);
+      const history = await fetchCompanyHistory(filing.cik, filing.ticker, env.SEC_USER_AGENT, fetcher).catch(() => context.history ?? { registryVersion: "sec-canonical-series.v1", series: [] });
+      const persisted = await sitePost<{ context?: typeof context }>(env, fetcher, "/api/internal/sec/context", { filing, history }).catch(() => ({ context: undefined }));
+      const brief = buildPreparedSecBrief(prepared, persisted.context ?? { ...context, history }, modules, history);
+      await putArtifact(env.SEC_FILINGS, reference, "brief", brief);
+      return brief;
+    },
+    plan: async (_filing, reference, brief): Promise<SecNodePlan> => {
+      const plan = await planPreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), model, brief);
+      await putArtifact(env.SEC_FILINGS, reference, "manager-plan", plan);
+      return plan;
+    },
+    analyzeNode: async (spec: SecNodeSpec, _filing, reference, brief, round = 0): Promise<SecNodeResult> => {
+      const result = await analyzePreparedSecNode(await readPrepared(env.SEC_FILINGS, reference), spec, model, brief);
+      await putArtifact(env.SEC_FILINGS, reference, `nodes/round-${round}/${spec.id}`, result);
+      return result;
+    },
+    review: async (_filing, reference, brief, plan, nodes, round): Promise<ManagerReview> => {
+      const result = await reviewPreparedSecAnalysis(await readPrepared(env.SEC_FILINGS, reference), brief, plan, nodes, round, model);
+      await putArtifact(env.SEC_FILINGS, reference, `manager-review/round-${round}`, result);
+      return result;
+    },
+    buildClaimLedger: async (_filing, reference, brief, nodes): Promise<ClaimLedger> => {
+      const result = buildPreparedClaimLedger(brief, nodes, []);
+      await putArtifact(env.SEC_FILINGS, reference, "nodes/final", nodes);
+      await putArtifact(env.SEC_FILINGS, reference, "claim-ledger", result);
+      return result;
+    },
     summarizeEvent: async (_filing, reference) => summarizePreparedSecEvent(await readPrepared(env.SEC_FILINGS, reference), model),
-    summarize: async (_filing, reference, context, router, modules, plan, nodes) => {
-      const result = await summarizePreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), context, router, modules, model, new Date(), plan, nodes);
-      return { ...result, artifact: { ...result.artifact, blocks: [] } };
+    summarize: async (_filing, reference, context, router, modules, plan, nodes, brief, review, ledger) => {
+      if (review) await putArtifact(env.SEC_FILINGS, reference, "manager-review/final", review);
+      const result = await summarizePreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), context, router, modules, model, new Date(), plan, nodes, brief, review, ledger);
+      const synthesisKey = await putArtifact(env.SEC_FILINGS, reference, "synthesis", result);
+      return { ...result, artifact: { ...result.artifact, blocks: [], artifactKeys: collectArtifactKeys(reference, synthesisKey) } };
+    },
+    repairSynthesis: async (_filing, reference, context, router, modules, plan, nodes, brief, review, ledger, failedCheck) => {
+      const repairedReview = { ...review, unresolvedQuestions: [...review.unresolvedQuestions, `Claim repair: ${JSON.stringify(failedCheck)}`] };
+      const result = await summarizePreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), context, router, modules, model, new Date(), plan, nodes, brief, repairedReview, ledger, "synthesis-repair");
+      const synthesisKey = await putArtifact(env.SEC_FILINGS, reference, "synthesis-repair", result);
+      return { ...result, artifact: { ...result.artifact, blocks: [], artifactKeys: collectArtifactKeys(reference, synthesisKey) } };
+    },
+    checkClaims: async (artifact, ledger, summary): Promise<ClaimCheckResult> => {
+      const deterministic = verifyClaimLedger(ledger, artifact.report.keyMetrics);
+      if (deterministic.status === "failed" || !summary?.report) return deterministic.status === "failed" ? deterministic : { ...deterministic, status: "failed", unsupportedClaims: ["Synthesis body is missing"] };
+      const reverse = normalizeReverseClaimCheck(await model("claim-check", reverseClaimSystemPrompt(), {
+        report: summary.report,
+        headline: summary.headline,
+        bullets: summary.bullets,
+        analystView: summary.analystView,
+        claimLedger: ledger,
+        outputSchema: { claims: "[{claimId,evidenceIds}]", unsupportedClaims: "[string]" },
+      }), ledger);
+      return reverse.status === "failed" ? reverse : deterministic;
     },
     publish: async (artifact, summary) => {
       const reference = { key: preparedKey(artifact.filing.ticker, artifact.filing.accessionNumber), filing: artifact.filing };
@@ -111,10 +185,14 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       for (const memoryCandidates of chunks(artifact.memoryCandidates, PUBLISH_MEMORY_CHUNK_SIZE)) {
         await sitePost(env, fetcher, "/api/internal/sec/publish", { artifact: { ...deferredArtifact, memoryCandidates }, summary: null });
       }
-      await sitePost(env, fetcher, "/api/internal/sec/publish", {
+      return sitePost<{ memoryJobId?: string }>(env, fetcher, "/api/internal/sec/publish", {
         artifact: { ...artifact, blocks: [], snapshots: [], comparisons: [], memoryCandidates: [] } satisfies SecAnalysisArtifact,
         summary,
       });
+    },
+    enqueueMemory: async (jobId, ticker) => {
+      if (!env.SEC_MEMORY_WORKFLOW) return;
+      await env.SEC_MEMORY_WORKFLOW.create({ id: `memory-${crypto.randomUUID()}`, params: { jobId, ticker } });
     },
     publishEvent: async (summary) => sitePost(env, fetcher, "/api/internal/sec/publish", { filing: summaryIdentity(summary), summary }).then(() => undefined),
     updateJob: (job) => sitePost(env, fetcher, "/api/internal/sec/jobs", { job }).then(() => undefined),
@@ -127,7 +205,7 @@ async function readPrepared(bucket: R2BucketLike, reference: PreparedFilingRefer
   return JSON.parse(await object.text()) as PreparedSecFiling;
 }
 
-async function sitePost<T = Record<string, unknown>>(env: SecPipelineEnv, fetcher: typeof fetch, path: string, body: unknown): Promise<T> {
+export async function sitePost<T = Record<string, unknown>>(env: SecPipelineEnv, fetcher: typeof fetch, path: string, body: unknown): Promise<T> {
   const response = await fetcher(`${env.MAX_SITE_ORIGIN.replace(/\/+$/, "")}${path}`, {
     method: "POST",
     headers: siteHeaders(env),
@@ -185,7 +263,49 @@ function chunks<T>(values: T[], size: number): T[][] {
   return result;
 }
 
-async function callWorkerSecModel(
+async function fetchCompanyHistory(cik: string, ticker: string, userAgent: string, fetcher: typeof fetch) {
+  const normalizedCik = String(cik).replace(/\D/g, "").padStart(10, "0");
+  const response = await fetcher(`https://data.sec.gov/api/xbrl/companyfacts/CIK${normalizedCik}.json`, {
+    cache: "no-store",
+    headers: { accept: "application/json", "user-agent": userAgent },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) throw new Error(`SEC Company Facts HTTP ${response.status}`);
+  const contentLength = Number(response.headers.get("content-length") ?? 0);
+  if (contentLength > 20_000_000) throw new Error("SEC Company Facts payload exceeds 20 MB");
+  return normalizeCompanyFacts(ticker, await response.json());
+}
+
+async function putArtifact(bucket: R2BucketLike, reference: PreparedFilingReference, name: string, value: unknown): Promise<string> {
+  const key = `${reference.key.replace(/^filings\//, "analysis/").replace(/\.json$/, "")}/${SEC_ANALYSIS_SCHEMA_VERSION}/${name}.json`;
+  await bucket.put(key, JSON.stringify(value), { httpMetadata: { contentType: "application/json" } });
+  return key;
+}
+
+function collectArtifactKeys(reference: PreparedFilingReference, synthesisKey: string): Record<string, string> {
+  const prefix = `${reference.key.replace(/^filings\//, "analysis/").replace(/\.json$/, "")}/${SEC_ANALYSIS_SCHEMA_VERSION}`;
+  return {
+    router: `${prefix}/router.json`,
+    brief: `${prefix}/brief.json`,
+    plan: `${prefix}/manager-plan.json`,
+    "manager-review": `${prefix}/manager-review/final.json`,
+    nodes: `${prefix}/nodes/final.json`,
+    claimLedger: `${prefix}/claim-ledger.json`,
+    synthesis: synthesisKey,
+    ...Object.fromEntries(SEC_ANALYSIS_MODULES.map((module) => [`module:${module.key}`, `${prefix}/modules/${module.key}.json`])),
+  };
+}
+
+function reverseClaimSystemPrompt(): string {
+  return [
+    "You are the final reverse Claim verifier for an SEC analysis report.",
+    "Extract every factual or numeric assertion from the report and map it to an exact claimId in the supplied Claim Ledger.",
+    "Put any assertion without an exact ledger entry in unsupportedClaims. Do not forgive formatting or period, unit, currency, or basis mismatches.",
+    "Return one JSON object using the exact outputSchema.",
+  ].join("\n");
+}
+
+export async function callWorkerSecModel(
   env: SecPipelineEnv,
   fetcher: typeof fetch,
   stage: string,

@@ -117,6 +117,11 @@ export const secFacts = sqliteTable("sec_facts", {
   derivationFormula: text("derivation_formula").notNull().default(""),
   evidenceId: text("evidence_id").notNull(),
   qualityStatus: text("quality_status").notNull().default("unverified"),
+  observationStart: text("observation_start"),
+  observationEnd: text("observation_end").notNull().default(""),
+  sourceFiledAt: text("source_filed_at").notNull().default(""),
+  sourceAccession: text("source_accession").notNull().default(""),
+  sourceVersion: text("source_version").notNull().default("legacy_unvalidated"),
 }, (table) => [uniqueIndex("sec_facts_period_series_idx").on(table.periodId, table.seriesId, table.dimensionsHash, table.basis)]);
 
 export const secModuleSnapshots = sqliteTable("sec_module_snapshots", {
@@ -150,7 +155,16 @@ export const secMemoryItems = sqliteTable("sec_memory_items", {
   materialityScore: integer("materiality_score").notNull().default(0),
   confidence: text("confidence").notNull().default("medium"),
   evidenceIds: text("evidence_ids").notNull().default("[]"),
-});
+  kind: text("kind").notNull().default("fact"),
+  horizon: text("horizon"),
+  nextTest: text("next_test"),
+  falsifier: text("falsifier"),
+  duePeriod: text("due_period"),
+  sourceJobIds: text("source_job_ids").notNull().default("[]"),
+  normalizedKey: text("normalized_key").notNull().default(""),
+  version: integer("version").notNull().default(1),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("sec_memory_items_ticker_status_due_idx").on(table.ticker, table.status, table.duePeriod)]);
 
 export const secMemoryEvents = sqliteTable("sec_memory_events", {
   eventId: text("event_id").primaryKey(),
@@ -161,7 +175,44 @@ export const secMemoryEvents = sqliteTable("sec_memory_events", {
   currentStatement: text("current_statement"),
   priorStatement: text("prior_statement"),
   evidenceIds: text("evidence_ids").notNull().default("[]"),
+  jobId: text("job_id"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const secMemoryJobs = sqliteTable("sec_memory_jobs", {
+  jobId: text("job_id").primaryKey(),
+  ticker: text("ticker").notNull(),
+  filingId: text("filing_id").notNull(),
+  periodId: text("period_id").notNull(),
+  status: text("status").notNull().default("pending"),
+  sourceR2Key: text("source_r2_key").notNull(),
+  ownerToken: text("owner_token"),
+  leaseUntil: text("lease_until"),
+  attempt: integer("attempt").notNull().default(0),
+  error: text("error"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  completedAt: text("completed_at"),
+}, (table) => [index("sec_memory_jobs_status_created_idx").on(table.status, table.createdAt)]);
+
+export const secMemoryExtractions = sqliteTable("sec_memory_extractions", {
+  extractionId: text("extraction_id").primaryKey(),
+  jobId: text("job_id").notNull(),
+  ticker: text("ticker").notNull(),
+  periodId: text("period_id").notNull(),
+  payload: text("payload").notNull(),
+  inputHash: text("input_hash").notNull(),
+  schemaVersion: text("schema_version").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [uniqueIndex("sec_memory_extractions_job_idx").on(table.jobId)]);
+
+export const secCompanyMemoryThreads = sqliteTable("sec_company_memory_threads", {
+  ticker: text("ticker").primaryKey(),
+  summary: text("summary").notNull().default(""),
+  version: integer("version").notNull().default(0),
+  leaseOwner: text("lease_owner"),
+  leaseUntil: text("lease_until"),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const secComparisons = sqliteTable("sec_comparisons", {
@@ -188,6 +239,9 @@ export const secAnalysisRuns = sqliteTable("sec_analysis_runs", {
   tokenUsage: text("token_usage").notNull().default("{}"),
   startedAt: text("started_at").notNull(),
   completedAt: text("completed_at"),
+  outputR2Key: text("output_r2_key"),
+  round: integer("round").notNull().default(0),
+  stopReason: text("stop_reason"),
 });
 
 export const secAnalysisJobs = sqliteTable("sec_analysis_jobs", {

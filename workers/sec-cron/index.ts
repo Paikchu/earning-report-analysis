@@ -1,14 +1,32 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 
-import { handleSecAnalysisRequest, runSecRefresh, type SecWorkflowParams } from "./core.ts";
+import { handleSecAnalysisRequest, runSecMemorySweep, runSecRefresh, type SecMemoryWorkflowParams, type SecWorkflowParams } from "./core.ts";
+import { executeSecMemoryWorkflow } from "./memory-workflow.ts";
 import { createSecPipelineOperations, type SecPipelineEnv } from "./operations.ts";
 import { executeSecAnalysisWorkflow } from "./workflow-core.ts";
 
-type ExecutionContext = { waitUntil(promise: Promise<unknown>): void };
+const WORKFLOW_RETRY = {
+  retries: { limit: 3, delay: "5 seconds", backoff: "exponential" as const },
+  timeout: "5 minutes",
+};
+
+function durableSteps(step: WorkflowStep) {
+  return {
+    do<T>(name: string, callback: () => Promise<T>): Promise<T> {
+      return step.do(name, WORKFLOW_RETRY, callback);
+    },
+  };
+}
 
 export class SecAnalysisWorkflow extends WorkflowEntrypoint<SecPipelineEnv, SecWorkflowParams> {
   async run(event: WorkflowEvent<SecWorkflowParams>, step: WorkflowStep) {
-    return executeSecAnalysisWorkflow(event.payload, event.instanceId, step, createSecPipelineOperations(this.env));
+    return executeSecAnalysisWorkflow(event.payload, event.instanceId, durableSteps(step), createSecPipelineOperations(this.env));
+  }
+}
+
+export class SecMemoryWorkflow extends WorkflowEntrypoint<SecPipelineEnv, SecMemoryWorkflowParams> {
+  async run(event: WorkflowEvent<SecMemoryWorkflowParams>, step: WorkflowStep) {
+    return executeSecMemoryWorkflow(event.payload, event.instanceId, durableSteps(step), this.env);
   }
 }
 
@@ -20,9 +38,11 @@ const worker = {
     return handleSecAnalysisRequest(request, env);
   },
 
-  async scheduled(_controller: unknown, env: SecPipelineEnv, context: ExecutionContext) {
-    context.waitUntil(runSecRefresh(env).then((result) => console.log(JSON.stringify({ event: "sec-workflows", ...result }))));
+  async scheduled(_controller: ScheduledController, env: SecPipelineEnv, context: ExecutionContext) {
+    context.waitUntil(Promise.allSettled([runSecRefresh(env), runSecMemorySweep(env)]).then((results) => {
+      console.log(JSON.stringify({ event: "sec-workflows", analysis: results[0], memory: results[1] }));
+    }));
   },
-};
+} satisfies ExportedHandler<SecPipelineEnv>;
 
 export default worker;

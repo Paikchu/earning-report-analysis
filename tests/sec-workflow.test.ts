@@ -6,23 +6,23 @@ import { SEC_ANALYSIS_MODULES, SEC_ANALYSIS_SCHEMA_VERSION, type ModuleAnalysis 
 import type { SecFiling, SecFilingSummary, SecNodeSpec } from "../lib/sec.ts";
 
 const filing: SecFiling = {
-  ticker: "MSFT",
-  cik: "0000789019",
-  cikNumber: 789019,
-  companyName: "Microsoft Corp",
+  ticker: "TESTCO",
+  cik: "0000000001",
+  cikNumber: 1,
+  companyName: "Test Company",
   form: "10-K",
   filingDate: "2026-07-30",
   reportDate: "2026-06-30",
-  accessionNumber: "0000789019-26-000001",
-  primaryDocument: "msft.htm",
+  accessionNumber: "0000000001-26-000001",
+  primaryDocument: "testco.htm",
   description: "Annual report",
   items: "",
-  documentUrl: "https://sec.test/msft.htm",
+  documentUrl: "https://sec.test/testco.htm",
   indexUrl: "https://sec.test/index.htm",
 };
 
-test("uses the v2 analysis schema for full-report recomputation", () => {
-  assert.equal(SEC_ANALYSIS_SCHEMA_VERSION, "sec-analysis.v2");
+test("uses the v3 analysis schema for full-report recomputation", () => {
+  assert.equal(SEC_ANALYSIS_SCHEMA_VERSION, "sec-analysis.v3");
 });
 
 function stepRecorder(names: string[]): WorkflowStepLike {
@@ -37,7 +37,7 @@ function stepRecorder(names: string[]): WorkflowStepLike {
 function operations(overrides: Partial<SecPipelineOperations> = {}): SecPipelineOperations {
   const moduleAnalysis = (moduleKey: ModuleAnalysis["moduleKey"]): ModuleAnalysis => ({
     moduleKey,
-    facts: [],
+    facts: [{ metricKey: `core_${moduleKey}`, value: "1", unit: "USD", currency: "USD", periodScope: "annual", basis: "gaap", evidenceIds: [`ev:${moduleKey}`], confidence: "high", sourceLabel: "fact_source_reported" }],
     claims: [],
     memoryCandidates: [],
     missingFields: [],
@@ -45,11 +45,11 @@ function operations(overrides: Partial<SecPipelineOperations> = {}): SecPipeline
     verificationStatus: "verified",
   });
   return {
-    async discover() { return { feed: { ticker: "MSFT" }, filings: [filing] }; },
+    async discover() { return { feed: { ticker: "TESTCO" }, filings: [filing] }; },
     async publishFeed() {},
     async shouldAnalyze() { return true; },
-    async getContext() { return { currentPeriodId: "MSFT:2026-06-30:annual", qoqPeriodId: null, yoyPeriodId: null, qoq: {}, yoy: {}, activeMemory: [] }; },
-    async prepare() { return { key: "MSFT/acc.json", filing }; },
+    async getContext() { return { currentPeriodId: "TESTCO:2026-06-30:annual", qoqPeriodId: null, yoyPeriodId: null, qoq: {}, yoy: {}, activeMemory: [] }; },
+    async prepare() { return { key: "TESTCO/acc.json", filing }; },
     async route() { return { selections: [], source: "fallback", status: "partial", missingModules: [] }; },
     async analyzeModule(moduleKey) { return moduleAnalysis(moduleKey); },
     async plan() {
@@ -88,7 +88,7 @@ function operations(overrides: Partial<SecPipelineOperations> = {}): SecPipeline
       return {
         artifact: {
           filing,
-          periodId: "MSFT:2026-06-30:annual",
+          periodId: "TESTCO:2026-06-30:annual",
           periodScope: "annual",
           blocks: [],
           moduleAnalyses: SEC_ANALYSIS_MODULES.map((module) => moduleAnalysis(module.key)),
@@ -97,8 +97,8 @@ function operations(overrides: Partial<SecPipelineOperations> = {}): SecPipeline
           memoryCandidates: [],
           router: { selections: [], source: "fallback", status: "partial", missingModules: [] },
           report: {
-            ticker: "MSFT",
-            periodId: "MSFT:2026-06-30:annual",
+            ticker: "TESTCO",
+            periodId: "TESTCO:2026-06-30:annual",
             reportVersion: "sec-analysis.v2:test",
             headline: "verified",
             keyMetrics: [],
@@ -107,7 +107,7 @@ function operations(overrides: Partial<SecPipelineOperations> = {}): SecPipeline
           },
         },
         summary: {
-          ticker: "MSFT",
+          ticker: "TESTCO",
           form: "10-K",
           filingDate: "2026-07-30",
           accessionNumber: filing.accessionNumber,
@@ -156,7 +156,7 @@ test("runs filing analysis as durable stages and fans modules out independently"
   });
 
   const result = await executeSecAnalysisWorkflow(
-    { ticker: "MSFT", requestedBy: "scheduled" },
+    { ticker: "TESTCO", requestedBy: "scheduled" },
     "workflow-1",
     stepRecorder(steps),
     ops,
@@ -169,10 +169,12 @@ test("runs filing analysis as durable stages and fans modules out independently"
   assert.ok(steps.includes(`prepare:${filing.accessionNumber}`));
   assert.ok(steps.includes(`router:${filing.accessionNumber}`));
   assert.ok(steps.includes(`manager:${filing.accessionNumber}`));
-  assert.ok(steps.includes(`node:${filing.accessionNumber}:0:revenue-growth`));
-  assert.ok(steps.includes(`node:${filing.accessionNumber}:1:cash-flow`));
+  assert.ok(steps.includes(`node:${filing.accessionNumber}:round:0:0:revenue-growth`));
+  assert.ok(steps.includes(`node:${filing.accessionNumber}:round:0:1:cash-flow`));
+  assert.ok(steps.includes(`manager-review:${filing.accessionNumber}:round:0`));
+  assert.ok(steps.includes(`claim-ledger:${filing.accessionNumber}`));
   assert.ok(steps.includes(`publish:${filing.accessionNumber}`));
-  assert.deepEqual(jobStages, ["context", "prepare", "router", "modules", "manager", "nodes", "synthesis", "publish", "published"]);
+  assert.deepEqual(jobStages, ["context", "prepare", "router", "modules", "brief", "manager", "nodes-round-0", "manager-review", "claim-ledger", "synthesis", "claim-check", "publish", "published"]);
   assert.ok(jobIds.every((jobId) => jobId.endsWith(":workflow-1")));
   assert.deepEqual(publishedSummary?.workflow?.nodes.map((node) => node.id), [
     "filing-selection",
@@ -192,8 +194,8 @@ test("keeps event filings on the compact path without running full-report stages
   let compactPublished = 0;
   let modules = 0;
   const ops = operations({
-    async discover() { return { feed: { ticker: "MSFT" }, filings: [eventFiling] }; },
-    async prepare() { return { key: "MSFT/event.json", filing: eventFiling }; },
+    async discover() { return { feed: { ticker: "TESTCO" }, filings: [eventFiling] }; },
+    async prepare() { return { key: "TESTCO/event.json", filing: eventFiling }; },
     async analyzeModule(moduleKey) {
       modules += 1;
       return operations().analyzeModule(moduleKey, {} as never, {} as never, {} as never, {} as never);
@@ -205,7 +207,7 @@ test("keeps event filings on the compact path without running full-report stages
   });
 
   const result = await executeSecAnalysisWorkflow(
-    { ticker: "MSFT", requestedBy: "scheduled" },
+    { ticker: "TESTCO", requestedBy: "scheduled" },
     "workflow-event",
     stepRecorder(steps),
     ops,
@@ -234,7 +236,7 @@ test("keeps a failed verification artifact out of the published report table", a
   });
 
   const result = await executeSecAnalysisWorkflow(
-    { ticker: "MSFT", requestedBy: "manual" },
+    { ticker: "TESTCO", requestedBy: "manual" },
     "workflow-2",
     stepRecorder([]),
     ops,
@@ -257,7 +259,7 @@ test("skips a completed filing during scheduled refreshes", async () => {
   });
 
   const result = await executeSecAnalysisWorkflow(
-    { ticker: "MSFT", requestedBy: "scheduled" },
+    { ticker: "TESTCO", requestedBy: "scheduled" },
     "workflow-3",
     stepRecorder(steps),
     ops,
@@ -266,4 +268,52 @@ test("skips a completed filing during scheduled refreshes", async () => {
   assert.deepEqual(result, { analyzed: [], skipped: [filing.accessionNumber], failed: [] });
   assert.equal(prepared, 0);
   assert.ok(steps.includes(`status:${filing.accessionNumber}`));
+});
+
+test("publishes analysis-incomplete results as partial with unresolved work exposed", async () => {
+  let publishedStatus = "";
+  let unresolved: string[] = [];
+  const ops = operations({
+    async analyzeNode(spec) {
+      return { id: spec.id, title: spec.title, status: "error", findings: [], narrative: "", evidence: [], error: "missing evidence" };
+    },
+    async publish(artifact) {
+      publishedStatus = artifact.report.dataQuality.analysisStatus ?? "";
+      unresolved = artifact.report.dataQuality.unresolvedQuestions ?? [];
+    },
+  });
+
+  const result = await executeSecAnalysisWorkflow({ ticker: "TESTCO", requestedBy: "manual" }, "workflow-partial", stepRecorder([]), ops);
+
+  assert.deepEqual(result.analyzed, [filing.accessionNumber]);
+  assert.equal(publishedStatus, "partial");
+  assert.equal(unresolved.length, 2);
+});
+
+test("treats missing core facts as a hard failure and keeps the last successful report", async () => {
+  let published = 0;
+  const ops = operations({
+    async analyzeModule(moduleKey) {
+      return { moduleKey, facts: [], claims: [], memoryCandidates: [], missingFields: [], evidenceCoverage: 0, verificationStatus: "failed" };
+    },
+    async publish() { published += 1; },
+  });
+
+  const result = await executeSecAnalysisWorkflow({ ticker: "TESTCO", requestedBy: "manual" }, "workflow-hard-failure", stepRecorder([]), ops);
+
+  assert.deepEqual(result.failed, [filing.accessionNumber]);
+  assert.equal(published, 0);
+});
+
+test("does not change a published report when asynchronous Memory launch fails", async () => {
+  let published = 0;
+  const ops = operations({
+    async publish() { published += 1; return { memoryJobId: "memory-job-1" }; },
+    async enqueueMemory() { throw new Error("workflow unavailable"); },
+  });
+
+  const result = await executeSecAnalysisWorkflow({ ticker: "TESTCO", requestedBy: "manual" }, "workflow-memory-failure", stepRecorder([]), ops);
+
+  assert.deepEqual(result.analyzed, [filing.accessionNumber]);
+  assert.equal(published, 1);
 });

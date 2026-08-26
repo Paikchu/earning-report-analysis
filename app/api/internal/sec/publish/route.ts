@@ -29,7 +29,12 @@ export async function POST(request: Request) {
   const ticker = cleanSecTicker(artifact?.filing?.ticker ?? "");
   const security = findSecurity(ticker);
   if (!artifact || !artifact.filing.accessionNumber || !security || security.type !== "stock") return Response.json({ error: "SEC 分析结果无效。" }, { status: 400 });
-  await repository.saveAnalysis({ ...artifact, filing: { ...artifact.filing, ticker } });
-  if (artifact.report.dataQuality.verificationStatus !== "failed" && body?.summary) await repository.setSummary(body.summary);
-  return Response.json({ status: artifact.report.dataQuality.verificationStatus === "failed" ? "rejected" : "published", ticker, accessionNumber: artifact.filing.accessionNumber }, { headers: { "cache-control": "no-store" } });
+  const normalizedArtifact = { ...artifact, filing: { ...artifact.filing, ticker } };
+  await repository.saveAnalysis(normalizedArtifact, false);
+  if (artifact.report.dataQuality.verificationStatus === "failed") {
+    return Response.json({ status: "rejected", ticker, accessionNumber: artifact.filing.accessionNumber }, { headers: { "cache-control": "no-store" } });
+  }
+  if (!body?.summary) return Response.json({ error: "SEC 最终发布缺少报告摘要。" }, { status: 400 });
+  const memoryJobId = await repository.commitFinalPublication(normalizedArtifact, body.summary);
+  return Response.json({ status: "published", ticker, accessionNumber: artifact.filing.accessionNumber, memoryJobId }, { headers: { "cache-control": "no-store" } });
 }

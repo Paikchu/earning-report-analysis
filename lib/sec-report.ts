@@ -85,6 +85,10 @@ export function normalizeSecNodePlan(value: unknown, outline: SecOutlineSection[
       question: question || `围绕「${title}」说明本期财报的变化、驱动因素与需要验证的问题。`,
       sectionIds,
       ...(keywords.length ? { keywords } : {}),
+      historySeriesIds: Array.isArray(input.historySeriesIds) ? input.historySeriesIds.map(String).filter((item) => ["revenue", "gross_profit", "gross_margin", "operating_income", "operating_margin", "net_income", "diluted_eps", "operating_cash_flow", "capex", "free_cash_flow", "cash", "debt", "shares"].includes(item)).slice(0, 12) as SecNodeSpec["historySeriesIds"] : [],
+      memoryIds: Array.isArray(input.memoryIds) ? input.memoryIds.map(String).filter(Boolean).slice(0, 20) : [],
+      acceptanceCriteria: Array.isArray(input.acceptanceCriteria) ? input.acceptanceCriteria.map((criterion) => cleanLine(criterion, 240)).filter(Boolean).slice(0, 8) : ["明确回答任务问题并引用当前 filing 证据"],
+      materiality: input.materiality === "high" || input.materiality === "low" ? input.materiality : "medium",
     }];
   });
   const clamped = Math.max(0, nodes.length - MAX_NODES);

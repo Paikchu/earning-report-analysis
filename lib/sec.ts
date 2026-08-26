@@ -1,4 +1,4 @@
-import type { PublishedSecReport } from "./sec-analysis.ts";
+import type { ManagerReview, PublishedSecReport, SecNodeSpecV2 } from "./sec-analysis.ts";
 
 export const SEC_SUMMARY_VERSION = 5;
 
@@ -38,13 +38,7 @@ export type SecDocument = {
   headings: SecHeadingCandidate[];
 };
 
-export type SecNodeSpec = {
-  id: string;
-  title: string;
-  question: string;
-  sectionIds: string[];
-  keywords?: string[];
-};
+export type SecNodeSpec = SecNodeSpecV2;
 
 export type SecNodePlan = {
   nodes: SecNodeSpec[];
@@ -67,6 +61,7 @@ export type SecNodeResult = {
   findings: SecSummaryBullet[];
   narrative: string;
   evidence: SecWorkflowEvidence[];
+  evidenceIds?: string[];
   error?: string;
 };
 
@@ -131,6 +126,8 @@ export type SecFilingSummary = {
   version?: number;
   nodes?: SecNodeResult[];
   plan?: SecNodePlan;
+  managerReview?: ManagerReview;
+  repairRounds?: number;
   workflow?: SecWorkflowTrace;
   source: "deepseek" | "error";
   generatedAt: string;

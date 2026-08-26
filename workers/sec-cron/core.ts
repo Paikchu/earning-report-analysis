@@ -1,7 +1,7 @@
 import { cleanSecTicker } from "../../lib/sec.ts";
 
-export type SecWorkflowBinding = {
-  create(options: { id: string; params: SecWorkflowParams }): Promise<{ id: string }>;
+export type SecWorkflowBinding<T = SecWorkflowParams> = {
+  create(options: { id: string; params: T }): Promise<{ id: string }>;
 };
 
 export type SecWorkflowParams = {
@@ -9,11 +9,18 @@ export type SecWorkflowParams = {
   requestedBy: "scheduled" | "manual";
 };
 
+export type SecMemoryWorkflowParams = {
+  jobId: string;
+  ticker: string;
+  ownerToken?: string;
+};
+
 export type SecCronEnv = {
   MAX_SITE_ORIGIN: string;
   MAX_SITE_BYPASS_TOKEN: string;
   SEC_REFRESH_KEY: string;
   SEC_ANALYSIS_WORKFLOW: SecWorkflowBinding;
+  SEC_MEMORY_WORKFLOW?: SecWorkflowBinding<SecMemoryWorkflowParams>;
 };
 
 export async function runSecRefresh(env: SecCronEnv, fetcher: typeof fetch = fetch, now = Date.now()) {
@@ -39,6 +46,25 @@ export async function runSecRefresh(env: SecCronEnv, fetcher: typeof fetch = fet
     }
   }
   return { started, failed };
+}
+
+export async function runSecMemorySweep(env: SecCronEnv, fetcher: typeof fetch = fetch): Promise<{ started: string[] }> {
+  if (!env.SEC_MEMORY_WORKFLOW) return { started: [] };
+  const ownerToken = `sweeper:${crypto.randomUUID()}`;
+  const response = await fetcher(`${env.MAX_SITE_ORIGIN.replace(/\/+$/, "")}/api/internal/sec/memory/claim`, {
+    method: "POST",
+    headers: siteHeaders(env),
+    body: JSON.stringify({ ownerToken }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) throw new Error(`SEC memory claim HTTP ${response.status}`);
+  const body = await response.json() as { claim?: { jobId: string; ticker: string } | null };
+  if (!body.claim) return { started: [] };
+  await env.SEC_MEMORY_WORKFLOW.create({
+    id: `memory-${crypto.randomUUID()}`,
+    params: { jobId: body.claim.jobId, ticker: body.claim.ticker, ownerToken },
+  });
+  return { started: [body.claim.jobId] };
 }
 
 export async function handleSecAnalysisRequest(request: Request, env: SecCronEnv, now = Date.now()): Promise<Response> {

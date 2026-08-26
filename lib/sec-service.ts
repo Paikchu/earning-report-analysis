@@ -25,12 +25,17 @@ import {
   SEC_ANALYSIS_MODULES,
   SEC_ANALYSIS_SCHEMA_VERSION,
   type ComparisonResult,
+  type ClaimLedger,
+  type CompanyMemoryItem,
   type FilingBlock,
   type ModuleAnalysis,
   type MemoryCandidate,
+  type ManagerReview,
   type PriorSnapshotContext,
   type PublishedSecReport,
   type RouterResult,
+  type SecAnalysisBrief,
+  type SecHistorySnapshot,
   type SecAnalysisModuleKey,
   type SnapshotSummary,
 } from "./sec-analysis.ts";
@@ -75,6 +80,9 @@ export type SecAnalysisContext = {
   qoq: Partial<Record<SecAnalysisModuleKey, PriorSnapshotContext>>;
   yoy: Partial<Record<SecAnalysisModuleKey, PriorSnapshotContext>>;
   activeMemory: PriorSnapshotContext["activeMemory"];
+  history?: SecHistorySnapshot;
+  companyMemorySummary?: string;
+  memoryItems?: CompanyMemoryItem[];
 };
 
 export type SecAnalysisArtifact = {
@@ -88,6 +96,10 @@ export type SecAnalysisArtifact = {
   memoryCandidates: MemoryCandidate[];
   report: PublishedSecReport;
   router: RouterResult;
+  brief?: SecAnalysisBrief;
+  managerReview?: ManagerReview;
+  claimLedger?: ClaimLedger;
+  artifactKeys?: Record<string, string>;
 };
 
 export async function getCachedSecFeed(repository: SecRepository, rawTicker: string): Promise<SecFilingFeed> {

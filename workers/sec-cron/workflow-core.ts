@@ -1,4 +1,20 @@
-import { SEC_ANALYSIS_MODULES, SEC_ANALYSIS_SCHEMA_VERSION, type ModuleAnalysis, type RouterResult } from "../../lib/sec-analysis.ts";
+import {
+  MAX_REPAIR_NODES_PER_ROUND,
+  MAX_REPAIR_ROUNDS,
+  buildClaimLedger,
+  buildSecAnalysisBrief,
+  SEC_ANALYSIS_MODULES,
+  SEC_ANALYSIS_SCHEMA_VERSION,
+  unresolvedFingerprint,
+  verifyClaimLedger,
+  type ClaimCheckResult,
+  type ClaimLedger,
+  type ManagerRepairTask,
+  type ManagerReview,
+  type ModuleAnalysis,
+  type RouterResult,
+  type SecAnalysisBrief,
+} from "../../lib/sec-analysis.ts";
 import type {
   SecFiling,
   SecFilingSummary,
@@ -13,6 +29,51 @@ import type { SecWorkflowParams } from "./core.ts";
 export type WorkflowStepLike = {
   do<T>(name: string, callback: () => Promise<T>): Promise<T>;
 };
+
+export type ManagerRepairLoopRuntime = {
+  review(round: number, nodes: SecNodeResult[]): Promise<ManagerReview>;
+  repair(task: ManagerRepairTask, round: number): Promise<SecNodeResult>;
+};
+
+export async function runManagerRepairLoop(
+  accessionNumber: string,
+  step: WorkflowStepLike,
+  _plan: SecNodePlan,
+  initialNodes: SecNodeResult[],
+  runtime: ManagerRepairLoopRuntime,
+): Promise<{ nodes: SecNodeResult[]; review: ManagerReview; rounds: number }> {
+  let nodes = [...initialNodes];
+  let rounds = 0;
+  let review = await step.do(`manager-review:${accessionNumber}:round:0`, () => runtime.review(0, nodes));
+  let previousFingerprint = unresolvedFingerprint(review);
+  while (review.status === "needs_repair" && rounds < MAX_REPAIR_ROUNDS) {
+    const tasks = review.repairTasks.slice(0, MAX_REPAIR_NODES_PER_ROUND);
+    if (!tasks.length) {
+      review = { ...review, status: "partial", stopReason: "analysis_incomplete" };
+      break;
+    }
+    rounds += 1;
+    const repaired = await Promise.all(tasks.map((task, index) => step.do(
+      `repair-node:${accessionNumber}:round:${rounds}:${index}:${task.id}`,
+      () => runtime.repair(task, rounds),
+    )));
+    for (const result of repaired) {
+      const index = nodes.findIndex((node) => node.id === result.id);
+      if (index >= 0) nodes[index] = result;
+      else nodes.push(result);
+    }
+    review = await step.do(`manager-review:${accessionNumber}:round:${rounds}`, () => runtime.review(rounds, nodes));
+    const fingerprint = unresolvedFingerprint(review);
+    if (review.status === "needs_repair" && fingerprint === previousFingerprint) {
+      review = { ...review, status: "partial", repairTasks: [], stopReason: "no_progress" };
+      break;
+    }
+    previousFingerprint = fingerprint;
+  }
+  if (review.status === "needs_repair") review = { ...review, status: "partial", repairTasks: [], stopReason: "max_rounds" };
+  if (review.status === "partial" && !review.stopReason) review = { ...review, stopReason: "analysis_incomplete" };
+  return { nodes, review, rounds };
+}
 
 export type PreparedFilingReference = {
   key: string;
@@ -43,11 +104,17 @@ export type SecPipelineOperations = {
   prepare(filing: SecFiling): Promise<PreparedFilingReference>;
   route(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext): Promise<RouterResult>;
   analyzeModule(moduleKey: ModuleAnalysis["moduleKey"], filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, router: RouterResult): Promise<ModuleAnalysis>;
-  plan(filing: SecFiling, prepared: PreparedFilingReference): Promise<SecNodePlan>;
-  analyzeNode(spec: SecNodeSpec, filing: SecFiling, prepared: PreparedFilingReference): Promise<SecNodeResult>;
+  buildBrief?(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, modules: ModuleAnalysis[]): Promise<SecAnalysisBrief>;
+  plan(filing: SecFiling, prepared: PreparedFilingReference, brief?: SecAnalysisBrief): Promise<SecNodePlan>;
+  analyzeNode(spec: SecNodeSpec, filing: SecFiling, prepared: PreparedFilingReference, brief?: SecAnalysisBrief, round?: number): Promise<SecNodeResult>;
+  review?(filing: SecFiling, prepared: PreparedFilingReference, brief: SecAnalysisBrief, plan: SecNodePlan, nodes: SecNodeResult[], round: number): Promise<ManagerReview>;
+  buildClaimLedger?(filing: SecFiling, prepared: PreparedFilingReference, brief: SecAnalysisBrief, nodes: SecNodeResult[]): Promise<ClaimLedger>;
   summarizeEvent(filing: SecFiling, prepared: PreparedFilingReference): Promise<SecFilingSummary>;
-  summarize(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, router: RouterResult, modules: ModuleAnalysis[], plan: SecNodePlan, nodes: SecNodeResult[]): Promise<{ artifact: SecAnalysisArtifact; summary: SecFilingSummary | null }>;
-  publish(artifact: SecAnalysisArtifact, summary: SecFilingSummary | null): Promise<void>;
+  summarize(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, router: RouterResult, modules: ModuleAnalysis[], plan: SecNodePlan, nodes: SecNodeResult[], brief?: SecAnalysisBrief, review?: ManagerReview, ledger?: ClaimLedger): Promise<{ artifact: SecAnalysisArtifact; summary: SecFilingSummary | null }>;
+  repairSynthesis?(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, router: RouterResult, modules: ModuleAnalysis[], plan: SecNodePlan, nodes: SecNodeResult[], brief: SecAnalysisBrief, review: ManagerReview, ledger: ClaimLedger, failedCheck: ClaimCheckResult): Promise<{ artifact: SecAnalysisArtifact; summary: SecFilingSummary | null }>;
+  checkClaims?(artifact: SecAnalysisArtifact, ledger: ClaimLedger, summary: SecFilingSummary | null): Promise<ClaimCheckResult>;
+  publish(artifact: SecAnalysisArtifact, summary: SecFilingSummary | null): Promise<void | { memoryJobId?: string }>;
+  enqueueMemory?(jobId: string, ticker: string): Promise<void>;
   publishEvent(summary: SecFilingSummary): Promise<void>;
   updateJob(job: WorkflowJobUpdate): Promise<void>;
 };
@@ -104,16 +171,52 @@ export async function executeSecAnalysisWorkflow(
         `module:${accession}:${module.key}`,
         () => operations.analyzeModule(module.key, filing, prepared, context, router),
       )));
+      await markJobStage(step, operations, baseJob, "brief");
+      const brief = await step.do(`brief:${accession}`, async () => operations.buildBrief
+        ? operations.buildBrief(filing, prepared, context, modules)
+        : buildFallbackBrief(filing, context, modules));
+      assertBriefCanProceed(brief);
       await markJobStage(step, operations, baseJob, "manager");
-      const plan = await step.do(`manager:${accession}`, () => operations.plan(filing, prepared));
+      const plan = await step.do(`manager:${accession}`, () => operations.plan(filing, prepared, brief));
       if (!plan.nodes.length) throw new Error("Manager planned no analysis nodes");
-      await markJobStage(step, operations, baseJob, "nodes");
+      await markJobStage(step, operations, baseJob, "nodes-round-0");
       const nodes = await mapWithConcurrency(plan.nodes, 4, (spec, index) => step.do(
-        `node:${accession}:${index}:${spec.id}`,
-        () => operations.analyzeNode(spec, filing, prepared),
+        `node:${accession}:round:0:${index}:${spec.id}`,
+        () => operations.analyzeNode(spec, filing, prepared, brief, 0),
       ));
+      await markJobStage(step, operations, baseJob, "manager-review");
+      const loop = await runManagerRepairLoop(accession, step, plan, nodes, {
+        review: (round, currentNodes) => operations.review
+          ? operations.review(filing, prepared, brief, plan, currentNodes, round)
+          : Promise.resolve(fallbackManagerReview(plan, currentNodes)),
+        repair: (task, round) => operations.analyzeNode({ ...task, id: task.targetNodeId }, filing, prepared, brief, round),
+      });
+      await markJobStage(step, operations, baseJob, "claim-ledger");
+      const ledger = await step.do(`claim-ledger:${accession}`, () => operations.buildClaimLedger
+        ? operations.buildClaimLedger(filing, prepared, brief, loop.nodes)
+        : Promise.resolve(buildClaimLedger(brief, loop.nodes.map((node) => ({ id: node.id, findings: node.findings, narrative: node.narrative, evidenceIds: node.evidenceIds })), [])));
       await markJobStage(step, operations, baseJob, "synthesis");
-      const result = await step.do(`synthesis:${accession}`, () => operations.summarize(filing, prepared, context, router, modules, plan, nodes));
+      let result = await step.do(`synthesis:${accession}`, () => operations.summarize(filing, prepared, context, router, modules, plan, loop.nodes, brief, loop.review, ledger));
+      await markJobStage(step, operations, baseJob, "claim-check");
+      let claimCheck = await step.do(`claim-check:${accession}:attempt:0`, () => operations.checkClaims
+        ? operations.checkClaims(result.artifact, ledger, result.summary)
+        : Promise.resolve(verifyClaimLedger(ledger, result.artifact.report.keyMetrics)));
+      if (claimCheck.status === "failed") {
+        if (!operations.repairSynthesis) throw new Error("Claim verification failed after synthesis");
+        result = await step.do(`synthesis-repair:${accession}`, () => operations.repairSynthesis!(filing, prepared, context, router, modules, plan, loop.nodes, brief, loop.review, ledger, claimCheck));
+        claimCheck = await step.do(`claim-check:${accession}:attempt:1`, () => operations.checkClaims
+          ? operations.checkClaims(result.artifact, ledger, result.summary)
+          : Promise.resolve(verifyClaimLedger(ledger, result.artifact.report.keyMetrics)));
+        if (claimCheck.status === "failed") throw new Error("Claim verification failed after synthesis repair");
+      }
+      result.artifact.report.dataQuality = {
+        ...result.artifact.report.dataQuality,
+        analysisStatus: loop.review.status === "complete" ? "complete" : "partial",
+        unresolvedQuestions: loop.review.unresolvedQuestions,
+        failedNodeIds: loop.nodes.filter((node) => node.status !== "complete").map((node) => node.id),
+        stopReason: loop.review.stopReason,
+        managerCoverageScore: loop.review.coverageScore,
+      };
       if (result.artifact.report.dataQuality.verificationStatus === "failed") {
         await step.do(`job:${accession}:failed`, () => operations.updateJob({
           ...baseJob,
@@ -130,20 +233,33 @@ export async function executeSecAnalysisWorkflow(
       const summary = result.summary ? {
         ...result.summary,
         plan,
-        nodes,
-        workflow: buildWorkflowTrace(filing, plan, modules, nodes, result.summary),
+        nodes: loop.nodes,
+        managerReview: loop.review,
+        repairRounds: loop.rounds,
+        workflow: buildWorkflowTrace(filing, plan, modules, loop.nodes, result.summary),
       } : null;
       await markJobStage(step, operations, baseJob, "publish");
-      await step.do(`publish:${accession}`, () => operations.publish(result.artifact, summary));
+      const publication = await step.do(`publish:${accession}`, () => operations.publish(result.artifact, summary));
       await step.do(`job:${accession}:complete`, () => operations.updateJob({ ...baseJob, status: "complete", currentStage: "published", updatedAt: new Date().toISOString(), completedAt: new Date().toISOString() }));
+      if (publication && publication.memoryJobId && operations.enqueueMemory) {
+        await step.do(`memory-enqueue:${accession}`, async () => {
+          try {
+            await operations.enqueueMemory!(publication.memoryJobId!, filing.ticker);
+          } catch {
+            return;
+          }
+        });
+      }
       analyzed.push(accession);
     } catch (error) {
+      const detail = error instanceof Error ? error.message.slice(0, 500) : "Unknown pipeline error";
+      const hardFailure = /No core facts|illegal evidence|Conflicting (fact|history) units|Manager (Review|planned)|Claim verification|Synthesis|final publish|R2 memory source/i.test(detail);
       await step.do(`job:${accession}:error`, () => operations.updateJob({
         ...baseJob,
         status: "failed",
         currentStage: "execution",
-        errorCode: "pipeline_error",
-        errorDetail: error instanceof Error ? error.message.slice(0, 500) : "Unknown pipeline error",
+        errorCode: hardFailure ? "hard_failure" : "pipeline_error",
+        errorDetail: detail,
         updatedAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
       }));
@@ -296,4 +412,58 @@ function markJobStage(
     currentStage,
     updatedAt: new Date().toISOString(),
   }));
+}
+
+function buildFallbackBrief(filing: SecFiling, context: SecAnalysisContext, modules: ModuleAnalysis[]): SecAnalysisBrief {
+  return buildSecAnalysisBrief({
+    ticker: filing.ticker,
+    filingId: filing.accessionNumber,
+    periodId: context.currentPeriodId,
+    periodScope: /^(10-K|20-F)/.test(filing.form) ? "annual" : "quarter",
+    modules,
+    history: context.history ?? { registryVersion: "sec-canonical-series.v1", series: [] },
+    memorySummary: context.companyMemorySummary ?? "",
+    memoryItems: context.memoryItems ?? [],
+    validEvidenceIds: new Set(modules.flatMap((module) => [...module.facts, ...module.claims].flatMap((item) => item.evidenceIds))),
+  });
+}
+
+function assertBriefCanProceed(brief: SecAnalysisBrief): void {
+  if (!brief.currentFacts.length) throw new Error("No core facts passed factual verification");
+  if (brief.evidenceQuality.invalidEvidenceIds.length) throw new Error("Brief contains illegal evidence IDs");
+  const identities = new Map<string, string>();
+  for (const fact of brief.currentFacts) {
+    const key = `${fact.metricKey}:${fact.periodScope ?? brief.periodId}:${fact.basis}`;
+    const unit = `${fact.unit}:${fact.currency ?? ""}`;
+    const previous = identities.get(key);
+    if (previous && previous !== unit) throw new Error(`Conflicting fact units for ${fact.metricKey}`);
+    identities.set(key, unit);
+  }
+  for (const series of brief.history.series) {
+    for (const observation of [...series.quarters, ...series.annual]) {
+      const key = `history:${series.seriesId}:${observation.periodScope}:${observation.startDate ?? "instant"}:${observation.endDate}:${observation.basis}`;
+      const unit = `${observation.unit}:${observation.currency ?? ""}`;
+      const previous = identities.get(key);
+      if (previous && previous !== unit) throw new Error(`Conflicting history units for ${series.seriesId}`);
+      identities.set(key, unit);
+    }
+  }
+}
+
+function fallbackManagerReview(plan: SecNodePlan, nodes: SecNodeResult[]): ManagerReview {
+  const results = new Map(nodes.map((node) => [node.id, node]));
+  const questions = plan.nodes.map((node) => {
+    const result = results.get(node.id);
+    const answered = result?.status === "complete" && Boolean(result.narrative || result.findings.length);
+    return { questionId: node.id, status: answered ? "answered" as const : "unanswered" as const, explanation: answered ? "Node completed" : result?.error ?? "Node incomplete" };
+  });
+  const unresolvedQuestions = plan.nodes.filter((_node, index) => questions[index].status !== "answered").map((node) => node.question);
+  return {
+    status: unresolvedQuestions.length ? "partial" : "complete",
+    questions,
+    repairTasks: [],
+    unresolvedQuestions,
+    coverageScore: questions.length ? questions.filter((question) => question.status === "answered").length / questions.length : 0,
+    stopReason: unresolvedQuestions.length ? "analysis_incomplete" : "complete",
+  };
 }
