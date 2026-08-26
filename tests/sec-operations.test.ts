@@ -29,8 +29,7 @@ test("adds bounded jitter around 30, 90, and 180 second retry delays", () => {
 test("sends an explicit fallback model override to B.ai", async () => {
   let requestedModel = "";
   const env = {
-    MAX_SITE_ORIGIN: "https://site.test",
-    MAX_SITE_BYPASS_TOKEN: "sites-token",
+    WEB_APP_ORIGIN: "https://site.test",
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
     AI_API_KEY: "worker-model-secret",
@@ -60,8 +59,7 @@ test("module stages read compact R2 slices after routing instead of reparsing th
     },
   };
   const env = {
-    MAX_SITE_ORIGIN: "https://site.test",
-    MAX_SITE_BYPASS_TOKEN: "sites-token",
+    WEB_APP_ORIGIN: "https://site.test",
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
     AI_API_KEY: "worker-model-secret",
@@ -96,8 +94,7 @@ test("module stages read compact R2 slices after routing instead of reparsing th
 
 test("scheduled analysis does not overlap an already running filing job", async () => {
   const env = {
-    MAX_SITE_ORIGIN: "https://site.test",
-    MAX_SITE_BYPASS_TOKEN: "sites-token",
+    WEB_APP_ORIGIN: "https://site.test",
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
     SEC_FILINGS: { async get() { return null; }, async put() { return {}; } },
@@ -112,8 +109,7 @@ test("calls B.ai from the workflow worker when its shared AI secret is configure
   const objects = new Map<string, string>();
   const requests: string[] = [];
   const env = {
-    MAX_SITE_ORIGIN: "https://site.test",
-    MAX_SITE_BYPASS_TOKEN: "sites-token",
+    WEB_APP_ORIGIN: "https://site.test",
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
     AI_API_KEY: "worker-model-secret",
@@ -152,8 +148,7 @@ test("calls B.ai from the workflow worker when its shared AI secret is configure
 test("plans and runs dynamic nodes from the prepared R2 filing", async () => {
   const objects = new Map<string, string>();
   const env = {
-    MAX_SITE_ORIGIN: "https://site.test",
-    MAX_SITE_BYPASS_TOKEN: "sites-token",
+    WEB_APP_ORIGIN: "https://site.test",
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
     AI_API_KEY: "worker-model-secret",
@@ -214,8 +209,7 @@ test("publishes cited evidence in bounded D1 bridge calls", async () => {
     outline: [],
   };
   const env = {
-    MAX_SITE_ORIGIN: "https://site.test",
-    MAX_SITE_BYPASS_TOKEN: "sites-token",
+    WEB_APP_ORIGIN: "https://site.test",
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
     SEC_FILINGS: {
@@ -284,8 +278,7 @@ test("publishes cited evidence in bounded D1 bridge calls", async () => {
 test("publishes event summaries without creating a structured filing artifact", async () => {
   let requestBody: Record<string, unknown> | null = null;
   const env = {
-    MAX_SITE_ORIGIN: "https://site.test",
-    MAX_SITE_BYPASS_TOKEN: "sites-token",
+    WEB_APP_ORIGIN: "https://site.test",
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
     SEC_FILINGS: { async get() { return null; }, async put() { return {}; } },

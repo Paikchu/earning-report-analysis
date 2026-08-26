@@ -1,4 +1,4 @@
-import type { SecFiling, SecFilingSummary } from "./sec.ts";
+import type { SecFiling, SecFilingSummary, SecFilingWithSummary } from "./sec.ts";
 import {
   buildPeriodIdentity,
   SEC_ANALYSIS_PROMPT_VERSION,
@@ -11,6 +11,7 @@ import {
 } from "./sec-analysis.ts";
 import { buildCompanyMemorySummary, consolidateMemoryCandidates, type MemoryCandidateV2 } from "./sec-memory.ts";
 import type { SecAnalysisArtifact, SecAnalysisContext, SecCacheRecord, SecRepository } from "./sec-service.ts";
+import { decodePageCursor, encodePageCursor } from "./sec-config.ts";
 
 type D1ResultStatement = {
   first<T>(): Promise<T | null>;
@@ -23,6 +24,25 @@ type D1Like = {
     bind(...values: unknown[]): D1ResultStatement;
   };
   batch?(statements: D1ResultStatement[]): Promise<unknown[]>;
+};
+
+export type PublicFilingPage = {
+  filings: SecFilingWithSummary[];
+  nextCursor: string | null;
+  total: number;
+};
+
+type PublicFilingRow = {
+  filingId: string;
+  ticker: string;
+  accessionNumber: string;
+  cik: string;
+  form: string;
+  filingDate: string;
+  reportDate: string;
+  documentUrl: string;
+  indexUrl: string;
+  companyName?: string | null;
 };
 
 export type SecAnalysisJobUpdate = {
@@ -112,6 +132,25 @@ export class D1SecRepository implements SecRepository {
     `).bind(summary.ticker, summary.accessionNumber, summary.generatedAt, JSON.stringify(summary)).run();
   }
 
+  async upsertFilingIndex(filing: SecFiling): Promise<void> {
+    await this.database.prepare(`
+      INSERT INTO sec_filings (
+        filing_id, ticker, accession_number, cik, form, filing_date, report_date,
+        document_url, index_url, parser_version, ingest_status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'sec-structure.v1', 'indexed')
+      ON CONFLICT(filing_id) DO UPDATE SET
+        ticker = excluded.ticker, accession_number = excluded.accession_number,
+        cik = excluded.cik, form = excluded.form, filing_date = excluded.filing_date,
+        report_date = excluded.report_date, document_url = excluded.document_url,
+        index_url = excluded.index_url, ingest_status = CASE
+          WHEN sec_filings.ingest_status = 'analyzed' THEN sec_filings.ingest_status
+          ELSE excluded.ingest_status END
+    `).bind(
+      filing.accessionNumber, filing.ticker, filing.accessionNumber, filing.cik,
+      filing.form, filing.filingDate, filing.reportDate, filing.documentUrl, filing.indexUrl,
+    ).run();
+  }
+
   async upsertAnalysisJob(job: SecAnalysisJobUpdate): Promise<void> {
     await this.database.prepare(`
       INSERT INTO sec_analysis_jobs (
@@ -157,6 +196,17 @@ export class D1SecRepository implements SecRepository {
     return row?.status ?? null;
   }
 
+  async getLatestAnalysisJobStatus(ticker: string, accessionNumber: string): Promise<SecAnalysisJobStatus | null> {
+    const row = await this.database.prepare(`
+      SELECT status
+      FROM sec_analysis_jobs
+      WHERE ticker = ? AND accession_number = ?
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `).bind(ticker, accessionNumber).first<{ status: SecAnalysisJobStatus }>();
+    return row?.status ?? null;
+  }
+
   async getPublishedReport(ticker: string, periodId: string): Promise<PublishedSecReport | null> {
     try {
       const row = await this.database.prepare(`
@@ -171,6 +221,73 @@ export class D1SecRepository implements SecRepository {
     } catch {
       return null;
     }
+  }
+
+  async listPublicFilings(rawTicker: string, rawCursor: string | null, rawLimit = 20): Promise<PublicFilingPage> {
+    const ticker = rawTicker.trim().toUpperCase();
+    const limit = Math.min(50, Math.max(1, Math.trunc(rawLimit) || 20));
+    const cursor = decodePageCursor(rawCursor);
+    const where = cursor
+      ? "WHERE ticker = ? AND (filing_date < ? OR (filing_date = ? AND accession_number < ?))"
+      : "WHERE ticker = ?";
+    const values = cursor
+      ? [ticker, cursor.filingDate, cursor.filingDate, cursor.accessionNumber, limit + 1]
+      : [ticker, limit + 1];
+    const rows = await this.database.prepare(`
+      SELECT filing_id AS filingId, ticker, accession_number AS accessionNumber, cik, form,
+        filing_date AS filingDate, report_date AS reportDate, document_url AS documentUrl,
+        index_url AS indexUrl
+      FROM sec_filings
+      ${where}
+      ORDER BY filing_date DESC, accession_number DESC
+      LIMIT ?
+    `).bind(...values).all<PublicFilingRow>();
+    const totalRow = await this.database.prepare("SELECT COUNT(*) AS count FROM sec_filings WHERE ticker = ?").bind(ticker).first<{ count: number }>();
+    const hasMore = rows.results.length > limit;
+    const pageRows = rows.results.slice(0, limit);
+    const filings = await Promise.all(pageRows.map((row) => this.hydratePublicFiling(row)));
+    const last = pageRows.at(-1);
+    return {
+      filings,
+      nextCursor: hasMore && last ? encodePageCursor({ filingDate: last.filingDate, accessionNumber: last.accessionNumber }) : null,
+      total: Number(totalRow?.count ?? 0),
+    };
+  }
+
+  async getPublicFiling(rawTicker: string, rawAccession: string): Promise<SecFilingWithSummary | null> {
+    const row = await this.database.prepare(`
+      SELECT filing_id AS filingId, ticker, accession_number AS accessionNumber, cik, form,
+        filing_date AS filingDate, report_date AS reportDate, document_url AS documentUrl,
+        index_url AS indexUrl
+      FROM sec_filings
+      WHERE ticker = ? AND accession_number = ?
+      LIMIT 1
+    `).bind(rawTicker.trim().toUpperCase(), rawAccession).first<PublicFilingRow>();
+    return row ? this.hydratePublicFiling(row) : null;
+  }
+
+  private async hydratePublicFiling(row: PublicFilingRow): Promise<SecFilingWithSummary> {
+    const filing: SecFiling = {
+      ticker: row.ticker,
+      cik: row.cik,
+      cikNumber: Number(row.cik.replace(/\D/g, "")) || 0,
+      companyName: row.companyName ?? row.ticker,
+      form: row.form,
+      filingDate: row.filingDate,
+      reportDate: row.reportDate,
+      accessionNumber: row.accessionNumber,
+      primaryDocument: row.documentUrl.split("/").at(-1) ?? "",
+      description: row.form,
+      items: "",
+      documentUrl: row.documentUrl,
+      indexUrl: row.indexUrl,
+    };
+    const summary = await this.getSummary(row.ticker, row.accessionNumber);
+    const period = await this.database.prepare(`
+      SELECT period_id AS periodId FROM sec_filing_periods WHERE filing_id = ? ORDER BY role = 'primary' DESC LIMIT 1
+    `).bind(row.filingId).first<{ periodId: string }>();
+    const analysis = period ? await this.getPublishedReport(row.ticker, period.periodId) : null;
+    return { ...filing, summary, analysis };
   }
 
   async getAnalysisContext(filing: SecFiling): Promise<SecAnalysisContext> {
@@ -537,19 +654,22 @@ export class D1SecRepository implements SecRepository {
     return memoryJobId;
   }
 
-  async claimMemoryJob(jobId: string | null, ownerToken: string, now: Date, leaseMilliseconds = 5 * 60_000): Promise<SecMemoryJobClaim | null> {
+  async claimMemoryJob(jobId: string | null, ownerToken: string, now: Date, leaseMilliseconds = 5 * 60_000, allowedTickers?: string[]): Promise<SecMemoryJobClaim | null> {
     if (!this.database.batch) throw new Error("D1 batch is required for memory lease claims");
+    if (allowedTickers && !allowedTickers.length) return null;
+    const tickerClause = allowedTickers ? ` AND ticker IN (${allowedTickers.map(() => "?").join(",")})` : "";
+    const tickerValues = allowedTickers ?? [];
     const candidate = jobId
       ? await this.database.prepare(`
         SELECT job_id AS jobId, ticker, filing_id AS filingId, period_id AS periodId, source_r2_key AS sourceR2Key, status
-        FROM sec_memory_jobs WHERE job_id = ?
-      `).bind(jobId).first<{ jobId: string; ticker: string; filingId: string; periodId: string; sourceR2Key: string; status: string }>()
+        FROM sec_memory_jobs WHERE job_id = ?${tickerClause}
+      `).bind(jobId, ...tickerValues).first<{ jobId: string; ticker: string; filingId: string; periodId: string; sourceR2Key: string; status: string }>()
       : await this.database.prepare(`
         SELECT job_id AS jobId, ticker, filing_id AS filingId, period_id AS periodId, source_r2_key AS sourceR2Key, status
         FROM sec_memory_jobs
-        WHERE status = 'pending' OR (status = 'running' AND lease_until < ?)
+        WHERE (status = 'pending' OR (status = 'running' AND lease_until < ?))${tickerClause}
         ORDER BY created_at ASC LIMIT 1
-      `).bind(now.toISOString()).first<{ jobId: string; ticker: string; filingId: string; periodId: string; sourceR2Key: string; status: string }>();
+      `).bind(now.toISOString(), ...tickerValues).first<{ jobId: string; ticker: string; filingId: string; periodId: string; sourceR2Key: string; status: string }>();
     if (!candidate || candidate.status === "complete") return null;
     const leaseUntil = new Date(now.getTime() + leaseMilliseconds).toISOString();
     await this.database.batch([
@@ -783,13 +903,6 @@ export class D1SecRepository implements SecRepository {
     }
     return result;
   }
-}
-
-export async function listHoldingPlanTickers(database: D1Like): Promise<string[]> {
-  const result = await database.prepare(`
-    SELECT DISTINCT ticker FROM holding_plans ORDER BY ticker
-  `).bind().all<{ ticker: string }>();
-  return result.results.map((row) => row.ticker);
 }
 
 function parseJson<T>(value: string): T | null {

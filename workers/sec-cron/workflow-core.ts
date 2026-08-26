@@ -143,7 +143,10 @@ export async function executeSecAnalysisWorkflow(
   const skipped: string[] = [];
   const failed: string[] = [];
 
-  for (const filing of discovery.filings) {
+  const filings = params.backfill
+    ? discovery.filings.filter((filing) => /^(10-K|10-Q|20-F|8-K|6-K)(\/A)?$/.test(filing.form))
+    : selectLatestWorkflowFilings(discovery.filings);
+  for (const filing of filings) {
     const accession = filing.accessionNumber;
     const jobId = `${filing.ticker}:${accession}:${SEC_ANALYSIS_SCHEMA_VERSION}:${workflowInstanceId}`;
     const baseJob = {
@@ -306,6 +309,13 @@ export async function executeSecAnalysisWorkflow(
     }
   }
   return { analyzed, skipped, failed };
+}
+
+function selectLatestWorkflowFilings(filings: SecFiling[]): SecFiling[] {
+  const primary = filings.find((filing) => /^(10-K|10-Q|20-F)(\/A)?$/.test(filing.form));
+  const events = filings.slice(0, 5).filter((filing) => /^(8-K|6-K)(\/A)?$/.test(filing.form));
+  return [...(primary ? [primary] : []), ...events]
+    .filter((filing, index, all) => all.findIndex((candidate) => candidate.accessionNumber === filing.accessionNumber) === index);
 }
 
 async function mapWithConcurrency<T, R>(values: T[], concurrency: number, operation: (value: T, index: number) => Promise<R>): Promise<R[]> {

@@ -2,6 +2,7 @@ import { getD1 } from "@/db";
 import { hasInternalSecAccess } from "@/lib/sec-api";
 import { D1SecRepository, type SecMemoryExtractionPayload, type SecMemoryJobClaim } from "@/lib/sec-d1";
 import { getSecRuntimeConfig } from "@/lib/sec-runtime";
+import { isTrackedTicker } from "@/lib/sec-config";
 
 export async function POST(request: Request) {
   const runtime = await getSecRuntimeConfig();
@@ -10,6 +11,7 @@ export async function POST(request: Request) {
   if (!body?.claim?.jobId || !body.claim.ownerToken || !Array.isArray(body.extraction?.candidates)) {
     return Response.json({ error: "SEC Memory 提交内容无效。" }, { status: 400 });
   }
+  if (!isTrackedTicker(body.claim.ticker, runtime.trackedTickers)) return Response.json({ error: "Ticker is not tracked" }, { status: 403 });
   const result = await new D1SecRepository(await getD1()).commitMemoryJob(body.claim, body.extraction);
   return Response.json({ status: "committed", ...result }, { headers: { "cache-control": "no-store" } });
 }

@@ -1,22 +1,23 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "max-investment-record-sec-cron",
+  "name": "earning-report-analysis-sec-pipeline",
   "main": "index.ts",
   "compatibility_date": "2026-08-26",
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
-    "MAX_SITE_ORIGIN": "https://max-investment-record.max-zhangyuchen.chatgpt.site",
-    "SEC_USER_AGENT": "max-investment-record/1.0 max.zhangyuchen@gmail.com",
-    "SEC_ANALYSIS_MODEL": "deepseek-v4-flash"
+    "WEB_APP_ORIGIN": "https://earning-report-analysis-sec-web.max-zhangyuchen.workers.dev",
+    "SEC_USER_AGENT": "earning-report-analysis/1.0 max.zhangyuchen@gmail.com",
+    "SEC_ANALYSIS_MODEL": "deepseek-v4-flash",
+    "SEC_TRACKED_TICKERS": ""
   },
   "workflows": [
     {
-      "name": "max-investment-record-sec-analysis",
+      "name": "earning-report-analysis-sec-analysis",
       "binding": "SEC_ANALYSIS_WORKFLOW",
       "class_name": "SecAnalysisWorkflow"
     },
     {
-      "name": "max-investment-record-sec-memory",
+      "name": "earning-report-analysis-sec-memory",
       "binding": "SEC_MEMORY_WORKFLOW",
       "class_name": "SecMemoryWorkflow"
     }
@@ -24,7 +25,7 @@
   "r2_buckets": [
     {
       "binding": "SEC_FILINGS",
-      "bucket_name": "max-investment-record-sec-filings"
+      "bucket_name": "earning-report-analysis-sec-filings"
     }
   ],
   "triggers": {
@@ -32,6 +33,36 @@
       "0 13-23 * * 1-5",
       "0 0-3 * * 2-6"
     ]
+  },
+  "env": {
+    "staging": {
+      "name": "earning-report-analysis-sec-pipeline-staging",
+      "vars": {
+        "WEB_APP_ORIGIN": "https://earning-report-analysis-sec-web-staging.max-zhangyuchen.workers.dev",
+        "SEC_USER_AGENT": "earning-report-analysis/1.0 max.zhangyuchen@gmail.com",
+        "SEC_ANALYSIS_MODEL": "deepseek-v4-flash",
+        "SEC_TRACKED_TICKERS": ""
+      },
+      "workflows": [
+        {
+          "name": "earning-report-analysis-sec-analysis-staging",
+          "binding": "SEC_ANALYSIS_WORKFLOW",
+          "class_name": "SecAnalysisWorkflow"
+        },
+        {
+          "name": "earning-report-analysis-sec-memory-staging",
+          "binding": "SEC_MEMORY_WORKFLOW",
+          "class_name": "SecMemoryWorkflow"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "SEC_FILINGS",
+          "bucket_name": "earning-report-analysis-sec-filings-staging"
+        }
+      ],
+      "triggers": { "crons": [] }
+    }
   },
   "observability": {
     "enabled": true,

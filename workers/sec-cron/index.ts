@@ -40,7 +40,7 @@ export class SecMemoryWorkflow extends WorkflowEntrypoint<SecPipelineEnv, SecMem
 const worker = {
   async fetch(request: Request, env: SecPipelineEnv) {
     if (new URL(request.url).pathname === "/health") {
-      return Response.json({ status: "ok", executor: "workflow", modelConfigured: Boolean(env.AI_API_KEY || env.SEC_BOOTSTRAP_PRIVATE_KEY) }, { headers: { "cache-control": "no-store" } });
+      return Response.json({ status: "ok", executor: "workflow", modelConfigured: Boolean(env.AI_API_KEY), trackedTickersConfigured: Boolean(env.SEC_TRACKED_TICKERS?.trim()) }, { headers: { "cache-control": "no-store" } });
     }
     return handleSecAnalysisRequest(request, env);
   },

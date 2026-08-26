@@ -5,7 +5,6 @@ import {
   buildPeriodIdentity,
   buildRouterPayload,
   buildSecAnalysisBrief,
-  buildSummaryPayload,
   compareSnapshots,
   fallbackRouterResult,
   hashString,
@@ -97,11 +96,11 @@ export async function discoverSecTicker(rawTicker: string, runtime: SecDiscovery
     feed: {
       ticker,
       company: { ticker, cik: company.cik, name: allFilings[0]?.companyName ?? company.name },
-      filings: allFilings.slice(0, 5).map((filing) => ({ ...filing, summary: null, analysis: null })),
+      filings: allFilings.map((filing) => ({ ...filing, summary: null, analysis: null })),
       fetchedAt: now.toISOString(),
       status: allFilings.length ? "ready" : "empty",
     },
-    filings: selectWorkflowFilings(allFilings),
+    filings: allFilings,
   };
 }
 

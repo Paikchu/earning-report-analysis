@@ -1,54 +1,74 @@
 "use client";
 
-import Link from "next/link";
-import { useRef, type MouseEvent } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
-type SiteHeaderView = "portfolio" | "ledger" | "review" | "macro" | "market-close";
+type SearchResult = { symbol: string; name: string; exchange: string; type: "stock" | "etf" };
 
-export function SiteHeader({
-  active,
-  onViewChange,
-  onOpenSettings,
-}: {
-  active: SiteHeaderView;
-  onViewChange?: (view: "portfolio" | "review") => void;
-  onOpenSettings?: () => void;
-}) {
-  const menuRef = useRef<HTMLDetailsElement>(null);
+export function SiteHeader({ initialQuery = "" }: { initialQuery?: string }) {
+  const router = useRouter();
+  const [query, setQuery] = useState(initialQuery);
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [searchActive, setSearchActive] = useState(false);
 
-  function handleViewClick(event: MouseEvent<HTMLAnchorElement>, view: "portfolio" | "review") {
-    if (!onViewChange) return;
+  useEffect(() => {
+    const value = query.trim();
+    if (!value || !searchActive) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      const response = await fetch(`/api/v1/search?q=${encodeURIComponent(value)}`, { signal: controller.signal });
+      if (response.ok) setResults((await response.json() as { results?: SearchResult[] }).results ?? []);
+    }, 120);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, searchActive]);
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    onViewChange(view);
-  }
-
-  function closeMenu() {
-    if (menuRef.current) menuRef.current.open = false;
+    const match = results[0];
+    const ticker = (match?.symbol ?? query.trim()).toUpperCase().replace(/[^A-Z0-9.-]/g, "");
+    if (ticker) {
+      setResults([]);
+      setSearchActive(false);
+      router.push(`/stocks/${encodeURIComponent(ticker)}`);
+    }
   }
 
   return (
-    <header className="site-header">
-      <Link className="site-brand" href="/" aria-label="MAX 投资记录首页">
-        <strong>MAX</strong>
-        <span>投资记录</span>
-      </Link>
-      <nav className="site-primary-nav" aria-label="主要页面">
-        <Link aria-current={active === "portfolio" ? "page" : undefined} href="/" onClick={(event) => handleViewClick(event, "portfolio")}>Portfolio</Link>
-        <Link aria-current={active === "ledger" ? "page" : undefined} href="/ledger">投资账本</Link>
-        <Link aria-current={active === "review" ? "page" : undefined} href="/?view=review" onClick={(event) => handleViewClick(event, "review")}>每日复盘</Link>
-        <Link aria-current={active === "macro" ? "page" : undefined} href="/macro">今日宏观经济</Link>
-        <Link aria-current={active === "market-close" ? "page" : undefined} href="/market-close">昨日收盘总结</Link>
-      </nav>
-      <details className="profile-menu" ref={menuRef}>
-        <summary className="profile-trigger" aria-label="打开账户菜单"><span className="profile-avatar" aria-hidden="true" /></summary>
-        <div className="profile-popover">
-          {onOpenSettings ? (
-            <button className="profile-menu-item" type="button" onClick={() => { closeMenu(); onOpenSettings(); }}>设置</button>
-          ) : (
-            <Link className="profile-menu-item" href="/?settings=1" onClick={closeMenu}>设置</Link>
-          )}
-        </div>
-      </details>
+    <header className="site-header sec-site-header">
+      <form className="sec-search-form" onSubmit={submit} role="search">
+        <label className="sr-only" htmlFor="sec-company-search">搜索股票代码或公司名称</label>
+        <span className="sec-search-icon" aria-hidden="true">⌕</span>
+        <input
+          id="sec-company-search"
+          autoComplete="off"
+          value={query}
+          onChange={(event) => {
+            const nextQuery = event.target.value;
+            setQuery(nextQuery);
+            setSearchActive(true);
+            if (!nextQuery.trim()) setResults([]);
+          }}
+          placeholder="搜索股票代码或公司名称"
+        />
+        <kbd>↵</kbd>
+        {searchActive && results.length > 0 && (
+          <div className="sec-search-results" role="listbox">
+            {results.map((result) => (
+              <button type="button" key={result.symbol} onClick={() => {
+                setQuery(result.symbol);
+                setResults([]);
+                setSearchActive(false);
+                router.push(`/stocks/${encodeURIComponent(result.symbol)}`);
+              }}>
+                <strong>{result.symbol}</strong><span>{result.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </form>
     </header>
   );
 }

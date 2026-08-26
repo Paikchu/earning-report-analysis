@@ -24,9 +24,9 @@ import {
   type ClaimCheckResult,
   type ClaimLedger,
   type ManagerReview,
+  type RouterResult,
 } from "../../lib/sec-analysis.ts";
 import { normalizeCompanyFacts } from "../../lib/sec-history.ts";
-import { decryptSecModelKey } from "../../lib/sec-key-bootstrap.ts";
 import { siteHeaders, type SecCronEnv } from "./core.ts";
 import type { SecModelExecution } from "./retry-policy.ts";
 import type { PreparedFilingReference, SecPipelineOperations } from "./workflow-core.ts";
@@ -42,10 +42,8 @@ export type SecPipelineEnv = SecCronEnv & {
   SEC_USER_AGENT: string;
   AI_API_KEY?: string;
   SEC_ANALYSIS_MODEL?: string;
-  SEC_BOOTSTRAP_PRIVATE_KEY?: string;
 };
 
-const modelKeyCache = new WeakMap<object, Promise<string>>();
 const PUBLISH_BLOCK_CHUNK_SIZE = 5;
 const PUBLISH_MEMORY_CHUNK_SIZE = 15;
 const PUBLISH_COMPARISON_CHUNK_SIZE = 30;
@@ -212,7 +210,7 @@ async function readPrepared(bucket: R2BucketLike, reference: PreparedFilingRefer
 }
 
 export async function sitePost<T = Record<string, unknown>>(env: SecPipelineEnv, fetcher: typeof fetch, path: string, body: unknown): Promise<T> {
-  const response = await fetcher(`${env.MAX_SITE_ORIGIN.replace(/\/+$/, "")}${path}`, {
+  const response = await fetcher(`${env.WEB_APP_ORIGIN.replace(/\/+$/, "")}${path}`, {
     method: "POST",
     headers: siteHeaders(env),
     body: JSON.stringify(body),
@@ -345,18 +343,9 @@ export async function callWorkerSecModel(
 }
 
 export async function resolveWorkerModelKey(env: SecPipelineEnv, fetcher: typeof fetch = fetch): Promise<string> {
-  if (env.AI_API_KEY) return env.AI_API_KEY;
-  if (!env.SEC_BOOTSTRAP_PRIVATE_KEY) throw new Error("SEC workflow model key is not configured");
-  const cached = modelKeyCache.get(env);
-  if (cached) return cached;
-  const pending = sitePost<{ ciphertext?: string }>(env, fetcher, "/api/internal/sec/model-key", {})
-    .then(async ({ ciphertext }) => {
-      if (!ciphertext) throw new Error("Sites SEC model-key bootstrap returned no ciphertext");
-      return decryptSecModelKey(ciphertext, env.SEC_BOOTSTRAP_PRIVATE_KEY as string);
-    });
-  modelKeyCache.set(env, pending);
-  pending.catch(() => modelKeyCache.delete(env));
-  return pending;
+  void fetcher;
+  if (!env.AI_API_KEY) throw new Error("SEC pipeline AI_API_KEY is not configured");
+  return env.AI_API_KEY;
 }
 
 function parseModelJson(content: string): Record<string, unknown> {

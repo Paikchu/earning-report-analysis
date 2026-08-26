@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { D1SecRepository, listHoldingPlanTickers, type SecAnalysisJobUpdate } from "../lib/sec-d1.ts";
+import { D1SecRepository, type SecAnalysisJobUpdate } from "../lib/sec-d1.ts";
 import type { SecFilingSummary } from "../lib/sec.ts";
 import type { SecAnalysisArtifact } from "../lib/sec-service.ts";
 
@@ -70,25 +70,6 @@ test("persists and restores one summary per ticker and accession", async () => {
 
   await repository.setSummary(summary);
   assert.equal((await repository.getSummary("MSFT", summary.accessionNumber))?.headline, "云业务推动增长");
-});
-
-test("returns distinct plan tickers for the background watchlist", async () => {
-  const database = {
-    prepare(sql: string) {
-      assert.match(sql, /SELECT DISTINCT ticker FROM holding_plans/);
-      return {
-        bind() {
-          return {
-            async all<T>() {
-              return { results: [{ ticker: "MSFT" }, { ticker: "NVDA" }] as T[] };
-            },
-          };
-        },
-      };
-    },
-  };
-
-  assert.deepEqual(await listHoldingPlanTickers(database), ["MSFT", "NVDA"]);
 });
 
 test("upserts independent SEC workflow job state", async () => {

@@ -9,9 +9,9 @@ import {
 } from "../workers/sec-cron/core.ts";
 
 const env: SecCronEnv = {
-  MAX_SITE_ORIGIN: "https://max-investment-record.example",
-  MAX_SITE_BYPASS_TOKEN: "sites-token",
+  WEB_APP_ORIGIN: "https://web.example",
   SEC_REFRESH_KEY: "refresh-key",
+  SEC_TRACKED_TICKERS: "MSFT,NOK",
   SEC_ANALYSIS_WORKFLOW: workflowBinding(),
 };
 
@@ -25,21 +25,10 @@ function workflowBinding(started: string[] = []): SecWorkflowBinding {
 }
 
 test("loads the watchlist and starts one independent workflow per ticker", async () => {
-  const requests: Request[] = [];
   const started: string[] = [];
-  const fetcher: typeof fetch = async (input, init) => {
-    const request = new Request(input, init);
-    requests.push(request);
-    if (request.url.endsWith("/watchlist")) return Response.json({ tickers: ["MSFT", "NOK"] });
-    throw new Error(`Unexpected request: ${request.url}`);
-  };
-
-  const result = await runSecRefresh({ ...env, SEC_ANALYSIS_WORKFLOW: workflowBinding(started) }, fetcher, 1_786_000_000_000);
+  const result = await runSecRefresh({ ...env, SEC_ANALYSIS_WORKFLOW: workflowBinding(started) }, fetch, 1_786_000_000_000);
 
   assert.deepEqual(result, { started: ["MSFT", "NOK"], failed: [] });
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0].headers.get("oai-sites-authorization"), "Bearer sites-token");
-  assert.equal(requests[0].headers.get("authorization"), null);
   assert.deepEqual(started, ["MSFT", "NOK"]);
 });
 
@@ -52,13 +41,7 @@ test("continues starting remaining workflows after one failure", async () => {
       return { id: options.id };
     },
   };
-  const fetcher: typeof fetch = async (input, init) => {
-    const request = new Request(input, init);
-    if (request.url.endsWith("/watchlist")) return Response.json({ tickers: ["MSFT", "NOK"] });
-    throw new Error(`Unexpected request: ${request.url}`);
-  };
-
-  assert.deepEqual(await runSecRefresh({ ...env, SEC_ANALYSIS_WORKFLOW: binding }, fetcher, 1_786_000_000_000), { started: ["NOK"], failed: ["MSFT"] });
+  assert.deepEqual(await runSecRefresh({ ...env, SEC_ANALYSIS_WORKFLOW: binding }, fetch, 1_786_000_000_000), { started: ["NOK"], failed: ["MSFT"] });
   assert.deepEqual(started, ["NOK"]);
 });
 

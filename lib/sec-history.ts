@@ -128,7 +128,11 @@ function chooseCanonicalConcept(observations: Array<HistoricalObservation & { co
     const previousPriority = previous?.conceptPriority ?? 99;
     if (!previous || priority < previousPriority || (priority === previousPriority && observation.sourceFiledAt > previous.sourceFiledAt)) selected.set(key, observation);
   }
-  return [...selected.values()].map(({ conceptPriority: _priority, ...observation }) => observation);
+  return [...selected.values()].map((observation) => {
+    const { conceptPriority, ...withoutPriority } = observation;
+    void conceptPriority;
+    return withoutPriority;
+  });
 }
 
 function deriveObservations(ticker: string, observations: HistoricalObservation[]): HistoricalObservation[] {

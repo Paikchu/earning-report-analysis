@@ -43,6 +43,13 @@
       "when": 1787705388031,
       "tag": "0005_fresh_bloodaxe",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1787754713000,
+      "tag": "0006_standalone_sec",
+      "breakpoints": true
     }
   ]
 }

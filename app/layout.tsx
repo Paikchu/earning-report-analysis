@@ -14,19 +14,19 @@ export async function generateMetadata(): Promise<Metadata> {
   const imageUrl = `${protocol}://${host}/og.png`;
 
   return {
-    title: "MAX · 投资记录",
-    description: "个人投资组合与持仓记录。",
+    title: "SEC / AI · 财报分析",
+    description: "按股票代码检索历史 SEC 申报与 AI 解析报告。",
     openGraph: {
-      title: "MAX · 投资记录",
-      description: "个人投资组合与持仓记录。",
+      title: "SEC / AI · 财报分析",
+      description: "按股票代码检索历史 SEC 申报与 AI 解析报告。",
       type: "website",
       locale: "zh_CN",
-      images: [{ url: imageUrl, width: 1200, height: 630, alt: "投资组合当前净值" }],
+      images: [{ url: imageUrl, width: 1200, height: 630, alt: "SEC 财报分析" }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "MAX · 投资记录",
-      description: "个人投资组合与持仓记录。",
+      title: "SEC / AI · 财报分析",
+      description: "按股票代码检索历史 SEC 申报与 AI 解析报告。",
       images: [imageUrl],
     },
   };
