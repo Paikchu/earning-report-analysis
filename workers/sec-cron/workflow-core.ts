@@ -25,14 +25,23 @@ import type {
 } from "../../lib/sec.ts";
 import type { SecAnalysisArtifact, SecAnalysisContext } from "../../lib/sec-service.ts";
 import type { SecWorkflowParams } from "./core.ts";
+import { modelExecutionForAttempt, type SecModelExecution } from "./retry-policy.ts";
 
-export type WorkflowStepLike = {
-  do<T>(name: string, callback: () => Promise<T>): Promise<T>;
+export type WorkflowStepContextLike = {
+  attempt: number;
 };
 
+export type WorkflowStepLike = {
+  do<T>(name: string, callback: (context?: WorkflowStepContextLike) => Promise<T>): Promise<T>;
+};
+
+function executionFor(context?: WorkflowStepContextLike): SecModelExecution {
+  return modelExecutionForAttempt(context?.attempt ?? 1);
+}
+
 export type ManagerRepairLoopRuntime = {
-  review(round: number, nodes: SecNodeResult[]): Promise<ManagerReview>;
-  repair(task: ManagerRepairTask, round: number): Promise<SecNodeResult>;
+  review(round: number, nodes: SecNodeResult[], execution?: SecModelExecution): Promise<ManagerReview>;
+  repair(task: ManagerRepairTask, round: number, execution?: SecModelExecution): Promise<SecNodeResult>;
 };
 
 export async function runManagerRepairLoop(
@@ -42,9 +51,9 @@ export async function runManagerRepairLoop(
   initialNodes: SecNodeResult[],
   runtime: ManagerRepairLoopRuntime,
 ): Promise<{ nodes: SecNodeResult[]; review: ManagerReview; rounds: number }> {
-  let nodes = [...initialNodes];
+  const nodes = [...initialNodes];
   let rounds = 0;
-  let review = await step.do(`manager-review:${accessionNumber}:round:0`, () => runtime.review(0, nodes));
+  let review = await step.do(`manager-review:${accessionNumber}:round:0`, (context) => runtime.review(0, nodes, executionFor(context)));
   let previousFingerprint = unresolvedFingerprint(review);
   while (review.status === "needs_repair" && rounds < MAX_REPAIR_ROUNDS) {
     const tasks = review.repairTasks.slice(0, MAX_REPAIR_NODES_PER_ROUND);
@@ -57,7 +66,7 @@ export async function runManagerRepairLoop(
     for (const [index, task] of tasks.entries()) {
       repaired.push(await step.do(
         `repair-node:${accessionNumber}:round:${rounds}:${index}:${task.id}`,
-        () => runtime.repair(task, rounds),
+        (context) => runtime.repair(task, rounds, executionFor(context)),
       ));
     }
     for (const result of repaired) {
@@ -65,7 +74,7 @@ export async function runManagerRepairLoop(
       if (index >= 0) nodes[index] = result;
       else nodes.push(result);
     }
-    review = await step.do(`manager-review:${accessionNumber}:round:${rounds}`, () => runtime.review(rounds, nodes));
+    review = await step.do(`manager-review:${accessionNumber}:round:${rounds}`, (context) => runtime.review(rounds, nodes, executionFor(context)));
     const fingerprint = unresolvedFingerprint(review);
     if (review.status === "needs_repair" && fingerprint === previousFingerprint) {
       review = { ...review, status: "partial", repairTasks: [], stopReason: "no_progress" };
@@ -105,17 +114,17 @@ export type SecPipelineOperations = {
   shouldAnalyze(filing: SecFiling, requestedBy: SecWorkflowParams["requestedBy"]): Promise<boolean>;
   getContext(filing: SecFiling): Promise<SecAnalysisContext>;
   prepare(filing: SecFiling): Promise<PreparedFilingReference>;
-  route(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext): Promise<RouterResult>;
-  analyzeModule(moduleKey: ModuleAnalysis["moduleKey"], filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, router: RouterResult): Promise<ModuleAnalysis>;
+  route(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, execution?: SecModelExecution): Promise<RouterResult>;
+  analyzeModule(moduleKey: ModuleAnalysis["moduleKey"], filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, router: RouterResult, execution?: SecModelExecution): Promise<ModuleAnalysis>;
   buildBrief?(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, modules: ModuleAnalysis[]): Promise<SecAnalysisBrief>;
-  plan(filing: SecFiling, prepared: PreparedFilingReference, brief?: SecAnalysisBrief): Promise<SecNodePlan>;
-  analyzeNode(spec: SecNodeSpec, filing: SecFiling, prepared: PreparedFilingReference, brief?: SecAnalysisBrief, round?: number): Promise<SecNodeResult>;
-  review?(filing: SecFiling, prepared: PreparedFilingReference, brief: SecAnalysisBrief, plan: SecNodePlan, nodes: SecNodeResult[], round: number): Promise<ManagerReview>;
+  plan(filing: SecFiling, prepared: PreparedFilingReference, brief?: SecAnalysisBrief, execution?: SecModelExecution): Promise<SecNodePlan>;
+  analyzeNode(spec: SecNodeSpec, filing: SecFiling, prepared: PreparedFilingReference, brief?: SecAnalysisBrief, round?: number, execution?: SecModelExecution): Promise<SecNodeResult>;
+  review?(filing: SecFiling, prepared: PreparedFilingReference, brief: SecAnalysisBrief, plan: SecNodePlan, nodes: SecNodeResult[], round: number, execution?: SecModelExecution): Promise<ManagerReview>;
   buildClaimLedger?(filing: SecFiling, prepared: PreparedFilingReference, brief: SecAnalysisBrief, nodes: SecNodeResult[]): Promise<ClaimLedger>;
-  summarizeEvent(filing: SecFiling, prepared: PreparedFilingReference): Promise<SecFilingSummary>;
-  summarize(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, router: RouterResult, modules: ModuleAnalysis[], plan: SecNodePlan, nodes: SecNodeResult[], brief?: SecAnalysisBrief, review?: ManagerReview, ledger?: ClaimLedger): Promise<{ artifact: SecAnalysisArtifact; summary: SecFilingSummary | null }>;
-  repairSynthesis?(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, router: RouterResult, modules: ModuleAnalysis[], plan: SecNodePlan, nodes: SecNodeResult[], brief: SecAnalysisBrief, review: ManagerReview, ledger: ClaimLedger, failedCheck: ClaimCheckResult): Promise<{ artifact: SecAnalysisArtifact; summary: SecFilingSummary | null }>;
-  checkClaims?(artifact: SecAnalysisArtifact, ledger: ClaimLedger, summary: SecFilingSummary | null): Promise<ClaimCheckResult>;
+  summarizeEvent(filing: SecFiling, prepared: PreparedFilingReference, execution?: SecModelExecution): Promise<SecFilingSummary>;
+  summarize(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, router: RouterResult, modules: ModuleAnalysis[], plan: SecNodePlan, nodes: SecNodeResult[], brief?: SecAnalysisBrief, review?: ManagerReview, ledger?: ClaimLedger, execution?: SecModelExecution): Promise<{ artifact: SecAnalysisArtifact; summary: SecFilingSummary | null }>;
+  repairSynthesis?(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, router: RouterResult, modules: ModuleAnalysis[], plan: SecNodePlan, nodes: SecNodeResult[], brief: SecAnalysisBrief, review: ManagerReview, ledger: ClaimLedger, failedCheck: ClaimCheckResult, execution?: SecModelExecution): Promise<{ artifact: SecAnalysisArtifact; summary: SecFilingSummary | null }>;
+  checkClaims?(artifact: SecAnalysisArtifact, ledger: ClaimLedger, summary: SecFilingSummary | null, execution?: SecModelExecution): Promise<ClaimCheckResult>;
   publish(artifact: SecAnalysisArtifact, summary: SecFilingSummary | null): Promise<void | { memoryJobId?: string }>;
   enqueueMemory?(jobId: string, ticker: string): Promise<void>;
   publishEvent(summary: SecFilingSummary): Promise<void>;
@@ -157,7 +166,7 @@ export async function executeSecAnalysisWorkflow(
       if (eventFiling) {
         const prepared = await step.do(`prepare:${accession}`, () => operations.prepare(filing));
         await markJobStage(step, operations, baseJob, "event-summary");
-        const summary = await step.do(`event-summary:${accession}`, () => operations.summarizeEvent(filing, prepared));
+        const summary = await step.do(`event-summary:${accession}`, (context) => operations.summarizeEvent(filing, prepared, executionFor(context)));
         await markJobStage(step, operations, baseJob, "publish");
         await step.do(`publish-event:${accession}`, () => operations.publishEvent(summary));
         await step.do(`job:${accession}:complete`, () => operations.updateJob({ ...baseJob, status: "complete", currentStage: "published", updatedAt: new Date().toISOString(), completedAt: new Date().toISOString() }));
@@ -168,13 +177,13 @@ export async function executeSecAnalysisWorkflow(
       await markJobStage(step, operations, baseJob, "prepare");
       const prepared = await step.do(`prepare:${accession}`, () => operations.prepare(filing));
       await markJobStage(step, operations, baseJob, "router");
-      const router = await step.do(`router:${accession}`, () => operations.route(filing, prepared, context));
+      const router = await step.do(`router:${accession}`, (stepContext) => operations.route(filing, prepared, context, executionFor(stepContext)));
       await markJobStage(step, operations, baseJob, "modules");
       const modules = await Promise.all(SEC_ANALYSIS_MODULES.map(async (module) => {
         try {
           return await step.do(
             `module:${accession}:${module.key}`,
-            () => operations.analyzeModule(module.key, filing, prepared, context, router),
+            (stepContext) => operations.analyzeModule(module.key, filing, prepared, context, router, executionFor(stepContext)),
           );
         } catch {
           return {
@@ -194,19 +203,19 @@ export async function executeSecAnalysisWorkflow(
         : buildFallbackBrief(filing, context, modules));
       assertBriefCanProceed(brief);
       await markJobStage(step, operations, baseJob, "manager");
-      const plan = await step.do(`manager:${accession}`, () => operations.plan(filing, prepared, brief));
+      const plan = await step.do(`manager:${accession}`, (stepContext) => operations.plan(filing, prepared, brief, executionFor(stepContext)));
       if (!plan.nodes.length) throw new Error("Manager planned no analysis nodes");
       await markJobStage(step, operations, baseJob, "nodes-round-0");
       const nodes = await mapWithConcurrency(plan.nodes, 4, (spec, index) => step.do(
         `node:${accession}:round:0:${index}:${spec.id}`,
-        () => operations.analyzeNode(spec, filing, prepared, brief, 0),
+        (stepContext) => operations.analyzeNode(spec, filing, prepared, brief, 0, executionFor(stepContext)),
       ));
       await markJobStage(step, operations, baseJob, "manager-review");
       const loop = await runManagerRepairLoop(accession, step, plan, nodes, {
-        review: (round, currentNodes) => operations.review
-          ? operations.review(filing, prepared, brief, plan, currentNodes, round)
+        review: (round, currentNodes, execution) => operations.review
+          ? operations.review(filing, prepared, brief, plan, currentNodes, round, execution)
           : Promise.resolve(fallbackManagerReview(plan, currentNodes)),
-        repair: (task, round) => operations.analyzeNode({ ...task, id: task.targetNodeId }, filing, prepared, brief, round),
+        repair: (task, round, execution) => operations.analyzeNode({ ...task, id: task.targetNodeId }, filing, prepared, brief, round, execution),
       });
       const managerReview: ManagerReview = brief.evidenceQuality.failedModules.length
         ? {
@@ -226,16 +235,16 @@ export async function executeSecAnalysisWorkflow(
         ? operations.buildClaimLedger(filing, prepared, brief, loop.nodes)
         : Promise.resolve(buildClaimLedger(brief, loop.nodes.map((node) => ({ id: node.id, findings: node.findings, narrative: node.narrative, evidenceIds: node.evidenceIds })), [])));
       await markJobStage(step, operations, baseJob, "synthesis");
-      let result = await step.do(`synthesis:${accession}`, () => operations.summarize(filing, prepared, context, router, modules, plan, loop.nodes, brief, managerReview, ledger));
+      let result = await step.do(`synthesis:${accession}`, (stepContext) => operations.summarize(filing, prepared, context, router, modules, plan, loop.nodes, brief, managerReview, ledger, executionFor(stepContext)));
       await markJobStage(step, operations, baseJob, "claim-check");
-      let claimCheck = await step.do(`claim-check:${accession}:attempt:0`, () => operations.checkClaims
-        ? operations.checkClaims(result.artifact, ledger, result.summary)
+      let claimCheck = await step.do(`claim-check:${accession}:attempt:0`, (stepContext) => operations.checkClaims
+        ? operations.checkClaims(result.artifact, ledger, result.summary, executionFor(stepContext))
         : Promise.resolve(verifyClaimLedger(ledger, result.artifact.report.keyMetrics)));
       if (claimCheck.status === "failed") {
         if (!operations.repairSynthesis) throw new Error("Claim verification failed after synthesis");
-        result = await step.do(`synthesis-repair:${accession}`, () => operations.repairSynthesis!(filing, prepared, context, router, modules, plan, loop.nodes, brief, managerReview, ledger, claimCheck));
-        claimCheck = await step.do(`claim-check:${accession}:attempt:1`, () => operations.checkClaims
-          ? operations.checkClaims(result.artifact, ledger, result.summary)
+        result = await step.do(`synthesis-repair:${accession}`, (stepContext) => operations.repairSynthesis!(filing, prepared, context, router, modules, plan, loop.nodes, brief, managerReview, ledger, claimCheck, executionFor(stepContext)));
+        claimCheck = await step.do(`claim-check:${accession}:attempt:1`, (stepContext) => operations.checkClaims
+          ? operations.checkClaims(result.artifact, ledger, result.summary, executionFor(stepContext))
           : Promise.resolve(verifyClaimLedger(ledger, result.artifact.report.keyMetrics)));
         if (claimCheck.status === "failed") throw new Error("Claim verification failed after synthesis repair");
       }

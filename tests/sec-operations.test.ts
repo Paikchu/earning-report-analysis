@@ -3,13 +3,49 @@ import test from "node:test";
 
 import type { SecAnalysisArtifact, SecAnalysisContext } from "../lib/sec-service.ts";
 import type { SecFiling, SecNodeSpec } from "../lib/sec.ts";
-import { createSecPipelineOperations, type SecPipelineEnv } from "../workers/sec-cron/operations.ts";
+import { callWorkerSecModel, createSecPipelineOperations, type SecPipelineEnv } from "../workers/sec-cron/operations.ts";
+import { modelExecutionForAttempt, retryDelayForAttempt } from "../workers/sec-cron/retry-policy.ts";
 
 const filing: SecFiling = {
   ticker: "MSFT", cik: "0000789019", cikNumber: 789019, companyName: "Microsoft Corp", form: "10-K",
   filingDate: "2026-07-30", reportDate: "2026-06-30", accessionNumber: "annual", primaryDocument: "msft.htm",
   description: "Annual report", items: "", documentUrl: "https://sec.test/msft.htm", indexUrl: "https://sec.test/index.htm",
 };
+
+test("uses hy3 only after the primary model attempt fails", () => {
+  assert.deepEqual(modelExecutionForAttempt(1), { attempt: 1, finalAttempt: false });
+  assert.deepEqual(modelExecutionForAttempt(2), { attempt: 2, model: "hy3", finalAttempt: false });
+  assert.deepEqual(modelExecutionForAttempt(4), { attempt: 4, model: "hy3", finalAttempt: true });
+});
+
+test("adds bounded jitter around 30, 90, and 180 second retry delays", () => {
+  assert.equal(retryDelayForAttempt(1, () => 0), 24_000);
+  assert.equal(retryDelayForAttempt(1, () => 0.5), 30_000);
+  assert.equal(retryDelayForAttempt(2, () => 0.5), 90_000);
+  assert.equal(retryDelayForAttempt(3, () => 0.5), 180_000);
+  assert.equal(retryDelayForAttempt(3, () => 1), 216_000);
+});
+
+test("sends an explicit fallback model override to B.ai", async () => {
+  let requestedModel = "";
+  const env = {
+    MAX_SITE_ORIGIN: "https://site.test",
+    MAX_SITE_BYPASS_TOKEN: "sites-token",
+    SEC_REFRESH_KEY: "refresh-key",
+    SEC_USER_AGENT: "test@example.com",
+    AI_API_KEY: "worker-model-secret",
+    SEC_ANALYSIS_MODEL: "primary-model",
+    SEC_FILINGS: { async get() { return null; }, async put() { return {}; } },
+  } as SecPipelineEnv;
+  const fetcher: typeof fetch = async (_input, init) => {
+    requestedModel = (JSON.parse(String(init?.body)) as { model: string }).model;
+    return Response.json({ choices: [{ message: { content: "{}" } }] });
+  };
+
+  await callWorkerSecModel(env, fetcher, "test", "Return JSON", {}, "hy3");
+
+  assert.equal(requestedModel, "hy3");
+});
 
 test("module stages read compact R2 slices after routing instead of reparsing the full filing", async () => {
   const objects = new Map<string, string>();

@@ -330,6 +330,27 @@ test("degrades one exhausted module to analysis-incomplete and continues with re
   assert.ok(unresolved.includes("module:capital_allocation"));
 });
 
+test("passes the hy3 fallback model to a retried analysis step", async () => {
+  const base = operations();
+  let retriedModel = "";
+  const step: WorkflowStepLike = {
+    async do<T>(name, callback): Promise<T> {
+      return callback({ attempt: name.endsWith(":capital_allocation") ? 2 : 1 });
+    },
+  };
+  const ops = operations({
+    async analyzeModule(moduleKey, filingArg, prepared, context, router, execution) {
+      if (moduleKey === "capital_allocation") retriedModel = execution?.model ?? "";
+      return base.analyzeModule(moduleKey, filingArg, prepared, context, router);
+    },
+  });
+
+  const result = await executeSecAnalysisWorkflow({ ticker: "TESTCO", requestedBy: "manual" }, "workflow-model-fallback", step, ops);
+
+  assert.deepEqual(result.failed, []);
+  assert.equal(retriedModel, "hy3");
+});
+
 test("classifies an exhausted Manager Review as a hard failure", async () => {
   let errorCode = "";
   const ops = operations({

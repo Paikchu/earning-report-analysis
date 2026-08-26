@@ -2,6 +2,7 @@ import type { SecMemoryJobClaim } from "../../lib/sec-d1.ts";
 import { normalizeMemoryExtraction } from "../../lib/sec-memory.ts";
 import type { SecMemoryWorkflowParams } from "./core.ts";
 import { callWorkerSecModel, sitePost, type SecPipelineEnv } from "./operations.ts";
+import { modelExecutionForAttempt } from "./retry-policy.ts";
 import type { WorkflowStepLike } from "./workflow-core.ts";
 
 export async function executeSecMemoryWorkflow(
@@ -24,8 +25,9 @@ export async function executeSecMemoryWorkflow(
     return JSON.parse(await object.text()) as Record<string, unknown>;
   });
   const validEvidenceIds = collectValidEvidenceIds(source);
-  const extraction = await step.do(`memory-extract:${params.jobId}`, async () => {
-    const value = await callWorkerSecModel(env, fetcher, "memory-extract", memoryExtractionSystemPrompt(), compactMemorySource(source));
+  const extraction = await step.do(`memory-extract:${params.jobId}`, async (context) => {
+    const execution = modelExecutionForAttempt(context?.attempt ?? 1);
+    const value = await callWorkerSecModel(env, fetcher, "memory-extract", memoryExtractionSystemPrompt(), compactMemorySource(source), execution.model);
     return normalizeMemoryExtraction(value, validEvidenceIds);
   });
   const committed = await step.do(`memory-commit:${params.jobId}`, () => sitePost<{ status: string; noOp: boolean; itemCount: number }>(env, fetcher, "/api/internal/sec/memory/commit", {

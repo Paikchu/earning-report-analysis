@@ -24,11 +24,11 @@ import {
   type ClaimCheckResult,
   type ClaimLedger,
   type ManagerReview,
-  type SecAnalysisBrief,
 } from "../../lib/sec-analysis.ts";
 import { normalizeCompanyFacts } from "../../lib/sec-history.ts";
 import { decryptSecModelKey } from "../../lib/sec-key-bootstrap.ts";
 import { siteHeaders, type SecCronEnv } from "./core.ts";
+import type { SecModelExecution } from "./retry-policy.ts";
 import type { PreparedFilingReference, SecPipelineOperations } from "./workflow-core.ts";
 
 type R2ObjectLike = { text(): Promise<string> };
@@ -51,12 +51,12 @@ const PUBLISH_MEMORY_CHUNK_SIZE = 15;
 const PUBLISH_COMPARISON_CHUNK_SIZE = 30;
 
 export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof fetch = fetch): SecPipelineOperations {
-  const model: SecModelCall = async (stage, system, payload) => {
+  const modelFor = (execution?: SecModelExecution): SecModelCall => async (stage, system, payload) => {
     try {
-      return await callWorkerSecModel(env, fetcher, stage, system, payload);
+      return await callWorkerSecModel(env, fetcher, stage, system, payload, execution?.model);
     } catch (error) {
       if (!(error instanceof SyntaxError) && !String(error).includes("JSON object")) throw error;
-      return callWorkerSecModel(env, fetcher, `${stage}:schema-retry`, `${system}\nYour previous response violated the JSON schema. Return one valid JSON object only.`, payload);
+      return callWorkerSecModel(env, fetcher, `${stage}:schema-retry`, `${system}\nYour previous response violated the JSON schema. Return one valid JSON object only.`, payload, execution?.model);
     }
   };
   return {
@@ -80,9 +80,15 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       await env.SEC_FILINGS.put(key, JSON.stringify(prepared), { httpMetadata: { contentType: "application/json" } });
       return { key, filing };
     },
-    route: async (_filing, reference, context) => {
+    route: async (_filing, reference, context, execution) => {
       const prepared = await readPrepared(env.SEC_FILINGS, reference);
-      const router = await routePreparedSecFiling(prepared, context, model).catch(() => fallbackRouterResult(prepared.blocks));
+      let router: RouterResult;
+      try {
+        router = await routePreparedSecFiling(prepared, context, modelFor(execution));
+      } catch (error) {
+        if (execution && !execution.finalAttempt) throw error;
+        router = fallbackRouterResult(prepared.blocks);
+      }
       await Promise.all(SEC_ANALYSIS_MODULES.map(async (module) => {
         const selected = new Set(router.selections.find((selection) => selection.moduleKey === module.key)?.blockIds ?? []);
         const slice: PreparedSecFiling = {
@@ -96,8 +102,8 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       await putArtifact(env.SEC_FILINGS, reference, "router", router);
       return router;
     },
-    analyzeModule: async (moduleKey, _filing, reference, context, router) => {
-      const result = await analyzePreparedSecModule(moduleKey, await readPrepared(env.SEC_FILINGS, { ...reference, key: modulePreparedKey(reference, moduleKey) }), context, router, model);
+    analyzeModule: async (moduleKey, _filing, reference, context, router, execution) => {
+      const result = await analyzePreparedSecModule(moduleKey, await readPrepared(env.SEC_FILINGS, { ...reference, key: modulePreparedKey(reference, moduleKey) }), context, router, modelFor(execution));
       await putArtifact(env.SEC_FILINGS, reference, `modules/${moduleKey}`, result);
       return result;
     },
@@ -109,18 +115,18 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       await putArtifact(env.SEC_FILINGS, reference, "brief", brief);
       return brief;
     },
-    plan: async (_filing, reference, brief): Promise<SecNodePlan> => {
-      const plan = await planPreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), model, brief);
+    plan: async (_filing, reference, brief, execution): Promise<SecNodePlan> => {
+      const plan = await planPreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), modelFor(execution), brief);
       await putArtifact(env.SEC_FILINGS, reference, "manager-plan", plan);
       return plan;
     },
-    analyzeNode: async (spec: SecNodeSpec, _filing, reference, brief, round = 0): Promise<SecNodeResult> => {
-      const result = await analyzePreparedSecNode(await readPrepared(env.SEC_FILINGS, reference), spec, model, brief);
+    analyzeNode: async (spec: SecNodeSpec, _filing, reference, brief, round = 0, execution): Promise<SecNodeResult> => {
+      const result = await analyzePreparedSecNode(await readPrepared(env.SEC_FILINGS, reference), spec, modelFor(execution), brief);
       await putArtifact(env.SEC_FILINGS, reference, `nodes/round-${round}/${spec.id}`, result);
       return result;
     },
-    review: async (_filing, reference, brief, plan, nodes, round): Promise<ManagerReview> => {
-      const result = await reviewPreparedSecAnalysis(await readPrepared(env.SEC_FILINGS, reference), brief, plan, nodes, round, model);
+    review: async (_filing, reference, brief, plan, nodes, round, execution): Promise<ManagerReview> => {
+      const result = await reviewPreparedSecAnalysis(await readPrepared(env.SEC_FILINGS, reference), brief, plan, nodes, round, modelFor(execution));
       await putArtifact(env.SEC_FILINGS, reference, `manager-review/round-${round}`, result);
       return result;
     },
@@ -130,23 +136,23 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       await putArtifact(env.SEC_FILINGS, reference, "claim-ledger", result);
       return result;
     },
-    summarizeEvent: async (_filing, reference) => summarizePreparedSecEvent(await readPrepared(env.SEC_FILINGS, reference), model),
-    summarize: async (_filing, reference, context, router, modules, plan, nodes, brief, review, ledger) => {
+    summarizeEvent: async (_filing, reference, execution) => summarizePreparedSecEvent(await readPrepared(env.SEC_FILINGS, reference), modelFor(execution)),
+    summarize: async (_filing, reference, context, router, modules, plan, nodes, brief, review, ledger, execution) => {
       if (review) await putArtifact(env.SEC_FILINGS, reference, "manager-review/final", review);
-      const result = await summarizePreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), context, router, modules, model, new Date(), plan, nodes, brief, review, ledger);
+      const result = await summarizePreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), context, router, modules, modelFor(execution), new Date(), plan, nodes, brief, review, ledger);
       const synthesisKey = await putArtifact(env.SEC_FILINGS, reference, "synthesis", result);
       return { ...result, artifact: { ...result.artifact, blocks: [], artifactKeys: collectArtifactKeys(reference, synthesisKey) } };
     },
-    repairSynthesis: async (_filing, reference, context, router, modules, plan, nodes, brief, review, ledger, failedCheck) => {
+    repairSynthesis: async (_filing, reference, context, router, modules, plan, nodes, brief, review, ledger, failedCheck, execution) => {
       const repairedReview = { ...review, unresolvedQuestions: [...review.unresolvedQuestions, `Claim repair: ${JSON.stringify(failedCheck)}`] };
-      const result = await summarizePreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), context, router, modules, model, new Date(), plan, nodes, brief, repairedReview, ledger, "synthesis-repair");
+      const result = await summarizePreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), context, router, modules, modelFor(execution), new Date(), plan, nodes, brief, repairedReview, ledger, "synthesis-repair");
       const synthesisKey = await putArtifact(env.SEC_FILINGS, reference, "synthesis-repair", result);
       return { ...result, artifact: { ...result.artifact, blocks: [], artifactKeys: collectArtifactKeys(reference, synthesisKey) } };
     },
-    checkClaims: async (artifact, ledger, summary): Promise<ClaimCheckResult> => {
+    checkClaims: async (artifact, ledger, summary, execution): Promise<ClaimCheckResult> => {
       const deterministic = verifyClaimLedger(ledger, artifact.report.keyMetrics);
       if (deterministic.status === "failed" || !summary?.report) return deterministic.status === "failed" ? deterministic : { ...deterministic, status: "failed", unsupportedClaims: ["Synthesis body is missing"] };
-      const reverse = normalizeReverseClaimCheck(await model("claim-check", reverseClaimSystemPrompt(), {
+      const reverse = normalizeReverseClaimCheck(await modelFor(execution)("claim-check", reverseClaimSystemPrompt(), {
         report: summary.report,
         headline: summary.headline,
         bullets: summary.bullets,
@@ -311,13 +317,14 @@ export async function callWorkerSecModel(
   stage: string,
   system: string,
   payload: unknown,
+  modelOverride?: string,
 ): Promise<Record<string, unknown>> {
   const apiKey = await resolveWorkerModelKey(env, fetcher);
   const response = await fetcher("https://api.b.ai/v1/chat/completions", {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: env.SEC_ANALYSIS_MODEL || "deepseek-v4-flash",
+      model: modelOverride || env.SEC_ANALYSIS_MODEL || "deepseek-v4-flash",
       messages: [
         { role: "system", content: system },
         { role: "user", content: JSON.stringify(payload) },

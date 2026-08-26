@@ -3,17 +3,24 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloud
 import { handleSecAnalysisRequest, runSecMemorySweep, runSecRefresh, type SecMemoryWorkflowParams, type SecWorkflowParams } from "./core.ts";
 import { executeSecMemoryWorkflow } from "./memory-workflow.ts";
 import { createSecPipelineOperations, type SecPipelineEnv } from "./operations.ts";
-import { executeSecAnalysisWorkflow } from "./workflow-core.ts";
+import { retryDelayForAttempt } from "./retry-policy.ts";
+import { executeSecAnalysisWorkflow, type WorkflowStepContextLike, type WorkflowStepLike } from "./workflow-core.ts";
 
 const WORKFLOW_RETRY = {
-  retries: { limit: 3, delay: "5 seconds", backoff: "exponential" as const },
+  retries: {
+    limit: 3,
+    delay: ({ ctx }: { ctx: WorkflowStepContextLike }) => retryDelayForAttempt(ctx.attempt),
+  },
   timeout: "5 minutes",
 };
 
-function durableSteps(step: WorkflowStep) {
+function durableSteps(step: WorkflowStep): WorkflowStepLike {
+  const dynamicStep = step as unknown as {
+    do<T>(name: string, config: typeof WORKFLOW_RETRY, callback: (context?: WorkflowStepContextLike) => Promise<T>): Promise<T>;
+  };
   return {
-    do<T>(name: string, callback: () => Promise<T>): Promise<T> {
-      return step.do(name, WORKFLOW_RETRY, callback);
+    do<T>(name: string, callback: (context?: WorkflowStepContextLike) => Promise<T>): Promise<T> {
+      return dynamicStep.do(name, WORKFLOW_RETRY, callback);
     },
   };
 }
