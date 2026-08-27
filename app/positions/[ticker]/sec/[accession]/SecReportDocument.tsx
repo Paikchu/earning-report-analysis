@@ -1,5 +1,5 @@
 import type { PublishedSecReport } from "@/lib/sec-analysis";
-import type { SecFilingWithSummary, SecNodeResult, SecWorkflowNode } from "@/lib/sec";
+import type { SecFilingWithSummary, SecNodeResult } from "@/lib/sec";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { SecReportNavigator, type ReportSectionLink } from "./SecReportNavigator";
@@ -96,16 +96,6 @@ export function SecReportDocument({ companyName, filing }: { companyName: string
       title: "数据质量",
       description: "检查证据覆盖率、验证状态和需要人工复核的提示。",
       content: <DataQuality report={report} />,
-    },
-    {
-      id: "sec-report-workflow",
-      title: "全部 Workflow 节点",
-      description: "查看报告各分析环节的结果与异常。",
-      content: (
-        <div className="sec-workflow-list">
-          {(summary?.workflow?.nodes ?? []).map((node, index) => <WorkflowNodeView index={index + 1} key={node.id} node={node} />)}
-        </div>
-      ),
     },
   ] : [];
   const navigationSections: ReportSectionLink[] = reportSections.flatMap((section, index) => {
@@ -206,37 +196,27 @@ function VerifiedMetrics({ report }: { report: PublishedSecReport | null | undef
 
 function DataQuality({ report }: { report: PublishedSecReport | null | undefined }) {
   if (!report) return <p className="sec-report-empty">结构化验证结果尚不可用。</p>;
+  const quality = report.dataQuality;
+  const notes = [
+    ...quality.warnings,
+    ...(quality.unresolvedQuestions ?? []).map((question) => `未解决问题：${question}`),
+    ...(quality.failedNodeIds ?? []).map((nodeId) => `未完成节点：${nodeId}`),
+  ];
   return (
     <div className="sec-report-quality">
       <dl>
-        <div><dt>证据覆盖率</dt><dd>{Math.round(report.dataQuality.coverage * 100)}%</dd></div>
-        <div><dt>验证状态</dt><dd>{verificationStatus(report.dataQuality.verificationStatus)}</dd></div>
+        <div><dt>证据覆盖率</dt><dd>{Math.round(quality.coverage * 100)}%</dd></div>
+        <div><dt>验证状态</dt><dd>{verificationStatus(quality.verificationStatus)}</dd></div>
+        <div><dt>分析完整性</dt><dd>{analysisStatus(quality.analysisStatus, quality.stopReason)}</dd></div>
+        {typeof quality.managerCoverageScore === "number"
+          ? <div><dt>主编覆盖度</dt><dd>{Math.round(quality.managerCoverageScore * 100)}%</dd></div>
+          : null}
         <div><dt>报告版本</dt><dd>{report.reportVersion}</dd></div>
       </dl>
-      {report.dataQuality.warnings.length > 0 ? (
-        <ul>{report.dataQuality.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
-      ) : <p>未发现需要单独提示的数据质量问题。</p>}
+      {notes.length > 0
+        ? <ul>{notes.map((note) => <li key={note}>{note}</li>)}</ul>
+        : <p>未发现需要单独提示的数据质量问题。</p>}
     </div>
-  );
-}
-
-function WorkflowNodeView({ index, node }: { index: number; node: SecWorkflowNode }) {
-  return (
-    <details className="sec-workflow-node">
-      <summary><span>{String(index).padStart(2, "0")}</span><strong>{node.label}</strong><small>{node.status === "complete" ? "完成" : "异常"}</small></summary>
-      <div>
-        <p>{node.output.summary}</p>
-        {node.output.metrics?.length ? <dl>{node.output.metrics.map((metric) => <div key={metric.label}><dt>{metric.label}</dt><dd>{metric.value}</dd></div>)}</dl> : null}
-        {node.output.excerpt && <blockquote>{node.output.excerpt}</blockquote>}
-        {node.output.sections?.map((section) => (
-          <article key={section.name}>
-            <strong>{section.name}</strong>
-            <p>{section.excerpt}</p>
-            <small>{section.characters.toLocaleString("zh-CN")} 字符</small>
-          </article>
-        ))}
-      </div>
-    </details>
   );
 }
 
@@ -256,6 +236,21 @@ function metricStatus(value: PublishedSecReport["keyMetrics"][number]["status"])
 
 function verificationStatus(value: PublishedSecReport["dataQuality"]["verificationStatus"]): string {
   return value === "verified" ? "已验证" : value === "partial" ? "部分完成" : "未通过";
+}
+
+function analysisStatus(
+  value: PublishedSecReport["dataQuality"]["analysisStatus"],
+  stopReason: PublishedSecReport["dataQuality"]["stopReason"],
+): string {
+  if (value === "complete") return "全部问题已回答";
+  const reason = stopReason === "max_rounds"
+    ? "修复轮次用尽"
+    : stopReason === "no_progress"
+      ? "修复无进展"
+      : stopReason === "analysis_incomplete"
+        ? "原文未提供足够依据"
+        : null;
+  return reason ? `部分完成 · ${reason}` : "部分完成";
 }
 
 function nodeStatus(value: SecNodeResult["status"]): string {

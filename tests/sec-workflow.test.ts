@@ -175,16 +175,8 @@ test("runs filing analysis as durable stages and fans modules out independently"
   assert.ok(steps.includes(`publish:${filing.accessionNumber}`));
   assert.deepEqual(jobStages, ["context", "prepare", "router", "modules", "brief", "manager", "nodes-round-0", "manager-review", "synthesis", "publish", "published"]);
   assert.ok(jobIds.every((jobId) => jobId.endsWith(":workflow-1")));
-  assert.deepEqual(publishedSummary?.workflow?.nodes.map((node) => node.id), [
-    "filing-selection",
-    "document",
-    "outline",
-    "manager-plan",
-    "structured-verification",
-    "analysis-nodes",
-    "synthesis",
-    "persistence",
-  ]);
+  assert.deepEqual(publishedSummary?.nodes?.map((node) => node.id), ["revenue-growth", "cash-flow"]);
+  assert.equal(publishedSummary?.managerReview?.status, "complete");
 });
 
 test("publishes full reports directly after synthesis without claim checks", async () => {

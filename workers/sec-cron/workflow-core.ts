@@ -17,7 +17,6 @@ import type {
   SecNodePlan,
   SecNodeResult,
   SecNodeSpec,
-  SecWorkflowTrace,
 } from "../../lib/sec.ts";
 import type { SecAnalysisArtifact, SecAnalysisContext } from "../../lib/sec-types.ts";
 import type { SecWorkflowParams } from "./core.ts";
@@ -255,7 +254,6 @@ export async function executeSecAnalysisWorkflow(
         nodes: loop.nodes,
         managerReview,
         repairRounds: loop.rounds,
-        workflow: buildWorkflowTrace(filing, plan, modules, loop.nodes, result.summary),
       } : null;
       await markJobStage(step, operations, baseJob, "publish");
       const publication = await step.do(`publish:${accession}`, () => operations.publish(result.artifact, summary));
@@ -307,123 +305,6 @@ async function mapWithConcurrency<T, R>(values: T[], concurrency: number, operat
   });
   await Promise.all(workers);
   return results;
-}
-
-function buildWorkflowTrace(
-  filing: SecFiling,
-  plan: SecNodePlan,
-  modules: ModuleAnalysis[],
-  nodes: SecNodeResult[],
-  summary: SecFilingSummary,
-): SecWorkflowTrace {
-  const completedNodes = nodes.filter((node) => node.status === "complete").length;
-  const verifiedModules = modules.filter((module) => module.verificationStatus !== "failed").length;
-  return {
-    version: 1,
-    generatedAt: summary.generatedAt,
-    nodes: [
-      {
-        id: "filing-selection",
-        label: "申报文件定位",
-        status: "complete",
-        output: {
-          summary: `已定位 ${filing.companyName} 最新一期 ${filing.form}。`,
-          metrics: [
-            { label: "报告期", value: filing.reportDate },
-            { label: "提交日", value: filing.filingDate },
-          ],
-        },
-      },
-      {
-        id: "document",
-        label: "正文获取",
-        status: "complete",
-        output: { summary: "已获取并清洗 SEC 原始申报文件，正文通过 R2 引用在步骤间复用。" },
-      },
-      {
-        id: "outline",
-        label: "章节大纲",
-        status: "complete",
-        output: {
-          summary: `已恢复 ${plan.outlineSections} 个有效章节并剔除目录重复项。`,
-          metrics: [{ label: "有效章节", value: String(plan.outlineSections) }],
-        },
-      },
-      {
-        id: "manager-plan",
-        label: "主编任务编排",
-        status: "complete",
-        output: {
-          summary: `主编按本期内容拆出 ${plan.nodes.length} 个分析节点。`,
-          metrics: [
-            { label: "分析节点", value: String(plan.nodes.length) },
-            { label: "护栏截断", value: String(plan.clamped ?? 0) },
-          ],
-          sections: plan.nodes.map((node) => ({
-            name: node.title,
-            characters: node.question.length,
-            excerpt: `${node.question}\n章节：${node.sectionIds.join("、")}`,
-          })),
-        },
-      },
-      {
-        id: "structured-verification",
-        label: "结构化验证",
-        status: verifiedModules ? "complete" : "error",
-        output: {
-          summary: `${verifiedModules}/${modules.length} 个结构化模块产出可用事实或比较。`,
-          metrics: [
-            { label: "可用模块", value: String(verifiedModules) },
-            { label: "总模块", value: String(modules.length) },
-          ],
-        },
-      },
-      {
-        id: "analysis-nodes",
-        label: "动态分段分析",
-        status: completedNodes ? "complete" : "error",
-        output: {
-          summary: `${completedNodes}/${nodes.length} 个动态节点完成分析。`,
-          metrics: [
-            { label: "完成", value: String(completedNodes) },
-            { label: "失败或空白", value: String(nodes.length - completedNodes) },
-          ],
-          sections: nodes.map((node) => ({
-            name: node.title,
-            characters: node.narrative.length,
-            excerpt: node.error || node.narrative.slice(0, 560),
-            evidence: node.evidence,
-          })),
-        },
-      },
-      {
-        id: "synthesis",
-        label: "总编汇总",
-        status: summary.report ? "complete" : "error",
-        output: {
-          summary: summary.headline || "总编未生成有效标题。",
-          metrics: [
-            { label: "核心结论", value: String(summary.bullets.length) },
-            { label: "正文字符", value: String(summary.report?.length ?? 0) },
-            { label: "摘要版本", value: String(summary.version ?? 0) },
-          ],
-          excerpt: summary.analystView,
-        },
-      },
-      {
-        id: "persistence",
-        label: "结果入库",
-        status: "complete",
-        output: {
-          summary: "完整研报、分段分析与节点轨迹写入同一条 D1 摘要记录。",
-          metrics: [
-            { label: "股票代码", value: summary.ticker },
-            { label: "Accession", value: summary.accessionNumber },
-          ],
-        },
-      },
-    ],
-  };
 }
 
 function markJobStage(

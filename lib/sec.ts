@@ -65,39 +65,6 @@ export type SecNodeResult = {
   error?: string;
 };
 
-export type SecWorkflowMetric = {
-  label: string;
-  value: string;
-};
-
-export type SecWorkflowSection = {
-  name: string;
-  characters: number;
-  excerpt: string;
-  candidates?: number;
-  selected?: number;
-  topScore?: number;
-  evidence?: SecWorkflowEvidence[];
-};
-
-export type SecWorkflowNode = {
-  id: string;
-  label: string;
-  status: "complete" | "error";
-  output: {
-    summary: string;
-    metrics?: SecWorkflowMetric[];
-    excerpt?: string;
-    sections?: SecWorkflowSection[];
-  };
-};
-
-export type SecWorkflowTrace = {
-  version: 1;
-  generatedAt: string;
-  nodes: SecWorkflowNode[];
-};
-
 export type SecFiling = {
   ticker: string;
   cik: string;
@@ -128,7 +95,6 @@ export type SecFilingSummary = {
   plan?: SecNodePlan;
   managerReview?: ManagerReview;
   repairRounds?: number;
-  workflow?: SecWorkflowTrace;
   source: "deepseek" | "error";
   generatedAt: string;
   error?: string;
