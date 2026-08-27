@@ -104,8 +104,13 @@ test("recovers a quarterly cash flow from year-to-date 10-Q facts", () => {
     { start: "2026-01-01", end: "2026-03-31", val: 30, accn: "q1", fy: 2026, fp: "Q1", form: "10-Q", filed: "2026-04-30" },
     { start: "2026-01-01", end: "2026-06-30", val: 70, accn: "h1", fy: 2026, fp: "Q2", form: "10-Q", filed: "2026-07-30" },
   ] } };
+  // Issuers that fold intangibles into capex tag it as PaymentsToAcquireProductiveAssets.
+  payload.facts["us-gaap"].PaymentsToAcquireProductiveAssets = { units: { USD: [
+    { start: "2026-01-01", end: "2026-09-30", val: 130, accn: "q3", fy: 2026, fp: "Q3", form: "10-Q", filed: "2026-10-30" },
+  ] } };
   const series = normalizeCompanyFacts(issuer, payload).series;
   const quarter = (id: string, endDate: string) => series.find((item) => item.seriesId === id)?.quarters.find((item) => item.endDate === endDate);
+  assert.equal(quarter("capex", "2026-09-30")?.value, "60", "Q3 capex comes from the productive-assets concept");
 
   const operating = quarter("operating_cash_flow", "2026-06-30");
   assert.equal(operating?.value, "160", "Q2 operating cash flow is H1 minus Q1");

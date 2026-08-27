@@ -14,7 +14,9 @@ export const SEC_CANONICAL_SERIES_REGISTRY: RegistryEntry[] = [
   { seriesId: "net_income", concepts: ["NetIncomeLoss", "ProfitLoss"] },
   { seriesId: "diluted_eps", concepts: ["EarningsPerShareDiluted"] },
   { seriesId: "operating_cash_flow", concepts: ["NetCashProvidedByUsedInOperatingActivities"] },
-  { seriesId: "capex", concepts: ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsForAdditionsToPropertyPlantAndEquipment"] },
+  // PaymentsToAcquireProductiveAssets is what issuers use once capex covers intangibles too;
+  // NVDA switched to it in 2020 and its capex series silently stopped there.
+  { seriesId: "capex", concepts: ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsForAdditionsToPropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets"] },
   { seriesId: "cash", concepts: ["CashAndCashEquivalentsAtCarryingValue", "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"] },
   { seriesId: "debt", concepts: ["LongTermDebtAndFinanceLeaseObligations", "LongTermDebt", "DebtAndFinanceLeaseObligations"] },
   { seriesId: "shares", concepts: ["CommonStockSharesOutstanding", "WeightedAverageNumberOfDilutedSharesOutstanding"] },
