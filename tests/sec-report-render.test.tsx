@@ -57,9 +57,14 @@ test("renders the complete report, dynamic evidence, and analysis completeness",
   assert.deepEqual([...html.matchAll(/data-report-index="(\d{2})"/g)].map((match) => match[1]), ["01", "02", "03", "04", "05"]);
   assert.match(html, /data-report-rail-density="compact"/);
   assert.match(html, /class="fixed left-0 top-1\/2/);
-  assert.match(html, /max-h-\[52dvh\] w-10/);
+  assert.match(html, /max-h-\[64dvh\] w-16/);
   assert.equal((html.match(/data-report-nav-depth="section"/g) ?? []).length, 5);
   assert.equal((html.match(/data-report-nav-depth="subsection"/g) ?? []).length, 2);
   assert.equal((html.match(/data-report-bar-state="resting"/g) ?? []).length, 7);
-  assert.equal((html.match(/h-\[2px\] w-8 origin-left scale-x-\[\.38\] opacity-30/g) ?? []).length, 7);
+  assert.equal((html.match(/relative m-0 w-16 p-0 h-5/g) ?? []).length, 5);
+  assert.equal((html.match(/relative m-0 w-16 p-0 h-4/g) ?? []).length, 2);
+  assert.equal((html.match(/transform:scaleX\(0\.72\)/g) ?? []).length, 7);
+  assert.doesNotMatch(html, /scale-x-\[/);
+  assert.equal((html.match(/h-\[2px\] origin-left w-12/g) ?? []).length, 5);
+  assert.equal((html.match(/h-\[2px\] origin-left w-10/g) ?? []).length, 2);
 });

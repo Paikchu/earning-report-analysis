@@ -181,7 +181,7 @@ export function SecReportNavigator({ initialSections }: { initialSections: Repor
         }}
         className="fixed left-0 top-1/2 z-40 hidden -translate-y-1/2 [@media(hover:hover)_and_(min-width:1360px)]:block"
       >
-        <ul ref={railRef} className="m-0 flex max-h-[52dvh] w-10 list-none flex-col items-start overflow-y-auto p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <ul ref={railRef} className="m-0 flex max-h-[64dvh] w-16 list-none flex-col items-start overflow-y-auto p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {sections.map((section, index) => {
             const active = section.id === activeId;
             const previewed = section.id === previewId;
@@ -190,7 +190,7 @@ export function SecReportNavigator({ initialSections }: { initialSections: Repor
               <li
                 key={section.id}
                 data-report-nav-depth={nested ? "subsection" : "section"}
-                className={`relative m-0 w-10 p-0 ${nested ? "h-6" : "h-8"}`}
+                className={`relative m-0 w-16 p-0 ${nested ? "h-4" : "h-5"}`}
               >
                 <a
                   ref={(link) => {
@@ -203,15 +203,15 @@ export function SecReportNavigator({ initialSections }: { initialSections: Repor
                   onPointerEnter={() => setPreviewId(section.id)}
                   onFocus={() => setPreviewId(section.id)}
                   onClick={() => navigate(section.id)}
-                  className={`group relative flex w-10 items-center text-[var(--ink)] no-underline ${nested ? "h-6" : "h-8"}`}
+                  className={`group relative flex w-16 items-center text-[var(--ink)] no-underline ${nested ? "h-4" : "h-5"}`}
                 >
                   <motion.span
                     aria-hidden="true"
                     data-report-bar-state={previewed ? "expanded" : "resting"}
                     initial={false}
-                    animate={{ scaleX: previewed ? 1 : 0.38, opacity: previewed ? 0.78 : active ? 0.5 : 0.3 }}
+                    animate={{ scaleX: previewed ? 1 : 0.72, opacity: previewed ? 0.9 : active ? 0.84 : 0.52 }}
                     transition={{ duration: reduceMotion ? 0 : 0.22, ease: easeOutExpo }}
-                    className={`h-[2px] w-8 origin-left scale-x-[.38] opacity-30 ${active || previewed ? "bg-[var(--color-loss)]" : "bg-[var(--ink-muted)]"}`}
+                    className={`h-[2px] origin-left ${nested ? "w-10" : "w-12"} ${active || previewed ? "bg-[var(--color-loss)]" : "bg-[var(--ink-muted)]"}`}
                   />
                   <span className="sr-only">{displayIndex(section, index)} {section.title}</span>
                 </a>
@@ -220,7 +220,7 @@ export function SecReportNavigator({ initialSections }: { initialSections: Repor
           })}
         </ul>
 
-        <div className="pointer-events-none absolute left-12 top-1/2 -translate-y-1/2">
+        <div className="pointer-events-none absolute left-16 top-1/2 -translate-y-1/2">
           <AnimatePresence initial={false} mode="wait">
             {previewSection && (
               <motion.aside
