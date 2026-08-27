@@ -70,7 +70,7 @@ test("splits umbrella business KPIs by normalized definition", () => {
 
   assert.deepEqual(facts.map((fact) => fact.metricKey), [
     "geographic_revenue_by_customer_headquarters",
-    "revenue_from_customers_headquartered_outside_the_united_states",
+    "revenue_from_customers_headquartered_outside",
   ]);
   assert.equal(facts[0].periodScope, "quarterly_and_half_yearly");
   assert.notEqual(facts[0].definitionHash, facts[1].definitionHash);
