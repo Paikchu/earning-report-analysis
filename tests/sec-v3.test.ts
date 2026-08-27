@@ -3,12 +3,9 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
 import {
-  buildClaimLedger,
   buildSecAnalysisBrief,
   normalizeManagerReview,
-  normalizeReverseClaimCheck,
   unresolvedFingerprint,
-  verifyClaimLedger,
   type CompanyMemoryItem,
   type HistoricalObservation,
   type ModuleAnalysis,
@@ -160,69 +157,6 @@ test("normalizes Manager review repair tasks and fingerprints unresolved work", 
   assert.equal(review.status, "needs_repair");
   assert.equal(review.repairTasks.length, 1);
   assert.equal(unresolvedFingerprint(review), unresolvedFingerprint({ ...review, coverageScore: 0.7 }));
-});
-
-test("rejects report metrics that are absent from the claim ledger", () => {
-  const brief = buildSecAnalysisBrief({
-    ticker: issuer, filingId: "filing-1", periodId: `${issuer}:2026-03-31:quarter`, periodScope: "quarter", modules: [],
-    history: { registryVersion: COMPANY_FACTS_REGISTRY_VERSION, series: [] }, memorySummary: "", memoryItems: [], validEvidenceIds: new Set(),
-  });
-  const ledger = buildClaimLedger(brief, [], []);
-  const checked = verifyClaimLedger(ledger, [{ metricKey: "revenue", currentValue: "999", status: "verified", evidenceIds: ["ev:invented"] }]);
-
-  assert.equal(checked.status, "failed");
-  assert.deepEqual(checked.invalidEvidenceIds, ["ev:invented"]);
-});
-
-test("matches harmless numeric formatting differences against Claim Ledger facts", () => {
-  const ledger = {
-    version: "sec-claim-ledger.v1" as const,
-    entries: [
-      { claimId: "fact:cash", kind: "fact" as const, metricKey: "cash", value: "12874", unit: "USD millions", currency: "USD", basis: "gaap", periodId: "TESTCO:2026-06-30:quarter", evidenceIds: ["ev:cash"] },
-      { claimId: "fact:margin", kind: "fact" as const, metricKey: "operating_margin", value: "-4.5", unit: "percent", currency: "", basis: "derived", periodId: "TESTCO:2026-06-30:quarter", evidenceIds: ["ev:margin"] },
-    ],
-    validEvidenceIds: ["ev:cash", "ev:margin"],
-  };
-
-  const checked = verifyClaimLedger(ledger, [
-    { metricKey: "cash", currentValue: "12,874", status: "verified", evidenceIds: ["ev:cash"] },
-    { metricKey: "operating_margin", currentValue: "-4.5%", status: "verified", evidenceIds: ["ev:margin"] },
-  ]);
-
-  assert.equal(checked.status, "verified");
-  assert.deepEqual(checked.mismatchedValues, []);
-
-  const wrongUnit = verifyClaimLedger(ledger, [
-    { metricKey: "cash", currentValue: "12,874%", status: "verified", evidenceIds: ["ev:cash"] },
-  ]);
-  assert.equal(wrongUnit.status, "failed");
-});
-
-test("fails reverse Claim verification when the report contains an unsupported numeric claim", () => {
-  const result = normalizeReverseClaimCheck({
-    claims: [{ claimId: "fact:known", evidenceIds: ["ev:known"] }],
-    unsupportedClaims: ["Revenue was 999."],
-  }, { version: "sec-claim-ledger.v1", entries: [{ claimId: "fact:known", kind: "fact", metricKey: "revenue", value: "100", evidenceIds: ["ev:known"] }], validEvidenceIds: ["ev:known"] });
-
-  assert.equal(result.status, "failed");
-  assert.deepEqual(result.unsupportedClaims, ["Revenue was 999."]);
-});
-
-test("rejects evidence borrowed from a different Claim Ledger entry", () => {
-  const result = normalizeReverseClaimCheck({
-    claims: [{ claimId: "claim:a", evidenceIds: ["ev:b"] }],
-    unsupportedClaims: [],
-  }, {
-    version: "sec-claim-ledger.v1",
-    entries: [
-      { claimId: "claim:a", kind: "claim", statement: "A", evidenceIds: ["ev:a"] },
-      { claimId: "claim:b", kind: "claim", statement: "B", evidenceIds: ["ev:b"] },
-    ],
-    validEvidenceIds: ["ev:a", "ev:b"],
-  });
-
-  assert.equal(result.status, "failed");
-  assert.deepEqual(result.invalidEvidenceIds, ["ev:b"]);
 });
 
 test("memory consolidation is replay-safe and marks explicit conflicts without resolving omissions", () => {

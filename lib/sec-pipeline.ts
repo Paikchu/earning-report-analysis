@@ -307,7 +307,6 @@ export async function summarizePreparedSecFiling(
   brief?: SecAnalysisBrief,
   review?: ManagerReview,
   ledger?: ClaimLedger,
-  stage = "synthesis",
 ): Promise<{ artifact: SecAnalysisArtifact; summary: SecFilingSummary }> {
   const snapshots = moduleAnalyses.map((analysis): SnapshotSummary => ({
     ticker: prepared.filing.ticker,
@@ -349,7 +348,7 @@ export async function summarizePreparedSecFiling(
       dataQuality: "{coverage, verificationStatus, warnings}",
     },
   };
-  const summaryValue = await model(stage, synthesisSystemPrompt(), summaryPayload);
+  const summaryValue = await model("synthesis", synthesisSystemPrompt(), summaryPayload);
   let report = normalizePublishedReport(summaryValue, {
     ticker: prepared.filing.ticker,
     periodId: prepared.periodId,

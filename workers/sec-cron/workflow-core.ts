@@ -6,8 +6,6 @@ import {
   SEC_ANALYSIS_MODULES,
   SEC_ANALYSIS_SCHEMA_VERSION,
   unresolvedFingerprint,
-  verifyClaimLedger,
-  type ClaimCheckResult,
   type ClaimLedger,
   type ManagerRepairTask,
   type ManagerReview,
@@ -123,8 +121,6 @@ export type SecPipelineOperations = {
   buildClaimLedger?(filing: SecFiling, prepared: PreparedFilingReference, brief: SecAnalysisBrief, nodes: SecNodeResult[]): Promise<ClaimLedger>;
   summarizeEvent(filing: SecFiling, prepared: PreparedFilingReference, execution?: SecModelExecution): Promise<SecFilingSummary>;
   summarize(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, router: RouterResult, modules: ModuleAnalysis[], plan: SecNodePlan, nodes: SecNodeResult[], brief?: SecAnalysisBrief, review?: ManagerReview, ledger?: ClaimLedger, execution?: SecModelExecution): Promise<{ artifact: SecAnalysisArtifact; summary: SecFilingSummary | null }>;
-  repairSynthesis?(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, router: RouterResult, modules: ModuleAnalysis[], plan: SecNodePlan, nodes: SecNodeResult[], brief: SecAnalysisBrief, review: ManagerReview, ledger: ClaimLedger, failedCheck: ClaimCheckResult, execution?: SecModelExecution): Promise<{ artifact: SecAnalysisArtifact; summary: SecFilingSummary | null }>;
-  checkClaims?(artifact: SecAnalysisArtifact, ledger: ClaimLedger, summary: SecFilingSummary | null, execution?: SecModelExecution): Promise<ClaimCheckResult>;
   publish(artifact: SecAnalysisArtifact, summary: SecFilingSummary | null): Promise<void | { memoryJobId?: string }>;
   enqueueMemory?(jobId: string, ticker: string): Promise<void>;
   publishEvent(summary: SecFilingSummary): Promise<void>;
@@ -238,19 +234,7 @@ export async function executeSecAnalysisWorkflow(
         ? operations.buildClaimLedger(filing, prepared, brief, loop.nodes)
         : Promise.resolve(buildClaimLedger(brief, loop.nodes.map((node) => ({ id: node.id, findings: node.findings, narrative: node.narrative, evidenceIds: node.evidenceIds })), [])));
       await markJobStage(step, operations, baseJob, "synthesis");
-      let result = await step.do(`synthesis:${accession}`, (stepContext) => operations.summarize(filing, prepared, context, router, modules, plan, loop.nodes, brief, managerReview, ledger, executionFor(stepContext)));
-      await markJobStage(step, operations, baseJob, "claim-check");
-      let claimCheck = await step.do(`claim-check:${accession}:attempt:0`, (stepContext) => operations.checkClaims
-        ? operations.checkClaims(result.artifact, ledger, result.summary, executionFor(stepContext))
-        : Promise.resolve(verifyClaimLedger(ledger, result.artifact.report.keyMetrics)));
-      if (claimCheck.status === "failed") {
-        if (!operations.repairSynthesis) throw new Error("Claim verification failed after synthesis");
-        result = await step.do(`synthesis-repair:${accession}`, (stepContext) => operations.repairSynthesis!(filing, prepared, context, router, modules, plan, loop.nodes, brief, managerReview, ledger, claimCheck, executionFor(stepContext)));
-        claimCheck = await step.do(`claim-check:${accession}:attempt:1`, (stepContext) => operations.checkClaims
-          ? operations.checkClaims(result.artifact, ledger, result.summary, executionFor(stepContext))
-          : Promise.resolve(verifyClaimLedger(ledger, result.artifact.report.keyMetrics)));
-        if (claimCheck.status === "failed") throw new Error("Claim verification failed after synthesis repair");
-      }
+      const result = await step.do(`synthesis:${accession}`, (stepContext) => operations.summarize(filing, prepared, context, router, modules, plan, loop.nodes, brief, managerReview, ledger, executionFor(stepContext)));
       result.artifact.report.dataQuality = {
         ...result.artifact.report.dataQuality,
         analysisStatus: managerReview.status === "complete" ? "complete" : "partial",
@@ -295,7 +279,7 @@ export async function executeSecAnalysisWorkflow(
       analyzed.push(accession);
     } catch (error) {
       const detail = error instanceof Error ? error.message.slice(0, 500) : "Unknown pipeline error";
-      const hardFailure = /No core facts|illegal evidence|Conflicting (fact|history) units|Manager[- ](Review|planned)|Claim verification|Synthesis|final publish|R2 memory source/i.test(detail);
+      const hardFailure = /No core facts|illegal evidence|Conflicting (fact|history) units|Manager[- ](Review|planned)|Synthesis|final publish|R2 memory source/i.test(detail);
       await step.do(`job:${accession}:error`, () => operations.updateJob({
         ...baseJob,
         status: "failed",

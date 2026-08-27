@@ -148,14 +148,6 @@ export type ClaimLedger = {
   validEvidenceIds: string[];
 };
 
-export type ClaimCheckResult = {
-  status: "verified" | "failed";
-  invalidEvidenceIds: string[];
-  unmatchedMetricKeys: string[];
-  mismatchedValues: string[];
-  unsupportedClaims?: string[];
-};
-
 export const SEC_DATA_NEEDS = {
   coreFacts: [
     "revenue",
@@ -588,44 +580,6 @@ export function buildClaimLedger(
   return { version: "sec-claim-ledger.v1", entries, validEvidenceIds: [...new Set(entries.flatMap((entry) => entry.evidenceIds))].sort() };
 }
 
-export function verifyClaimLedger(ledger: ClaimLedger, metrics: PublishedSecReport["keyMetrics"]): ClaimCheckResult {
-  const validEvidence = new Set(ledger.validEvidenceIds);
-  const invalidEvidenceIds = [...new Set(metrics.flatMap((metric) => metric.evidenceIds).filter((id) => !validEvidence.has(id)))].sort();
-  const unmatchedMetricKeys: string[] = [];
-  const mismatchedValues: string[] = [];
-  for (const metric of metrics) {
-    const entries = ledger.entries.filter((entry) => entry.kind === "fact" && entry.metricKey === metric.metricKey);
-    if (!entries.length) unmatchedMetricKeys.push(metric.metricKey);
-    else if (!entries.some((entry) => claimValueMatches(entry, metric.currentValue))) mismatchedValues.push(metric.metricKey);
-  }
-  return {
-    status: invalidEvidenceIds.length || unmatchedMetricKeys.length || mismatchedValues.length ? "failed" : "verified",
-    invalidEvidenceIds,
-    unmatchedMetricKeys: [...new Set(unmatchedMetricKeys)].sort(),
-    mismatchedValues: [...new Set(mismatchedValues)].sort(),
-  };
-}
-
-export function normalizeReverseClaimCheck(value: unknown, ledger: ClaimLedger): ClaimCheckResult {
-  const root = asRecord(value);
-  const ledgerEntries = new Map(ledger.entries.map((entry) => [entry.claimId, entry]));
-  const claims = Array.isArray(root?.claims) ? root.claims.map(asRecord).filter((item): item is Record<string, unknown> => Boolean(item)) : [];
-  const unmatchedMetricKeys = claims.map((claim) => String(claim.claimId ?? "")).filter((claimId) => !ledgerEntries.has(claimId));
-  const invalidEvidenceIds = claims.flatMap((claim) => {
-    const entry = ledgerEntries.get(String(claim.claimId ?? ""));
-    const allowed = new Set(entry?.evidenceIds ?? []);
-    return Array.isArray(claim.evidenceIds) ? claim.evidenceIds.map(String).filter((id) => !allowed.has(id)) : [];
-  });
-  const unsupportedClaims = Array.isArray(root?.unsupportedClaims) ? root.unsupportedClaims.map(String).filter(Boolean).slice(0, 30) : ["Reverse Claim check returned no unsupportedClaims decision"];
-  return {
-    status: unmatchedMetricKeys.length || invalidEvidenceIds.length || unsupportedClaims.length ? "failed" : "verified",
-    invalidEvidenceIds: [...new Set(invalidEvidenceIds)].sort(),
-    unmatchedMetricKeys: [...new Set(unmatchedMetricKeys)].sort(),
-    mismatchedValues: [],
-    unsupportedClaims,
-  };
-}
-
 export function buildFilingBlocks(text: string, accessionNumber: string): FilingBlock[] {
   const lines = String(text ?? "")
     .split(/\n+/)
@@ -1044,15 +998,6 @@ function numericValue(value: string): number | null {
   const normalized = String(value).replace(/[$,%\s,]/g, "");
   const result = Number(normalized);
   return Number.isFinite(result) ? result : null;
-}
-
-function claimValueMatches(entry: ClaimLedgerEntry, reportedValue: string): boolean {
-  if (entry.value === reportedValue) return true;
-  const entryValue = numericValue(entry.value ?? "");
-  const reportValue = numericValue(reportedValue);
-  if (entryValue === null || reportValue === null || entryValue !== reportValue) return false;
-  if (!reportedValue.includes("%")) return true;
-  return entry.value?.includes("%") || /^(?:%|percent|percentage|pct)$/i.test(entry.unit ?? "");
 }
 
 function canonicalSeriesId(metricKey: string): SecCanonicalSeriesId | null {

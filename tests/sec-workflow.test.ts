@@ -174,7 +174,7 @@ test("runs filing analysis as durable stages and fans modules out independently"
   assert.ok(steps.includes(`manager-review:${filing.accessionNumber}:round:0`));
   assert.ok(steps.includes(`claim-ledger:${filing.accessionNumber}`));
   assert.ok(steps.includes(`publish:${filing.accessionNumber}`));
-  assert.deepEqual(jobStages, ["context", "prepare", "router", "modules", "brief", "manager", "nodes-round-0", "manager-review", "claim-ledger", "synthesis", "claim-check", "publish", "published"]);
+  assert.deepEqual(jobStages, ["context", "prepare", "router", "modules", "brief", "manager", "nodes-round-0", "manager-review", "claim-ledger", "synthesis", "publish", "published"]);
   assert.ok(jobIds.every((jobId) => jobId.endsWith(":workflow-1")));
   assert.deepEqual(publishedSummary?.workflow?.nodes.map((node) => node.id), [
     "filing-selection",
@@ -186,6 +186,28 @@ test("runs filing analysis as durable stages and fans modules out independently"
     "synthesis",
     "persistence",
   ]);
+});
+
+test("publishes full reports directly after synthesis without claim checks", async () => {
+  const steps: string[] = [];
+  let published = 0;
+  const ops = operations({
+    async publish() {
+      published += 1;
+    },
+  });
+
+  const result = await executeSecAnalysisWorkflow(
+    { ticker: "TESTCO", requestedBy: "manual" },
+    "workflow-without-claim-check",
+    stepRecorder(steps),
+    ops,
+  );
+
+  assert.deepEqual(result, { analyzed: [filing.accessionNumber], skipped: [], failed: [] });
+  assert.equal(published, 1);
+  assert.equal(steps.some((step) => step.includes("claim-check")), false);
+  assert.equal(steps.some((step) => step.includes("synthesis-repair")), false);
 });
 
 test("keeps event filings on the compact path without running full-report stages", async () => {

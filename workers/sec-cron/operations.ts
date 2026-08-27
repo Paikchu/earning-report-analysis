@@ -17,11 +17,8 @@ import type { SecAnalysisArtifact } from "../../lib/sec-service.ts";
 import type { SecFilingSummary, SecNodePlan, SecNodeResult, SecNodeSpec } from "../../lib/sec.ts";
 import {
   fallbackRouterResult,
-  normalizeReverseClaimCheck,
   SEC_ANALYSIS_MODULES,
   SEC_ANALYSIS_SCHEMA_VERSION,
-  verifyClaimLedger,
-  type ClaimCheckResult,
   type ClaimLedger,
   type ManagerReview,
   type RouterResult,
@@ -140,25 +137,6 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       const result = await summarizePreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), context, router, modules, modelFor(execution), new Date(), plan, nodes, brief, review, ledger);
       const synthesisKey = await putArtifact(env.SEC_FILINGS, reference, "synthesis", result);
       return { ...result, artifact: { ...result.artifact, blocks: [], artifactKeys: collectArtifactKeys(reference, synthesisKey) } };
-    },
-    repairSynthesis: async (_filing, reference, context, router, modules, plan, nodes, brief, review, ledger, failedCheck, execution) => {
-      const repairedReview = { ...review, unresolvedQuestions: [...review.unresolvedQuestions, `Claim repair: ${JSON.stringify(failedCheck)}`] };
-      const result = await summarizePreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), context, router, modules, modelFor(execution), new Date(), plan, nodes, brief, repairedReview, ledger, "synthesis-repair");
-      const synthesisKey = await putArtifact(env.SEC_FILINGS, reference, "synthesis-repair", result);
-      return { ...result, artifact: { ...result.artifact, blocks: [], artifactKeys: collectArtifactKeys(reference, synthesisKey) } };
-    },
-    checkClaims: async (artifact, ledger, summary, execution): Promise<ClaimCheckResult> => {
-      const deterministic = verifyClaimLedger(ledger, artifact.report.keyMetrics);
-      if (deterministic.status === "failed" || !summary?.report) return deterministic.status === "failed" ? deterministic : { ...deterministic, status: "failed", unsupportedClaims: ["Synthesis body is missing"] };
-      const reverse = normalizeReverseClaimCheck(await modelFor(execution)("claim-check", reverseClaimSystemPrompt(), {
-        report: summary.report,
-        headline: summary.headline,
-        bullets: summary.bullets,
-        analystView: summary.analystView,
-        claimLedger: ledger,
-        outputSchema: { claims: "[{claimId,evidenceIds}]", unsupportedClaims: "[string]" },
-      }), ledger);
-      return reverse.status === "failed" ? reverse : deterministic;
     },
     publish: async (artifact, summary) => {
       const reference = { key: preparedKey(artifact.filing.ticker, artifact.filing.accessionNumber), filing: artifact.filing };
@@ -298,15 +276,6 @@ function collectArtifactKeys(reference: PreparedFilingReference, synthesisKey: s
     synthesis: synthesisKey,
     ...Object.fromEntries(SEC_ANALYSIS_MODULES.map((module) => [`module:${module.key}`, `${prefix}/modules/${module.key}.json`])),
   };
-}
-
-function reverseClaimSystemPrompt(): string {
-  return [
-    "You are the final reverse Claim verifier for an SEC analysis report.",
-    "Extract every factual or numeric assertion from the report and map it to an exact claimId in the supplied Claim Ledger.",
-    "Put any assertion without an exact ledger entry in unsupportedClaims. Do not forgive formatting or period, unit, currency, or basis mismatches.",
-    "Return one JSON object using the exact outputSchema.",
-  ].join("\n");
 }
 
 export async function callWorkerSecModel(
