@@ -226,7 +226,7 @@ test("synthesizes one full report from node outputs and verified structured data
         analystView: "增长质量取决于需求能否延续。",
         report: completeReport(),
         keyMetrics: [
-          { metricKey: "revenue", currentValue: "120", evidenceIds: [`ev:${prepared.blocks[0].blockId}`] },
+          { metricKey: "Total Revenues", currentValue: "120", evidenceIds: [`ev:${prepared.blocks[0].blockId}`] },
           { metricKey: "segment_revenue", currentValue: "60", evidenceIds: [`ev:${prepared.blocks[0].blockId}`] },
           { metricKey: "invented_metric", currentValue: "9", evidenceIds: [`ev:${prepared.blocks[0].blockId}`] },
         ],
@@ -246,6 +246,35 @@ test("synthesizes one full report from node outputs and verified structured data
   assert.match(synthesisSystem, /JSON/i);
   assert.deepEqual(result.artifact.report.keyMetrics.map((metric) => metric.metricKey), ["revenue", "segment_revenue"]);
   assert.equal(result.artifact.report.keyMetrics.find((metric) => metric.metricKey === "revenue")?.yoy, "+20.0%");
+  assert.ok(result.artifact.report.dataQuality.warnings.some((warning) => warning.includes("invented_metric")));
+});
+
+test("drops unverifiable keyMetrics instead of failing the whole report", async () => {
+  const prepared = await prepareSecFiling(filing, {
+    userAgent: "test@example.com",
+    fetcher: async () => new Response("<h1>Revenue</h1><p>Revenue increased 18%.</p>"),
+  });
+  const result = await summarizePreparedSecFiling(
+    prepared,
+    analysisContext(prepared.periodId, xbrlHistory("120")),
+    async () => ({
+      headline: "收入增长",
+      bullets: completeBullets(),
+      analystView: "需求仍需观察。",
+      report: completeReport(),
+      keyMetrics: [{ metricKey: "narrative_only_metric", currentValue: "9", evidenceIds: [`ev:${prepared.blocks[0].blockId}`] }],
+      changes: { qoq: [], yoy: [], guidance: [], risks: [] },
+      dataQuality: { coverage: 1, verificationStatus: "verified", warnings: [] },
+    }),
+    new Date("2026-08-05T00:00:00.000Z"),
+    normalizePlan(prepared.outline[0].id),
+    [{ id: "revenue-growth", title: "收入增长", status: "complete", findings: [], narrative: "收入增长。", evidence: [] }],
+  );
+
+  assert.deepEqual(result.artifact.report.keyMetrics, []);
+  assert.equal(result.artifact.report.dataQuality.verificationStatus, "partial");
+  assert.ok(result.artifact.report.dataQuality.warnings.some((warning) => warning.includes("narrative_only_metric")));
+  assert.equal(result.summary.report, completeReport().slice(0, 6_000));
 });
 
 function normalizePlan(sectionId: string) {

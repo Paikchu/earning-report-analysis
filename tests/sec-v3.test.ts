@@ -196,7 +196,7 @@ test("keeps resolved due items out of the injected company summary", () => {
   assert.equal(buildCompanyMemorySummary([item]), "");
 });
 
-test("Manager repair loop uses deterministic round names and never exceeds two repair rounds", async () => {
+test("Manager repair loop uses deterministic round names and stops after one repair round", async () => {
   const steps: string[] = [];
   const step: WorkflowStepLike = { async do<T>(name: string, callback: () => Promise<T>) { steps.push(name); return callback(); } };
   const plan: SecNodePlan = {
@@ -208,10 +208,10 @@ test("Manager repair loop uses deterministic round names and never exceeds two r
   const result = await runManagerRepairLoop("filing-1", step, plan, initialNodes, {
     async review(round) {
       reviews += 1;
-      return round < 2 ? {
-        status: "needs_repair", questions: [{ questionId: "q-growth", status: round === 0 ? "unanswered" : "partial", explanation: "Missing" }],
+      return round < 1 ? {
+        status: "needs_repair", questions: [{ questionId: "q-growth", status: "unanswered", explanation: "Missing" }],
         repairTasks: [{ id: `repair-${round}`, questionId: "q-growth", targetNodeId: "growth", title: "Growth", question: "What changed?", sectionIds: ["section-1"], keywords: [], historySeriesIds: [], memoryIds: [], acceptanceCriteria: ["answer"], materiality: "high", missingEvidence: ["driver"] }],
-        unresolvedQuestions: [`round-${round}`], coverageScore: round / 2, stopReason: null,
+        unresolvedQuestions: [`round-${round}`], coverageScore: 0, stopReason: null,
       } : {
         status: "complete", questions: [{ questionId: "q-growth", status: "answered", explanation: "Answered" }], repairTasks: [], unresolvedQuestions: [], coverageScore: 1, stopReason: "complete",
       };
@@ -221,12 +221,44 @@ test("Manager repair loop uses deterministic round names and never exceeds two r
     },
   });
 
-  assert.equal(result.rounds, 2);
-  assert.equal(reviews, 3);
+  assert.equal(result.rounds, 1);
+  assert.equal(reviews, 2);
   assert.equal(result.review.status, "complete");
   assert.ok(steps.includes("manager-review:filing-1:round:0"));
-  assert.ok(steps.includes("repair-node:filing-1:round:2:0:repair-1"));
-  assert.equal(steps.some((name) => name.includes("round:3")), false);
+  assert.ok(steps.includes("repair-node:filing-1:round:1:0:repair-0"));
+  assert.equal(steps.some((name) => name.includes("round:2")), false);
+});
+
+test("Manager repair loop repairs the highest-materiality nodes first", async () => {
+  const repaired: string[] = [];
+  const step: WorkflowStepLike = { async do<T>(_name: string, callback: () => Promise<T>) { return callback(); } };
+  const specs = ["low", "high", "medium", "high"].map((materiality, index) => ({
+    id: `node-${index}`, title: `Node ${index}`, question: "What changed?", sectionIds: ["section-1"],
+    keywords: [], historySeriesIds: [], memoryIds: [], acceptanceCriteria: ["answer"],
+    materiality: materiality as "high" | "medium" | "low",
+  }));
+  const plan: SecNodePlan = { nodes: specs, outlineSections: 1 };
+  const initialNodes: SecNodeResult[] = specs.map((spec) => ({ id: spec.id, title: spec.title, status: "empty", findings: [], narrative: "", evidence: [] }));
+
+  await runManagerRepairLoop("filing-1", step, plan, initialNodes, {
+    async review(round) {
+      return round < 1 ? {
+        status: "needs_repair",
+        questions: specs.map((spec) => ({ questionId: spec.id, status: "unanswered" as const, explanation: "Missing" })),
+        repairTasks: specs.map((spec) => ({ ...spec, questionId: spec.id, targetNodeId: spec.id, missingEvidence: [] })),
+        unresolvedQuestions: specs.map((spec) => spec.id), coverageScore: 0, stopReason: null,
+      } : {
+        status: "complete", questions: specs.map((spec) => ({ questionId: spec.id, status: "answered" as const, explanation: "Answered" })),
+        repairTasks: [], unresolvedQuestions: [], coverageScore: 1, stopReason: "complete",
+      };
+    },
+    async repair(task, round) {
+      repaired.push(task.targetNodeId);
+      return { id: task.targetNodeId, title: task.title, status: "complete", findings: [], narrative: `repair-${round}`, evidence: [] };
+    },
+  });
+
+  assert.deepEqual(repaired, ["node-1", "node-3", "node-2"]);
 });
 
 test("Manager repair loop executes repair steps sequentially", async () => {

@@ -84,7 +84,7 @@ test("calls B.ai from the workflow worker when its shared AI secret is configure
     requests.push(url);
     if (url === filing.documentUrl) return new Response("<h1>Item 7. Management Discussion</h1><p>Revenue was 120 USDm.</p>");
     if (url === "https://api.b.ai/v1/chat/completions") {
-      const prepared = JSON.parse(objects.get("filings/MSFT/annual.json") ?? "{}") as { outline?: Array<{ id: string }> };
+      const prepared = JSON.parse(objects.get("filings/MSFT/annual/meta.json") ?? "{}") as { outline?: Array<{ id: string }> };
       return Response.json({ choices: [{ message: { content: JSON.stringify({ nodes: [{ id: "growth", title: "增长质量", question: "增长由什么驱动？", sectionIds: [prepared.outline?.[0]?.id] }] }) } }] });
     }
     throw new Error(`Unexpected request: ${url}`);
@@ -123,7 +123,7 @@ test("plans and runs dynamic nodes from the prepared R2 filing", async () => {
     const body = JSON.parse(String(init?.body ?? "{}")) as { messages?: Array<{ content?: string }> };
     const system = body.messages?.[0]?.content ?? "";
     if (system.includes("编排分析任务")) {
-      const prepared = JSON.parse(objects.get("filings/MSFT/annual.json") ?? "{}") as { outline?: Array<{ id: string }> };
+      const prepared = JSON.parse(objects.get("filings/MSFT/annual/meta.json") ?? "{}") as { outline?: Array<{ id: string }> };
       return Response.json({ choices: [{ message: { content: JSON.stringify({ nodes: [{ id: "growth", title: "增长质量", question: "增长由什么驱动？", sectionIds: [prepared.outline?.[0]?.id], keywords: ["revenue", "cloud"] }] }) } }] });
     }
     return Response.json({ choices: [{ message: { content: JSON.stringify({ findings: [{ label: "收入", detail: "收入同比增长12%。", importance: "high" }], narrative: "云需求推动收入增长。" }) } }] });
@@ -136,6 +136,57 @@ test("plans and runs dynamic nodes from the prepared R2 filing", async () => {
   assert.equal(plan.nodes.length, 1);
   assert.equal(node.status, "complete");
   assert.match(node.narrative, /云需求/);
+});
+
+test("fetches XBRL during prepare and resolves context in one bridge call", async () => {
+  const objects = new Map<string, string>();
+  const contextPosts: Array<Record<string, unknown>> = [];
+  const env = {
+    WEB_APP_ORIGIN: "https://site.test",
+    SEC_REFRESH_KEY: "refresh-key",
+    SEC_USER_AGENT: "test@example.com",
+    AI_API_KEY: "worker-model-secret",
+    SEC_FILINGS: {
+      async get(key: string) {
+        const value = objects.get(key);
+        return value === undefined ? null : { async text() { return value; } };
+      },
+      async put(key: string, value: string) {
+        objects.set(key, value);
+        return {};
+      },
+    },
+  } as SecPipelineEnv;
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = String(input);
+    if (url === filing.documentUrl) return new Response("<h1>Item 7. Management Discussion</h1><p>Revenue was 120 USDm.</p>");
+    if (url.includes("/api/xbrl/companyfacts/")) {
+      return Response.json({ facts: { "us-gaap": { Revenues: { units: { USD: [
+        { start: "2025-07-01", end: "2026-06-30", val: 120, accn: "annual", fy: 2026, fp: "FY", form: "10-K", filed: "2026-07-30" },
+      ] } } } } });
+    }
+    if (url.endsWith("/api/internal/sec/context")) {
+      contextPosts.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return Response.json({ context: { currentPeriodId: "MSFT:2026-06-30:annual", qoqPeriodId: null, yoyPeriodId: null } });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  };
+  const operations = createSecPipelineOperations(env, fetcher);
+
+  const reference = await operations.prepare(filing);
+  const context = await operations.getContext(filing, reference);
+  const brief = await operations.buildBrief!(filing, reference, context);
+
+  assert.equal(contextPosts.length, 1, "context must be resolved and persisted in a single call");
+  assert.ok((contextPosts[0].history as { series: unknown[] }).series.length > 0);
+  assert.deepEqual([...objects.keys()].filter((key) => key.startsWith("filings/")).sort(), [
+    "filings/MSFT/annual/history.json",
+    "filings/MSFT/annual/meta.json",
+    "filings/MSFT/annual/text.json",
+  ]);
+  assert.ok(JSON.parse(objects.get("filings/MSFT/annual/meta.json")!).blockIds.length > 0);
+  assert.equal(JSON.parse(objects.get("filings/MSFT/annual/meta.json")!).document, undefined);
+  assert.deepEqual(brief.currentFacts.map((fact) => [fact.metricKey, fact.value]), [["revenue", "120"]]);
 });
 
 test("publishes cited evidence in bounded D1 bridge calls", async () => {
@@ -167,7 +218,13 @@ test("publishes cited evidence in bounded D1 bridge calls", async () => {
     SEC_USER_AGENT: "test@example.com",
     SEC_FILINGS: {
       async get(key: string) {
-        return key === "filings/MSFT/annual.json" ? { async text() { return JSON.stringify(prepared); } } : null;
+        if (key === "filings/MSFT/annual/meta.json") {
+          return { async text() { return JSON.stringify({ filing, periodId: prepared.periodId, periodScope: prepared.periodScope, outline: [], blockIds: blocks.map((block) => `ev:${block.blockId}`) }); } };
+        }
+        if (key === "filings/MSFT/annual/text.json") {
+          return { async text() { return JSON.stringify({ document: prepared.document, blocks }); } };
+        }
+        return null;
       },
       async put() { return {}; },
     },
@@ -196,11 +253,13 @@ test("publishes cited evidence in bounded D1 bridge calls", async () => {
 
   await createSecPipelineOperations(env, fetcher).publish(artifact, null);
 
-  assert.equal(published.length, 5);
-  assert.deepEqual(published.flatMap((body) => body.artifact.blocks.map((block) => block.blockId)), citedBlocks.map((block) => block.blockId));
-  assert.ok(published.slice(0, -1).every((body) => body.artifact.report.dataQuality.verificationStatus === "failed"));
+  assert.equal(published.length, 2);
+  const blockPosts = published.slice(0, -1) as unknown as Array<{ filing: SecFiling; blocks: Array<{ blockId: string }>; artifact?: unknown }>;
+  assert.deepEqual(blockPosts.flatMap((body) => body.blocks.map((block) => block.blockId)), citedBlocks.map((block) => block.blockId));
+  assert.ok(blockPosts.every((body) => body.artifact === undefined), "evidence posts must not resend the report");
+  assert.ok(blockPosts.every((body) => body.blocks.length <= 40));
   assert.equal(published.at(-1)?.artifact.report.dataQuality.verificationStatus, "verified");
-  assert.ok(published.every((body) => body.artifact.blocks.length <= 5));
+  assert.deepEqual(published.at(-1)?.artifact.blocks, []);
 });
 
 test("publishes event summaries without creating a structured filing artifact", async () => {

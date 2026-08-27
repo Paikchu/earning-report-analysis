@@ -1,7 +1,7 @@
 export const SEC_ANALYSIS_SCHEMA_VERSION = "sec-analysis.v3";
 export const SEC_ANALYSIS_PROMPT_VERSION = "sec-analysis-prompt.v3";
-export const MAX_REPAIR_ROUNDS = 2;
-export const MAX_REPAIR_NODES_PER_ROUND = 4;
+export const MAX_REPAIR_ROUNDS = 1;
+export const MAX_REPAIR_NODES_PER_ROUND = 3;
 
 export const SEC_CANONICAL_SERIES_IDS = [
   "revenue",
@@ -362,7 +362,7 @@ export function normalizeManagerReview(value: unknown, validNodeIds: Set<string>
       materiality,
       missingEvidence: Array.isArray(item?.missingEvidence) ? item.missingEvidence.map(String).filter(Boolean).slice(0, 12) : [],
     }];
-  }).slice(0, MAX_REPAIR_NODES_PER_ROUND) : [];
+  }).sort((left, right) => materialityRank(left.materiality) - materialityRank(right.materiality)).slice(0, MAX_REPAIR_NODES_PER_ROUND) : [];
   const requestedStatus = root.status === "complete" || root.status === "partial" ? root.status : "needs_repair";
   const suppliedUnresolved = Array.isArray(root.unresolvedQuestions) ? root.unresolvedQuestions.map(String).filter(Boolean) : [];
   const unresolvedQuestions = [...new Set([
@@ -378,6 +378,10 @@ export function normalizeManagerReview(value: unknown, validNodeIds: Set<string>
     ? root.stopReason as NonNullable<ManagerReview["stopReason"]>
     : status === "complete" ? "complete" : null;
   return { status, questions, repairTasks, unresolvedQuestions, coverageScore: clamp(Number(root.coverageScore ?? 0), 0, 1), stopReason };
+}
+
+function materialityRank(value: SecNodeSpecV2["materiality"]): number {
+  return value === "high" ? 0 : value === "medium" ? 1 : 2;
 }
 
 export function unresolvedFingerprint(review: ManagerReview): string {
@@ -551,24 +555,60 @@ function numericValue(value: string): number | null {
   return Number.isFinite(result) ? result : null;
 }
 
+const CANONICAL_SERIES_ALIASES: Record<string, SecCanonicalSeriesId> = {
+  revenue: "revenue",
+  revenues: "revenue",
+  total_revenue: "revenue",
+  total_revenues: "revenue",
+  net_revenue: "revenue",
+  net_sales: "revenue",
+  sales: "revenue",
+  gross_profit: "gross_profit",
+  gross_margin: "gross_margin",
+  gross_profit_margin: "gross_margin",
+  operating_income: "operating_income",
+  operating_profit: "operating_income",
+  income_from_operations: "operating_income",
+  operating_margin: "operating_margin",
+  operating_profit_margin: "operating_margin",
+  net_income: "net_income",
+  net_earnings: "net_income",
+  profit: "net_income",
+  eps: "diluted_eps",
+  diluted_eps: "diluted_eps",
+  earnings_per_share: "diluted_eps",
+  diluted_earnings_per_share: "diluted_eps",
+  operating_cash_flow: "operating_cash_flow",
+  cash_from_operations: "operating_cash_flow",
+  net_cash_from_operating_activities: "operating_cash_flow",
+  ocf: "operating_cash_flow",
+  capex: "capex",
+  capital_expenditures: "capex",
+  purchases_of_property_and_equipment: "capex",
+  free_cash_flow: "free_cash_flow",
+  fcf: "free_cash_flow",
+  cash: "cash",
+  cash_and_equivalents: "cash",
+  cash_and_cash_equivalents: "cash",
+  debt: "debt",
+  total_debt: "debt",
+  long_term_debt: "debt",
+  shares: "shares",
+  shares_outstanding: "shares",
+  diluted_shares: "shares",
+};
+
+export function canonicalMetricKey(metricKey: string): SecCanonicalSeriesId | null {
+  const normalized = String(metricKey ?? "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return CANONICAL_SERIES_ALIASES[normalized] ?? null;
+}
+
 function canonicalSeriesId(metricKey: string): SecCanonicalSeriesId | null {
-  const aliases: Record<string, SecCanonicalSeriesId> = {
-    revenue: "revenue",
-    gross_profit: "gross_profit",
-    gross_margin: "gross_margin",
-    operating_income: "operating_income",
-    operating_margin: "operating_margin",
-    net_income: "net_income",
-    eps: "diluted_eps",
-    diluted_eps: "diluted_eps",
-    operating_cash_flow: "operating_cash_flow",
-    capex: "capex",
-    free_cash_flow: "free_cash_flow",
-    cash: "cash",
-    debt: "debt",
-    shares: "shares",
-  };
-  return aliases[metricKey] ?? null;
+  return canonicalMetricKey(metricKey);
 }
 
 function canonicalSeriesIds(value: unknown): SecCanonicalSeriesId[] {

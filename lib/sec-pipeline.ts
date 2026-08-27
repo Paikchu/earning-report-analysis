@@ -1,6 +1,7 @@
 import {
   buildFilingBlocks,
   buildPeriodIdentity,
+  canonicalMetricKey,
   buildSecAnalysisBrief,
   hashString,
   normalizeManagerReview,
@@ -51,13 +52,19 @@ export type SecPreparationRuntime = {
   fetcher?: typeof fetch;
 };
 
-export type PreparedSecFiling = {
+/** Everything the planning, review and synthesis stages need — no filing text. */
+export type PreparedSecFilingMeta = {
   filing: SecFiling;
   periodId: string;
   periodScope: "quarter" | "annual";
+  outline: SecOutlineSection[];
+  blockIds: string[];
+};
+
+/** Meta plus the filing body, needed only by node analysis, event summaries and publication. */
+export type PreparedSecFiling = PreparedSecFilingMeta & {
   blocks: FilingBlock[];
   document: SecDocument;
-  outline: SecOutlineSection[];
 };
 
 export async function discoverSecTicker(rawTicker: string, runtime: SecDiscoveryRuntime): Promise<{ feed: SecFilingFeed; filings: SecFiling[] }> {
@@ -111,10 +118,18 @@ export async function prepareSecFiling(filing: SecFiling, runtime: SecPreparatio
   const blocks = buildFilingBlocks(document.text, filing.accessionNumber);
   if (!blocks.length) throw new Error("SEC filing did not produce analysis blocks");
   const { periodId, periodScope } = buildPeriodIdentity(filing.ticker, filing.form, filing.reportDate);
-  return { filing, periodId, periodScope, blocks, document, outline: buildSecOutline(document) };
+  return {
+    filing,
+    periodId,
+    periodScope,
+    outline: buildSecOutline(document),
+    blockIds: blocks.map((block) => `ev:${block.blockId}`),
+    blocks,
+    document,
+  };
 }
 
-export async function planPreparedSecFiling(prepared: PreparedSecFiling, model: SecModelCall, brief?: SecAnalysisBrief): Promise<SecNodePlan> {
+export async function planPreparedSecFiling(prepared: PreparedSecFilingMeta, model: SecModelCall, brief?: SecAnalysisBrief): Promise<SecNodePlan> {
   if (!prepared.outline.length) return { nodes: [], outlineSections: 0 };
   const value = await model("manager", managerSystemPrompt(), {
     ticker: prepared.filing.ticker,
@@ -181,7 +196,7 @@ export async function analyzePreparedSecNode(
 }
 
 export function buildPreparedSecBrief(
-  prepared: PreparedSecFiling,
+  prepared: PreparedSecFilingMeta,
   context: SecAnalysisContext,
   history: SecHistorySnapshot = context.history ?? { registryVersion: "sec-canonical-series.v1", series: [] },
 ): SecAnalysisBrief {
@@ -198,7 +213,7 @@ export function buildPreparedSecBrief(
 }
 
 export async function reviewPreparedSecAnalysis(
-  prepared: PreparedSecFiling,
+  prepared: PreparedSecFilingMeta,
   brief: SecAnalysisBrief,
   plan: SecNodePlan,
   nodes: SecNodeResult[],
@@ -248,7 +263,7 @@ export async function summarizePreparedSecEvent(
 }
 
 export async function summarizePreparedSecFiling(
-  prepared: PreparedSecFiling,
+  prepared: PreparedSecFilingMeta,
   context: SecAnalysisContext,
   model: SecModelCall,
   now = new Date(),
@@ -268,7 +283,7 @@ export async function summarizePreparedSecFiling(
     questions: plan.nodes.map((node) => ({ questionId: node.id, status: "answered" as const, explanation: "Completed before v3 review injection" })),
     repairTasks: [], unresolvedQuestions: [], coverageScore: 1, stopReason: "complete" as const,
   };
-  const validEvidenceIds = [...new Set(prepared.blocks.map((block) => `ev:${block.blockId}`))].sort();
+  const validEvidenceIds = [...new Set(prepared.blockIds)].sort();
   const summaryPayload = {
     brief: finalBrief,
     nodeAnalyses: usableNodes.map(({ id, title, findings, narrative, facts }) => ({ id, title, findings, narrative, facts: facts ?? [] })),
@@ -290,8 +305,8 @@ export async function summarizePreparedSecFiling(
     periodId: prepared.periodId,
     reportVersion: `${SEC_ANALYSIS_SCHEMA_VERSION}:${hashString(JSON.stringify(summaryPayload))}`,
   }, new Set(validEvidenceIds));
-  report = addDeterministicDeltas(report, qoq, yoy);
   report = enforceDeterministicReportQuality(report, finalBrief, nodeFacts);
+  report = addDeterministicDeltas(report, qoq, yoy);
   report = {
     ...report,
     dataQuality: {
@@ -307,7 +322,7 @@ export async function summarizePreparedSecFiling(
     filing: prepared.filing,
     periodId: prepared.periodId,
     periodScope: prepared.periodScope,
-    blocks: prepared.blocks,
+    blocks: [],
     comparisons: [qoq, yoy].filter((comparison): comparison is ComparisonResult => Boolean(comparison)),
     report,
     brief: finalBrief,
@@ -381,7 +396,7 @@ function managerReviewSystemPrompt() {
     "你是财报研究主编，负责判断每个计划问题是否被事实和节点分析回答。",
     "answered 表示结论、证据和期间口径均完整；not_disclosed 只用于 filing 明确未披露；不要把节点有文字等同于回答完整。",
     "只有 partial 或 unanswered 可以生成 repairTasks；repair 必须绑定原 questionId、targetNodeId、已有 sectionIds 和缺失证据。",
-    "单轮最多返回 4 个 repairTasks。不要创建新主题。",
+    "最多返回 3 个 repairTasks，按 materiality 从高到低排列，只有一轮修复机会。不要创建新主题。",
     "严格按 outputSchema 返回 JSON。",
   ].join("\n");
 }
@@ -479,20 +494,32 @@ function enforceDeterministicReportQuality(
   brief: SecAnalysisBrief,
   nodeFacts: AnalysisFact[],
 ): SecAnalysisArtifact["report"] {
-  const allowed = new Map<string, AnalysisFact>();
-  for (const fact of [...brief.currentFacts, ...nodeFacts]) allowed.set(fact.metricKey, fact);
-  const keyMetrics = report.keyMetrics.filter((metric) => allowed.has(metric.metricKey));
+  const allowed = new Set<string>();
+  for (const fact of [...brief.currentFacts, ...nodeFacts]) {
+    allowed.add(fact.metricKey);
+    const canonical = canonicalMetricKey(fact.metricKey);
+    if (canonical) allowed.add(canonical);
+  }
+  const keyMetrics: SecAnalysisArtifact["report"]["keyMetrics"] = [];
+  const dropped: string[] = [];
+  for (const metric of report.keyMetrics) {
+    const canonical = canonicalMetricKey(metric.metricKey);
+    if (allowed.has(metric.metricKey)) keyMetrics.push(metric);
+    else if (canonical && allowed.has(canonical)) keyMetrics.push({ ...metric, metricKey: canonical });
+    else dropped.push(metric.metricKey);
+  }
   const coverage = brief.allowedMetricKeys.length
     ? brief.currentFacts.length / brief.allowedMetricKeys.length
     : 0;
-  const verificationStatus = !allowed.size || !keyMetrics.length
-    ? "failed"
-    : brief.currentFacts.length >= 3 && keyMetrics.length >= 2
-      ? "verified"
-      : "partial";
+  const verificationStatus = keyMetrics.length >= 2 && brief.currentFacts.length >= 3
+    ? "verified"
+    : allowed.size
+      ? "partial"
+      : "failed";
   const warnings = [...report.dataQuality.warnings];
   if (verificationStatus === "failed") warnings.push("No evidence-grounded financial metrics passed deterministic verification");
   else if (verificationStatus === "partial") warnings.push("Verified evidence coverage is below the full-report threshold");
+  if (dropped.length) warnings.push(`Dropped unverifiable keyMetrics: ${[...new Set(dropped)].join(", ")}`);
   if (brief.missingSeriesIds.length) warnings.push(`XBRL has no current-period value for: ${brief.missingSeriesIds.join(", ")}`);
   return {
     ...report,

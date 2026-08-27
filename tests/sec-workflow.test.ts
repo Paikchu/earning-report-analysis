@@ -178,8 +178,9 @@ test("runs filing analysis as durable stages and fans analysis nodes out indepen
   assert.ok(steps.includes(`node:${filing.accessionNumber}:round:0:1:cash-flow`));
   assert.ok(steps.includes(`manager-review:${filing.accessionNumber}:round:0`));
   assert.ok(steps.includes(`publish:${filing.accessionNumber}`));
-  assert.deepEqual(jobStages, ["context", "prepare", "brief", "manager", "nodes-round-0", "manager-review", "synthesis", "publish", "published"]);
+  assert.deepEqual(jobStages, ["prepare", "published"]);
   assert.ok(jobIds.every((jobId) => jobId.endsWith(":workflow-1")));
+  assert.equal(jobStages.length, 2, "job state is written once at start and once at completion");
   assert.deepEqual(publishedSummary?.nodes?.map((node) => node.id), ["revenue-growth", "cash-flow"]);
   assert.equal(publishedSummary?.managerReview?.status, "complete");
 });

@@ -48,7 +48,7 @@ export async function runManagerRepairLoop(
   let review = await step.do(`manager-review:${accessionNumber}:round:0`, (context) => runtime.review(0, nodes, executionFor(context)));
   let previousFingerprint = unresolvedFingerprint(review);
   while (review.status === "needs_repair" && rounds < MAX_REPAIR_ROUNDS) {
-    const tasks = review.repairTasks.slice(0, MAX_REPAIR_NODES_PER_ROUND);
+    const tasks = [...review.repairTasks].sort(byMateriality).slice(0, MAX_REPAIR_NODES_PER_ROUND);
     if (!tasks.length) {
       review = { ...review, status: "partial", stopReason: "analysis_incomplete" };
       break;
@@ -79,6 +79,11 @@ export async function runManagerRepairLoop(
   return { nodes, review, rounds };
 }
 
+function byMateriality(left: ManagerRepairTask, right: ManagerRepairTask): number {
+  const rank = { high: 0, medium: 1, low: 2 } as const;
+  return rank[left.materiality] - rank[right.materiality];
+}
+
 export type PreparedFilingReference = {
   key: string;
   filing: SecFiling;
@@ -104,7 +109,7 @@ export type SecPipelineOperations = {
   discover(ticker: string): Promise<{ feed: unknown; filings: SecFiling[] }>;
   publishFeed(feed: unknown): Promise<void>;
   shouldAnalyze(filing: SecFiling, requestedBy: SecWorkflowParams["requestedBy"]): Promise<boolean>;
-  getContext(filing: SecFiling): Promise<SecAnalysisContext>;
+  getContext(filing: SecFiling, prepared?: PreparedFilingReference): Promise<SecAnalysisContext>;
   prepare(filing: SecFiling): Promise<PreparedFilingReference>;
   buildBrief?(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext): Promise<SecAnalysisBrief>;
   plan(filing: SecFiling, prepared: PreparedFilingReference, brief?: SecAnalysisBrief, execution?: SecModelExecution): Promise<SecNodePlan>;
@@ -145,6 +150,7 @@ export async function executeSecAnalysisWorkflow(
       requestedBy: params.requestedBy,
       workflowInstanceId,
     } as const;
+    let stage = "context";
     try {
       const shouldAnalyze = await step.do(`status:${accession}`, () => operations.shouldAnalyze(filing, params.requestedBy));
       if (!shouldAnalyze) {
@@ -152,34 +158,35 @@ export async function executeSecAnalysisWorkflow(
         continue;
       }
       const eventFiling = /^(8-K|6-K)(\/A)?$/.test(filing.form);
-      await step.do(`job:${accession}:start`, () => operations.updateJob({ ...baseJob, status: "running", currentStage: eventFiling ? "prepare" : "context", updatedAt: new Date().toISOString() }));
+      stage = "prepare";
+      await step.do(`job:${accession}:start`, () => operations.updateJob({ ...baseJob, status: "running", currentStage: "prepare", updatedAt: new Date().toISOString() }));
       if (eventFiling) {
         const prepared = await step.do(`prepare:${accession}`, () => operations.prepare(filing));
-        await markJobStage(step, operations, baseJob, "event-summary");
+        stage = "event-summary";
         const summary = await step.do(`event-summary:${accession}`, (context) => operations.summarizeEvent(filing, prepared, executionFor(context)));
-        await markJobStage(step, operations, baseJob, "publish");
+        stage = "publish";
         await step.do(`publish-event:${accession}`, () => operations.publishEvent(summary));
         await step.do(`job:${accession}:complete`, () => operations.updateJob({ ...baseJob, status: "complete", currentStage: "published", updatedAt: new Date().toISOString(), completedAt: new Date().toISOString() }));
         analyzed.push(accession);
         continue;
       }
-      const context = await step.do(`context:${accession}`, () => operations.getContext(filing));
-      await markJobStage(step, operations, baseJob, "prepare");
       const prepared = await step.do(`prepare:${accession}`, () => operations.prepare(filing));
-      await markJobStage(step, operations, baseJob, "brief");
+      stage = "context";
+      const context = await step.do(`context:${accession}`, () => operations.getContext(filing, prepared));
+      stage = "brief";
       const brief = await step.do(`brief:${accession}`, async () => operations.buildBrief
         ? operations.buildBrief(filing, prepared, context)
         : buildFallbackBrief(filing, context));
       assertBriefCanProceed(brief);
-      await markJobStage(step, operations, baseJob, "manager");
+      stage = "manager";
       const plan = await step.do(`manager:${accession}`, (stepContext) => operations.plan(filing, prepared, brief, executionFor(stepContext)));
       if (!plan.nodes.length) throw new Error("Manager planned no analysis nodes");
-      await markJobStage(step, operations, baseJob, "nodes-round-0");
+      stage = "nodes-round-0";
       const nodes = await mapWithConcurrency(plan.nodes, 4, (spec, index) => step.do(
         `node:${accession}:round:0:${index}:${spec.id}`,
         (stepContext) => operations.analyzeNode(spec, filing, prepared, brief, 0, executionFor(stepContext)),
       ));
-      await markJobStage(step, operations, baseJob, "manager-review");
+      stage = "manager-review";
       const loop = await runManagerRepairLoop(accession, step, plan, nodes, {
         review: (round, currentNodes, execution) => operations.review
           ? operations.review(filing, prepared, brief, plan, currentNodes, round, execution)
@@ -187,7 +194,7 @@ export async function executeSecAnalysisWorkflow(
         repair: (task, round, execution) => operations.analyzeNode({ ...task, id: task.targetNodeId }, filing, prepared, brief, round, execution),
       });
       const managerReview: ManagerReview = loop.review;
-      await markJobStage(step, operations, baseJob, "synthesis");
+      stage = "synthesis";
       const result = await step.do(`synthesis:${accession}`, (stepContext) => operations.summarize(filing, prepared, context, plan, loop.nodes, brief, managerReview, executionFor(stepContext)));
       result.artifact.report.dataQuality = {
         ...result.artifact.report.dataQuality,
@@ -217,7 +224,7 @@ export async function executeSecAnalysisWorkflow(
         managerReview,
         repairRounds: loop.rounds,
       } : null;
-      await markJobStage(step, operations, baseJob, "publish");
+      stage = "publish";
       const publication = await step.do(`publish:${accession}`, () => operations.publish(result.artifact, summary));
       await step.do(`job:${accession}:complete`, () => operations.updateJob({ ...baseJob, status: "complete", currentStage: "published", updatedAt: new Date().toISOString(), completedAt: new Date().toISOString() }));
       if (publication && publication.memoryJobId && operations.enqueueMemory) {
@@ -236,7 +243,7 @@ export async function executeSecAnalysisWorkflow(
       await step.do(`job:${accession}:error`, () => operations.updateJob({
         ...baseJob,
         status: "failed",
-        currentStage: "execution",
+        currentStage: stage,
         errorCode: hardFailure ? "hard_failure" : "pipeline_error",
         errorDetail: detail,
         updatedAt: new Date().toISOString(),
@@ -267,20 +274,6 @@ async function mapWithConcurrency<T, R>(values: T[], concurrency: number, operat
   });
   await Promise.all(workers);
   return results;
-}
-
-function markJobStage(
-  step: WorkflowStepLike,
-  operations: SecPipelineOperations,
-  baseJob: Omit<WorkflowJobUpdate, "status" | "currentStage" | "updatedAt">,
-  currentStage: string,
-) {
-  return step.do(`job:${baseJob.accessionNumber}:stage:${currentStage}`, () => operations.updateJob({
-    ...baseJob,
-    status: "running",
-    currentStage,
-    updatedAt: new Date().toISOString(),
-  }));
 }
 
 function buildFallbackBrief(filing: SecFiling, context: SecAnalysisContext): SecAnalysisBrief {

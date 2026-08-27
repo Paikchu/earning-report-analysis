@@ -8,11 +8,12 @@ import {
   summarizePreparedSecEvent,
   summarizePreparedSecFiling,
   type PreparedSecFiling,
+  type PreparedSecFilingMeta,
   type SecModelCall,
 } from "../../lib/sec-pipeline.ts";
 import type { SecAnalysisArtifact } from "../../lib/sec-types.ts";
 import type { SecFilingSummary, SecNodePlan, SecNodeResult, SecNodeSpec } from "../../lib/sec.ts";
-import { SEC_ANALYSIS_SCHEMA_VERSION, type ManagerReview } from "../../lib/sec-analysis.ts";
+import { SEC_ANALYSIS_SCHEMA_VERSION, type FilingBlock, type ManagerReview, type SecHistorySnapshot } from "../../lib/sec-analysis.ts";
 import { normalizeCompanyFacts } from "../../lib/sec-history.ts";
 import { siteHeaders, type SecCronEnv } from "./core.ts";
 import type { SecModelExecution } from "./retry-policy.ts";
@@ -31,7 +32,7 @@ export type SecPipelineEnv = SecCronEnv & {
   SEC_ANALYSIS_MODEL?: string;
 };
 
-const PUBLISH_BLOCK_CHUNK_SIZE = 5;
+const PUBLISH_BLOCK_CHUNK_SIZE = 40;
 
 export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof fetch = fetch): SecPipelineOperations {
   const modelFor = (execution?: SecModelExecution): SecModelCall => async (stage, system, payload) => {
@@ -56,23 +57,32 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       });
       return result.status === null || result.status === "failed";
     },
-    getContext: async (filing) => (await sitePost<{ context: Awaited<ReturnType<SecPipelineOperations["getContext"]>> }>(env, fetcher, "/api/internal/sec/context", { filing })).context,
+    getContext: async (filing, reference) => {
+      const history = reference ? await readHistory(env.SEC_FILINGS, reference) : EMPTY_HISTORY;
+      const response = await sitePost<{ context: Awaited<ReturnType<SecPipelineOperations["getContext"]>> }>(env, fetcher, "/api/internal/sec/context", { filing, history });
+      return { ...response.context, history: response.context.history ?? history };
+    },
     prepare: async (filing) => {
       const prepared = await prepareSecFiling(filing, { userAgent: env.SEC_USER_AGENT, fetcher });
+      const history = await fetchCompanyHistory(filing.cik, filing.ticker, env.SEC_USER_AGENT, fetcher).catch(() => EMPTY_HISTORY);
       const key = preparedKey(filing.ticker, filing.accessionNumber);
-      await env.SEC_FILINGS.put(key, JSON.stringify(prepared), { httpMetadata: { contentType: "application/json" } });
+      const { blocks, document, ...meta } = prepared;
+      await Promise.all([
+        putJson(env.SEC_FILINGS, `${key}/meta.json`, meta),
+        putJson(env.SEC_FILINGS, `${key}/text.json`, { document, blocks }),
+        putJson(env.SEC_FILINGS, `${key}/history.json`, history),
+      ]);
       return { key, filing };
     },
-    buildBrief: async (filing, reference, context) => {
-      const prepared = await readPrepared(env.SEC_FILINGS, reference);
-      const history = await fetchCompanyHistory(filing.cik, filing.ticker, env.SEC_USER_AGENT, fetcher).catch(() => context.history ?? { registryVersion: "sec-canonical-series.v1", series: [] });
-      const persisted = await sitePost<{ context?: typeof context }>(env, fetcher, "/api/internal/sec/context", { filing, history }).catch(() => ({ context: undefined }));
-      const brief = buildPreparedSecBrief(prepared, persisted.context ?? { ...context, history }, history);
+    buildBrief: async (_filing, reference, context) => {
+      const meta = await readMeta(env.SEC_FILINGS, reference);
+      const history = context.history ?? await readHistory(env.SEC_FILINGS, reference);
+      const brief = buildPreparedSecBrief(meta, context, history);
       await putArtifact(env.SEC_FILINGS, reference, "brief", brief);
       return brief;
     },
     plan: async (_filing, reference, brief, execution): Promise<SecNodePlan> => {
-      const plan = await planPreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), modelFor(execution), brief);
+      const plan = await planPreparedSecFiling(await readMeta(env.SEC_FILINGS, reference), modelFor(execution), brief);
       await putArtifact(env.SEC_FILINGS, reference, "manager-plan", plan);
       return plan;
     },
@@ -82,7 +92,7 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       return result;
     },
     review: async (_filing, reference, brief, plan, nodes, round, execution): Promise<ManagerReview> => {
-      const result = await reviewPreparedSecAnalysis(await readPrepared(env.SEC_FILINGS, reference), brief, plan, nodes, round, modelFor(execution));
+      const result = await reviewPreparedSecAnalysis(await readMeta(env.SEC_FILINGS, reference), brief, plan, nodes, round, modelFor(execution));
       await putArtifact(env.SEC_FILINGS, reference, `manager-review/round-${round}`, result);
       return result;
     },
@@ -90,7 +100,7 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
     summarize: async (_filing, reference, context, plan, nodes, brief, review, execution) => {
       await putArtifact(env.SEC_FILINGS, reference, "nodes/final", nodes);
       if (review) await putArtifact(env.SEC_FILINGS, reference, "manager-review/final", review);
-      const result = await summarizePreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), context, modelFor(execution), new Date(), plan, nodes, brief, review);
+      const result = await summarizePreparedSecFiling(await readMeta(env.SEC_FILINGS, reference), context, modelFor(execution), new Date(), plan, nodes, brief, review);
       const synthesisKey = await putArtifact(env.SEC_FILINGS, reference, "synthesis", result);
       return { ...result, artifact: { ...result.artifact, blocks: [], artifactKeys: collectArtifactKeys(reference, synthesisKey) } };
     },
@@ -99,17 +109,8 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       const prepared = await readPrepared(env.SEC_FILINGS, reference);
       const citedBlockIds = collectReferencedBlockIds(artifact);
       const citedBlocks = prepared.blocks.filter((block) => citedBlockIds.has(block.blockId));
-      const deferredArtifact: SecAnalysisArtifact = {
-        ...artifact,
-        blocks: [],
-        comparisons: [],
-        report: {
-          ...artifact.report,
-          dataQuality: { ...artifact.report.dataQuality, verificationStatus: "failed" },
-        },
-      };
       for (const blocks of chunks(citedBlocks, PUBLISH_BLOCK_CHUNK_SIZE)) {
-        await sitePost(env, fetcher, "/api/internal/sec/publish", { artifact: { ...deferredArtifact, blocks }, summary: null });
+        await sitePost(env, fetcher, "/api/internal/sec/publish", { filing: artifact.filing, blocks });
       }
       return sitePost<{ memoryJobId?: string }>(env, fetcher, "/api/internal/sec/publish", {
         artifact: { ...artifact, blocks: [] } satisfies SecAnalysisArtifact,
@@ -125,10 +126,32 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
   };
 }
 
+const EMPTY_HISTORY: SecHistorySnapshot = { registryVersion: "sec-canonical-series.v1", series: [] };
+
+async function readJson<T>(bucket: R2BucketLike, key: string): Promise<T> {
+  const object = await bucket.get(key);
+  if (!object) throw new Error(`Prepared filing not found: ${key}`);
+  return JSON.parse(await object.text()) as T;
+}
+
+async function putJson(bucket: R2BucketLike, key: string, value: unknown): Promise<void> {
+  await bucket.put(key, JSON.stringify(value), { httpMetadata: { contentType: "application/json" } });
+}
+
+function readMeta(bucket: R2BucketLike, reference: PreparedFilingReference): Promise<PreparedSecFilingMeta> {
+  return readJson<PreparedSecFilingMeta>(bucket, `${reference.key}/meta.json`);
+}
+
+function readHistory(bucket: R2BucketLike, reference: PreparedFilingReference): Promise<SecHistorySnapshot> {
+  return readJson<SecHistorySnapshot>(bucket, `${reference.key}/history.json`).catch(() => EMPTY_HISTORY);
+}
+
 async function readPrepared(bucket: R2BucketLike, reference: PreparedFilingReference): Promise<PreparedSecFiling> {
-  const object = await bucket.get(reference.key);
-  if (!object) throw new Error(`Prepared filing not found: ${reference.key}`);
-  return JSON.parse(await object.text()) as PreparedSecFiling;
+  const [meta, body] = await Promise.all([
+    readMeta(bucket, reference),
+    readJson<{ document: PreparedSecFiling["document"]; blocks: FilingBlock[] }>(bucket, `${reference.key}/text.json`),
+  ]);
+  return { ...meta, document: body.document, blocks: body.blocks };
 }
 
 export async function sitePost<T = Record<string, unknown>>(env: SecPipelineEnv, fetcher: typeof fetch, path: string, body: unknown): Promise<T> {
@@ -145,7 +168,7 @@ export async function sitePost<T = Record<string, unknown>>(env: SecPipelineEnv,
 }
 
 function preparedKey(ticker: string, accessionNumber: string) {
-  return `filings/${ticker}/${accessionNumber}.json`;
+  return `filings/${ticker}/${accessionNumber}`;
 }
 
 function collectReferencedBlockIds(artifact: SecAnalysisArtifact): Set<string> {
@@ -199,13 +222,13 @@ async function fetchCompanyHistory(cik: string, ticker: string, userAgent: strin
 }
 
 async function putArtifact(bucket: R2BucketLike, reference: PreparedFilingReference, name: string, value: unknown): Promise<string> {
-  const key = `${reference.key.replace(/^filings\//, "analysis/").replace(/\.json$/, "")}/${SEC_ANALYSIS_SCHEMA_VERSION}/${name}.json`;
+  const key = `${reference.key.replace(/^filings\//, "analysis/")}/${SEC_ANALYSIS_SCHEMA_VERSION}/${name}.json`;
   await bucket.put(key, JSON.stringify(value), { httpMetadata: { contentType: "application/json" } });
   return key;
 }
 
 function collectArtifactKeys(reference: PreparedFilingReference, synthesisKey: string): Record<string, string> {
-  const prefix = `${reference.key.replace(/^filings\//, "analysis/").replace(/\.json$/, "")}/${SEC_ANALYSIS_SCHEMA_VERSION}`;
+  const prefix = `${reference.key.replace(/^filings\//, "analysis/")}/${SEC_ANALYSIS_SCHEMA_VERSION}`;
   return {
     brief: `${prefix}/brief.json`,
     plan: `${prefix}/manager-plan.json`,
