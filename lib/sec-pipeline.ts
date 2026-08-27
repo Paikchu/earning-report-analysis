@@ -384,8 +384,8 @@ export async function summarizePreparedSecFiling(
     claimLedger: finalLedger,
   };
   const normalizedSummary = normalizeSecSummary({ ...summaryValue, source: "deepseek", version: SEC_SUMMARY_VERSION }, prepared.filing, now);
-  if (!normalizedSummary.report || normalizedSummary.report.length < 900 || normalizedSummary.report.length > 1_600) {
-    throw new Error("Synthesis report must contain 900–1,600 characters");
+  if (!normalizedSummary.report) {
+    throw new Error("Synthesis must contain a report");
   }
   if (normalizedSummary.bullets.length < 3 || normalizedSummary.bullets.length > 5 || !normalizedSummary.analystView) {
     throw new Error("Synthesis must contain 3–5 core conclusions and an investment view");

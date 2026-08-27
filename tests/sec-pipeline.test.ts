@@ -374,5 +374,38 @@ test("rejects an incomplete synthesis before it can replace the last successful 
     new Date("2026-08-05T00:00:00.000Z"),
     normalizePlan(prepared.outline[0].id),
     [{ id: "revenue-growth", title: "收入增长", status: "complete", findings: [], narrative: "收入增长。", evidence: [] }],
-  ), /900.*1,600|核心结论/);
+  ), /3–5 core conclusions/);
+});
+
+test("accepts complete synthesis reports outside the former length range", async () => {
+  const prepared = await prepareSecFiling(filing, {
+    userAgent: "test@example.com",
+    fetcher: async () => new Response("<h1>Revenue</h1><p>Revenue increased 18%.</p>"),
+  });
+  const modules = SEC_ANALYSIS_MODULES.map((module) => ({
+    moduleKey: module.key,
+    facts: module.key === "performance" ? [{ metricKey: "revenue", value: "120", unit: "USDm", evidenceIds: [`ev:${prepared.blocks[0].blockId}`] }] : [],
+    claims: [], memoryCandidates: [], missingFields: [], evidenceCoverage: 1, verificationStatus: "verified" as const,
+  }));
+
+  for (const report of ["简明但完整的研报正文。", "长篇研报正文。".repeat(1_000)]) {
+    const result = await summarizePreparedSecFiling(
+      prepared,
+      { currentPeriodId: prepared.periodId, qoqPeriodId: null, yoyPeriodId: null, qoq: {}, yoy: {}, activeMemory: [] },
+      { selections: [], source: "fallback", status: "partial", missingModules: [] },
+      modules,
+      async () => ({
+        headline: "收入增长",
+        bullets: completeBullets(),
+        analystView: "需求仍需观察。",
+        report,
+        keyMetrics: [], changes: { qoq: [], yoy: [], guidance: [], risks: [] }, dataQuality: { coverage: 1, warnings: [] },
+      }),
+      new Date("2026-08-05T00:00:00.000Z"),
+      normalizePlan(prepared.outline[0].id),
+      [{ id: "revenue-growth", title: "收入增长", status: "complete", findings: [], narrative: "收入增长。", evidence: [] }],
+    );
+
+    assert.equal(result.summary.report, report.slice(0, 6_000));
+  }
 });
