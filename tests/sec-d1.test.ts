@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { D1SecRepository, type SecAnalysisJobUpdate } from "../lib/sec-d1.ts";
 import type { SecFilingSummary } from "../lib/sec.ts";
-import type { SecAnalysisArtifact } from "../lib/sec-service.ts";
+import type { SecAnalysisArtifact } from "../lib/sec-types.ts";
 
 test("reads and upserts SEC cache records through prepared D1 statements", async () => {
   const calls: Array<{ sql: string; values: unknown[]; action: string }> = [];

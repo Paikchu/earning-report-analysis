@@ -13,7 +13,7 @@ import {
   type PreparedSecFiling,
   type SecModelCall,
 } from "../../lib/sec-pipeline.ts";
-import type { SecAnalysisArtifact } from "../../lib/sec-service.ts";
+import type { SecAnalysisArtifact } from "../../lib/sec-types.ts";
 import type { SecFilingSummary, SecNodePlan, SecNodeResult, SecNodeSpec } from "../../lib/sec.ts";
 import {
   fallbackRouterResult,

@@ -48,7 +48,7 @@ import {
   type SecNodeResult,
   type SecNodeSpec,
 } from "./sec.ts";
-import type { SecAnalysisArtifact, SecAnalysisContext } from "./sec-service.ts";
+import type { SecAnalysisArtifact, SecAnalysisContext } from "./sec-types.ts";
 
 export type SecModelCall = (stage: string, system: string, payload: unknown) => Promise<Record<string, unknown>>;
 

@@ -96,6 +96,7 @@ test("ships SEC analysis as a durable Cloudflare workflow with isolated model cr
   assert.match(workerConfig, /"r2_buckets"/);
   assert.doesNotMatch(workerConfig, /"SEC_TRACKED_TICKERS"\s*:\s*""/);
   assert.match(operations, /AI_API_KEY/);
+  assert.match(operations, /deepseek-v4-flash/);
   assert.doesNotMatch(runtime, /AI_API_KEY/);
-  assert.match(runtime, /deepseek-v4-flash/);
+  assert.doesNotMatch(runtime, /deepseek-v4-flash/);
 });

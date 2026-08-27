@@ -7,7 +7,7 @@ import {
   hasInternalSecAccess,
   requestSecAnalysis,
 } from "../lib/sec-api.ts";
-import type { SecRepository } from "../lib/sec-service.ts";
+import type { SecRepository } from "../lib/sec-types.ts";
 
 const emptyRepository: SecRepository = {
   async getCache() { return null; },

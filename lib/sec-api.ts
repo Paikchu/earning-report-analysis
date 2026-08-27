@@ -1,5 +1,6 @@
 import { cleanSecTicker, type SecFilingFeed } from "./sec.ts";
-import { getCachedSecFeed, type SecRepository } from "./sec-service.ts";
+import { getCachedSecFeed } from "./sec-feed.ts";
+import type { SecRepository } from "./sec-types.ts";
 
 type SecSecurity = {
   symbol: string;

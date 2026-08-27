@@ -3,7 +3,7 @@ import { hasInternalSecAccess } from "@/lib/sec-api";
 import { D1SecRepository } from "@/lib/sec-d1";
 import { getSecRuntimeConfig } from "@/lib/sec-runtime";
 import { cleanSecAccession, cleanSecTicker, type SecFiling, type SecFilingSummary } from "@/lib/sec";
-import type { SecAnalysisArtifact } from "@/lib/sec-service";
+import type { SecAnalysisArtifact } from "@/lib/sec-types";
 import { isTrackedTicker } from "@/lib/sec-config";
 
 export async function POST(request: Request) {

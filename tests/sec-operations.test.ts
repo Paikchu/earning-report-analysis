@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { SecAnalysisArtifact, SecAnalysisContext } from "../lib/sec-service.ts";
+import type { SecAnalysisArtifact, SecAnalysisContext } from "../lib/sec-types.ts";
 import type { SecFiling, SecNodeSpec } from "../lib/sec.ts";
 import { callWorkerSecModel, createSecPipelineOperations, type SecPipelineEnv } from "../workers/sec-cron/operations.ts";
 import { modelExecutionForAttempt, retryDelayForAttempt } from "../workers/sec-cron/retry-policy.ts";

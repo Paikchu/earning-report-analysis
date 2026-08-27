@@ -14,7 +14,7 @@ import {
   type SecModelCall,
 } from "../lib/sec-pipeline.ts";
 import { SEC_ANALYSIS_MODULES } from "../lib/sec-analysis.ts";
-import type { SecAnalysisContext } from "../lib/sec-service.ts";
+import type { SecAnalysisContext } from "../lib/sec-types.ts";
 import { SEC_SUMMARY_VERSION, type SecFiling } from "../lib/sec.ts";
 
 const filing: SecFiling = {

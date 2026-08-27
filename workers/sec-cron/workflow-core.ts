@@ -21,7 +21,7 @@ import type {
   SecNodeSpec,
   SecWorkflowTrace,
 } from "../../lib/sec.ts";
-import type { SecAnalysisArtifact, SecAnalysisContext } from "../../lib/sec-service.ts";
+import type { SecAnalysisArtifact, SecAnalysisContext } from "../../lib/sec-types.ts";
 import type { SecWorkflowParams } from "./core.ts";
 import { modelExecutionForAttempt, type SecModelExecution } from "./retry-policy.ts";
 

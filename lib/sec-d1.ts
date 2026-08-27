@@ -10,7 +10,7 @@ import {
   type SecHistorySnapshot,
 } from "./sec-analysis.ts";
 import { buildCompanyMemorySummary, consolidateMemoryCandidates, type MemoryCandidateV2 } from "./sec-memory.ts";
-import type { SecAnalysisArtifact, SecAnalysisContext, SecCacheRecord, SecRepository } from "./sec-service.ts";
+import type { SecAnalysisArtifact, SecAnalysisContext, SecCacheRecord, SecRepository } from "./sec-types.ts";
 import { decodePageCursor, encodePageCursor } from "./sec-config.ts";
 
 type D1ResultStatement = {

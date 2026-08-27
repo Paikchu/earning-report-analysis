@@ -1,7 +1,7 @@
 import { cleanSecAccession, type SecFilingWithSummary } from "./sec.ts";
 import { decodePageCursor, encodePageCursor, normalizeTrackedTicker } from "./sec-config.ts";
 import { D1SecRepository } from "./sec-d1.ts";
-import { getCachedSecFeed } from "./sec-service.ts";
+import { getCachedSecFeed } from "./sec-feed.ts";
 import { findSecurity } from "./site-data.ts";
 
 export type PublicAnalysisStatus = "complete" | "partial" | "processing" | "not_collected";
