@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { executeSecAnalysisWorkflow, type SecPipelineOperations, type WorkflowStepLike } from "../workers/sec-cron/workflow-core.ts";
-import { SEC_ANALYSIS_MODULES, SEC_ANALYSIS_SCHEMA_VERSION, type ModuleAnalysis } from "../lib/sec-analysis.ts";
+import { SEC_ANALYSIS_SCHEMA_VERSION, type SecHistorySnapshot } from "../lib/sec-analysis.ts";
 import type { SecFiling, SecFilingSummary, SecNodeSpec } from "../lib/sec.ts";
 
 const filing: SecFiling = {
@@ -34,24 +34,40 @@ function stepRecorder(names: string[]): WorkflowStepLike {
   };
 }
 
-function operations(overrides: Partial<SecPipelineOperations> = {}): SecPipelineOperations {
-  const moduleAnalysis = (moduleKey: ModuleAnalysis["moduleKey"]): ModuleAnalysis => ({
-    moduleKey,
-    facts: [{ metricKey: `core_${moduleKey}`, value: "1", unit: "USD", currency: "USD", periodScope: "annual", basis: "gaap", evidenceIds: [`ev:${moduleKey}`], confidence: "high", sourceLabel: "fact_source_reported" }],
-    claims: [],
-    memoryCandidates: [],
-    missingFields: [],
-    evidenceCoverage: 1,
-    verificationStatus: "verified",
+function xbrlHistory(unitOverride?: { seriesId: "revenue"; unit: string }): SecHistorySnapshot {
+  const observation = (unit: string, id: string) => ({
+    observationId: id,
+    seriesId: "revenue" as const,
+    metricKey: "revenue",
+    value: "120",
+    unit,
+    currency: unit === "USD" ? "USD" : undefined,
+    basis: "gaap" as const,
+    periodScope: "annual" as const,
+    startDate: "2025-07-01",
+    endDate: "2026-06-30",
+    sourceAccession: filing.accessionNumber,
+    sourceFiledAt: "2026-07-30",
+    sourceVersion: "sec-canonical-series.v1",
+    qualityStatus: "validated_xbrl" as const,
   });
+  return {
+    registryVersion: "sec-canonical-series.v1",
+    series: [{
+      seriesId: "revenue",
+      quarters: [],
+      annual: [observation("USD", "xbrl-usd"), ...(unitOverride ? [observation(unitOverride.unit, "xbrl-alt")] : [])],
+    }],
+  };
+}
+
+function operations(overrides: Partial<SecPipelineOperations> = {}): SecPipelineOperations {
   return {
     async discover() { return { feed: { ticker: "TESTCO" }, filings: [filing] }; },
     async publishFeed() {},
     async shouldAnalyze() { return true; },
-    async getContext() { return { currentPeriodId: "TESTCO:2026-06-30:annual", qoqPeriodId: null, yoyPeriodId: null, qoq: {}, yoy: {}, activeMemory: [] }; },
+    async getContext() { return { currentPeriodId: "TESTCO:2026-06-30:annual", qoqPeriodId: null, yoyPeriodId: null, history: xbrlHistory() }; },
     async prepare() { return { key: "TESTCO/acc.json", filing }; },
-    async route() { return { selections: [], source: "fallback", status: "partial", missingModules: [] }; },
-    async analyzeModule(moduleKey) { return moduleAnalysis(moduleKey); },
     async plan() {
       return {
         nodes: [
@@ -91,11 +107,7 @@ function operations(overrides: Partial<SecPipelineOperations> = {}): SecPipeline
           periodId: "TESTCO:2026-06-30:annual",
           periodScope: "annual",
           blocks: [],
-          moduleAnalyses: SEC_ANALYSIS_MODULES.map((module) => moduleAnalysis(module.key)),
-          snapshots: [],
           comparisons: [],
-          memoryCandidates: [],
-          router: { selections: [], source: "fallback", status: "partial", missingModules: [] },
           report: {
             ticker: "TESTCO",
             periodId: "TESTCO:2026-06-30:annual",
@@ -128,19 +140,14 @@ function operations(overrides: Partial<SecPipelineOperations> = {}): SecPipeline
   };
 }
 
-test("runs filing analysis as durable stages and fans modules out independently", async () => {
+test("runs filing analysis as durable stages and fans analysis nodes out independently", async () => {
   const steps: string[] = [];
-  const moduleKeys: string[] = [];
   const nodeIds: string[] = [];
   const jobStages: string[] = [];
   const jobIds: string[] = [];
   let published = 0;
   let publishedSummary: SecFilingSummary | null = null;
   const ops = operations({
-    async analyzeModule(moduleKey) {
-      moduleKeys.push(moduleKey);
-      return operations().analyzeModule(moduleKey, {} as never, {} as never, {} as never, {} as never);
-    },
     async analyzeNode(spec: SecNodeSpec) {
       nodeIds.push(spec.id);
       return operations().analyzeNode(spec, {} as never, {} as never);
@@ -163,17 +170,15 @@ test("runs filing analysis as durable stages and fans modules out independently"
   );
 
   assert.deepEqual(result, { analyzed: [filing.accessionNumber], skipped: [], failed: [] });
-  assert.deepEqual(moduleKeys, SEC_ANALYSIS_MODULES.map((module) => module.key));
   assert.deepEqual(nodeIds, ["revenue-growth", "cash-flow"]);
   assert.equal(published, 1);
   assert.ok(steps.includes(`prepare:${filing.accessionNumber}`));
-  assert.ok(steps.includes(`router:${filing.accessionNumber}`));
   assert.ok(steps.includes(`manager:${filing.accessionNumber}`));
   assert.ok(steps.includes(`node:${filing.accessionNumber}:round:0:0:revenue-growth`));
   assert.ok(steps.includes(`node:${filing.accessionNumber}:round:0:1:cash-flow`));
   assert.ok(steps.includes(`manager-review:${filing.accessionNumber}:round:0`));
   assert.ok(steps.includes(`publish:${filing.accessionNumber}`));
-  assert.deepEqual(jobStages, ["context", "prepare", "router", "modules", "brief", "manager", "nodes-round-0", "manager-review", "synthesis", "publish", "published"]);
+  assert.deepEqual(jobStages, ["context", "prepare", "brief", "manager", "nodes-round-0", "manager-review", "synthesis", "publish", "published"]);
   assert.ok(jobIds.every((jobId) => jobId.endsWith(":workflow-1")));
   assert.deepEqual(publishedSummary?.nodes?.map((node) => node.id), ["revenue-growth", "cash-flow"]);
   assert.equal(publishedSummary?.managerReview?.status, "complete");
@@ -205,13 +210,13 @@ test("keeps event filings on the compact path without running full-report stages
   const eventFiling = { ...filing, form: "8-K", accessionNumber: "event", items: "2.02" };
   const steps: string[] = [];
   let compactPublished = 0;
-  let modules = 0;
+  let analysisNodes = 0;
   const ops = operations({
     async discover() { return { feed: { ticker: "TESTCO" }, filings: [eventFiling] }; },
     async prepare() { return { key: "TESTCO/event.json", filing: eventFiling }; },
-    async analyzeModule(moduleKey) {
-      modules += 1;
-      return operations().analyzeModule(moduleKey, {} as never, {} as never, {} as never, {} as never);
+    async analyzeNode(spec: SecNodeSpec) {
+      analysisNodes += 1;
+      return operations().analyzeNode(spec, {} as never, {} as never);
     },
     async publishEvent(summary) {
       compactPublished += 1;
@@ -228,7 +233,7 @@ test("keeps event filings on the compact path without running full-report stages
 
   assert.deepEqual(result.analyzed, ["event"]);
   assert.equal(compactPublished, 1);
-  assert.equal(modules, 0);
+  assert.equal(analysisNodes, 0);
   assert.ok(steps.includes("event-summary:event"));
   assert.ok(steps.includes("publish-event:event"));
   assert.equal(steps.some((step) => step.startsWith("manager:event")), false);
@@ -306,8 +311,8 @@ test("publishes analysis-incomplete results as partial with unresolved work expo
 test("treats missing core facts as a hard failure and keeps the last successful report", async () => {
   let published = 0;
   const ops = operations({
-    async analyzeModule(moduleKey) {
-      return { moduleKey, facts: [], claims: [], memoryCandidates: [], missingFields: [], evidenceCoverage: 0, verificationStatus: "failed" };
+    async getContext() {
+      return { currentPeriodId: "TESTCO:2026-06-30:annual", qoqPeriodId: null, yoyPeriodId: null, history: { registryVersion: "sec-canonical-series.v1", series: [] } };
     },
     async publish() { published += 1; },
   });
@@ -318,73 +323,24 @@ test("treats missing core facts as a hard failure and keeps the last successful 
   assert.equal(published, 0);
 });
 
-test("uses definition hashes to distinguish KPI facts before enforcing units", async () => {
-  const base = operations();
-  const ops = operations({
-    async analyzeModule(moduleKey, ...args) {
-      if (moduleKey !== "segments_and_kpis") return base.analyzeModule(moduleKey, ...args);
-      return {
-        moduleKey,
-        facts: [
-          { metricKey: "business_kpi", value: "60074", unit: "USD millions", currency: "USD", periodScope: "quarter_and_half_year", basis: "management_kpi", evidenceIds: ["ev:kpi"], confidence: "high", sourceLabel: "fact_source_reported", definitionHash: "revenue-hash" },
-          { metricKey: "business_kpi", value: "38", unit: "percent", currency: "", periodScope: "quarter_and_half_year", basis: "management_kpi", evidenceIds: ["ev:kpi"], confidence: "high", sourceLabel: "fact_source_reported", definitionHash: "share-hash" },
-        ],
-        claims: [], memoryCandidates: [], missingFields: [], evidenceCoverage: 1, verificationStatus: "verified",
-      };
-    },
-  });
-
-  const result = await executeSecAnalysisWorkflow({ ticker: "TESTCO", requestedBy: "manual" }, "workflow-kpi-definitions", stepRecorder([]), ops);
+test("accepts one XBRL series carrying a single unit per reporting period", async () => {
+  const result = await executeSecAnalysisWorkflow({ ticker: "TESTCO", requestedBy: "manual" }, "workflow-units-ok", stepRecorder([]), operations());
 
   assert.deepEqual(result.failed, []);
   assert.deepEqual(result.analyzed, [filing.accessionNumber]);
 });
 
-test("still rejects different units for the same KPI definition", async () => {
-  const base = operations();
+test("still rejects two units for the same XBRL series and period", async () => {
   const ops = operations({
-    async analyzeModule(moduleKey, ...args) {
-      if (moduleKey !== "segments_and_kpis") return base.analyzeModule(moduleKey, ...args);
-      return {
-        moduleKey,
-        facts: [
-          { metricKey: "customer_concentration", value: "38", unit: "percent", currency: "", periodScope: "quarter", basis: "management_kpi", evidenceIds: ["ev:kpi"], confidence: "high", sourceLabel: "fact_source_reported", definitionHash: "same-definition" },
-          { metricKey: "customer_concentration", value: "60074", unit: "USD millions", currency: "USD", periodScope: "quarter", basis: "management_kpi", evidenceIds: ["ev:kpi"], confidence: "high", sourceLabel: "fact_source_reported", definitionHash: "same-definition" },
-        ],
-        claims: [], memoryCandidates: [], missingFields: [], evidenceCoverage: 1, verificationStatus: "verified",
-      };
+    async getContext() {
+      return { currentPeriodId: "TESTCO:2026-06-30:annual", qoqPeriodId: null, yoyPeriodId: null, history: xbrlHistory({ seriesId: "revenue", unit: "shares" }) };
     },
   });
 
-  const result = await executeSecAnalysisWorkflow({ ticker: "TESTCO", requestedBy: "manual" }, "workflow-kpi-unit-conflict", stepRecorder([]), ops);
+  const result = await executeSecAnalysisWorkflow({ ticker: "TESTCO", requestedBy: "manual" }, "workflow-unit-conflict", stepRecorder([]), ops);
 
   assert.deepEqual(result.failed, [filing.accessionNumber]);
   assert.deepEqual(result.analyzed, []);
-});
-
-test("degrades one exhausted module to analysis-incomplete and continues with remaining facts", async () => {
-  const base = operations();
-  let published = 0;
-  let analysisStatus = "";
-  let unresolved: string[] = [];
-  const ops = operations({
-    async analyzeModule(moduleKey, ...args) {
-      if (moduleKey === "capital_allocation") throw new Error("provider timeout");
-      return base.analyzeModule(moduleKey, ...args);
-    },
-    async publish(artifact) {
-      published += 1;
-      analysisStatus = artifact.report.dataQuality.analysisStatus ?? "";
-      unresolved = artifact.report.dataQuality.unresolvedQuestions ?? [];
-    },
-  });
-
-  const result = await executeSecAnalysisWorkflow({ ticker: "TESTCO", requestedBy: "manual" }, "workflow-module-partial", stepRecorder([]), ops);
-
-  assert.deepEqual(result.analyzed, [filing.accessionNumber]);
-  assert.equal(published, 1);
-  assert.equal(analysisStatus, "partial");
-  assert.ok(unresolved.includes("module:capital_allocation"));
 });
 
 test("passes the hy3 fallback model to a retried analysis step", async () => {
@@ -392,13 +348,13 @@ test("passes the hy3 fallback model to a retried analysis step", async () => {
   let retriedModel = "";
   const step: WorkflowStepLike = {
     async do<T>(name, callback): Promise<T> {
-      return callback({ attempt: name.endsWith(":capital_allocation") ? 2 : 1 });
+      return callback({ attempt: name.endsWith(":cash-flow") ? 2 : 1 });
     },
   };
   const ops = operations({
-    async analyzeModule(moduleKey, filingArg, prepared, context, router, execution) {
-      if (moduleKey === "capital_allocation") retriedModel = execution?.model ?? "";
-      return base.analyzeModule(moduleKey, filingArg, prepared, context, router);
+    async analyzeNode(spec, filingArg, prepared, brief, round, execution) {
+      if (spec.id === "cash-flow") retriedModel = execution?.model ?? "";
+      return base.analyzeNode(spec, filingArg, prepared, brief, round);
     },
   });
 

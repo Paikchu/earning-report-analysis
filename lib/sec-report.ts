@@ -8,6 +8,7 @@ import {
   type SecSummaryImportance,
   type SecWorkflowEvidence,
 } from "./sec.ts";
+import { normalizeAnalysisFacts } from "./sec-analysis.ts";
 
 const TABLE_OF_CONTENTS_FRACTION = 0.1;
 const MIN_BOLD_SECTION_CHARACTERS = 400;
@@ -168,7 +169,12 @@ function fallbackEvidence(text: string): SecWorkflowEvidence[] {
   }];
 }
 
-export function normalizeSecNodeResult(value: unknown, spec: SecNodeSpec, evidence: SecWorkflowEvidence[]): SecNodeResult {
+export function normalizeSecNodeResult(
+  value: unknown,
+  spec: SecNodeSpec,
+  evidence: SecWorkflowEvidence[],
+  validEvidenceIds: Set<string> = new Set(),
+): SecNodeResult {
   const input = asRecord(value) ?? {};
   const findings = (Array.isArray(input.findings) ? input.findings : []).flatMap((item) => {
     const finding = asRecord(item);
@@ -179,12 +185,14 @@ export function normalizeSecNodeResult(value: unknown, spec: SecNodeSpec, eviden
     return [{ label, detail, importance }];
   }).slice(0, 6);
   const narrative = cleanProse(input.narrative, 4_000);
+  const facts = normalizeAnalysisFacts(input.facts, validEvidenceIds);
   return {
     id: spec.id,
     title: spec.title,
     status: narrative || findings.length ? "complete" : "empty",
     findings,
     narrative,
+    facts,
     evidence: evidence.slice(0, 16),
   };
 }

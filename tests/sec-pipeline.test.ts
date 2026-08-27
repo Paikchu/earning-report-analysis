@@ -3,19 +3,50 @@ import test from "node:test";
 
 import {
   analyzePreparedSecNode,
-  analyzePreparedSecModule,
+  buildPreparedSecBrief,
   discoverSecTicker,
   planPreparedSecFiling,
   prepareSecFiling,
-  routePreparedSecFiling,
   selectWorkflowFilings,
   summarizePreparedSecEvent,
   summarizePreparedSecFiling,
   type SecModelCall,
 } from "../lib/sec-pipeline.ts";
-import { SEC_ANALYSIS_MODULES } from "../lib/sec-analysis.ts";
 import type { SecAnalysisContext } from "../lib/sec-types.ts";
+import type { SecHistorySnapshot } from "../lib/sec-analysis.ts";
 import { SEC_SUMMARY_VERSION, type SecFiling } from "../lib/sec.ts";
+
+function xbrlHistory(current: string, prior?: string): SecHistorySnapshot {
+  const observation = (endDate: string, value: string) => ({
+    observationId: `xbrl:revenue:${endDate}`,
+    seriesId: "revenue" as const,
+    metricKey: "revenue",
+    value,
+    unit: "USD",
+    currency: "USD",
+    basis: "gaap" as const,
+    periodScope: "annual" as const,
+    startDate: endDate,
+    endDate,
+    sourceAccession: "annual",
+    sourceFiledAt: endDate,
+    sourceVersion: "sec-canonical-series.v1",
+    qualityStatus: "validated_xbrl" as const,
+    xbrlConcept: "us-gaap:Revenues",
+  });
+  return {
+    registryVersion: "sec-canonical-series.v1",
+    series: [{
+      seriesId: "revenue",
+      quarters: [],
+      annual: [observation("2026-06-30", current), ...(prior ? [observation("2025-06-30", prior)] : [])],
+    }],
+  };
+}
+
+function analysisContext(periodId: string, history?: SecHistorySnapshot): SecAnalysisContext {
+  return { currentPeriodId: periodId, qoqPeriodId: null, yoyPeriodId: null, history };
+}
 
 const filing: SecFiling = {
   ticker: "MSFT", cik: "0000789019", cikNumber: 789019, companyName: "Microsoft Corp", form: "10-K",
@@ -161,31 +192,7 @@ test("synthesizes one full report from node outputs and verified structured data
     userAgent: "test@example.com",
     fetcher: async () => new Response("<h1>Revenue</h1><p>RAW-FILING-MARKER revenue was $120 million.</p>"),
   });
-  const context: SecAnalysisContext = {
-    currentPeriodId: prepared.periodId,
-    qoqPeriodId: null,
-    yoyPeriodId: null,
-    qoq: {},
-    yoy: {},
-    activeMemory: [],
-  };
-  const modules = SEC_ANALYSIS_MODULES.map((module) => ({
-    moduleKey: module.key,
-    facts: module.key === "performance" ? [{
-      metricKey: "revenue",
-      value: "120",
-      unit: "USDm",
-      basis: "gaap" as const,
-      evidenceIds: [`ev:${prepared.blocks[0].blockId}`],
-      confidence: "high" as const,
-      sourceLabel: "fact_source_reported" as const,
-    }] : [],
-    claims: [],
-    memoryCandidates: [],
-    missingFields: [],
-    evidenceCoverage: 1,
-    verificationStatus: "verified" as const,
-  }));
+  const context = analysisContext(prepared.periodId, xbrlHistory("120", "100"));
   const plan = normalizePlan(prepared.outline[0].id);
   const nodes = [{
     id: "revenue-growth",
@@ -193,6 +200,15 @@ test("synthesizes one full report from node outputs and verified structured data
     status: "complete" as const,
     findings: [{ label: "收入", detail: "收入达到 1.2 亿美元。", importance: "high" as const }],
     narrative: "收入增长由核心业务需求推动。",
+    facts: [{
+      metricKey: "segment_revenue",
+      value: "60",
+      unit: "USDm",
+      basis: "gaap" as const,
+      evidenceIds: [`ev:${prepared.blocks[0].blockId}`],
+      confidence: "high" as const,
+      sourceLabel: "fact_source_reported" as const,
+    }],
     evidence: [],
   }];
   let synthesisPayload: unknown;
@@ -200,8 +216,6 @@ test("synthesizes one full report from node outputs and verified structured data
   const result = await summarizePreparedSecFiling(
     prepared,
     context,
-    { selections: [], source: "fallback", status: "partial", missingModules: [] },
-    modules,
     async (stage, system, payload) => {
       assert.equal(stage, "synthesis");
       synthesisSystem = system;
@@ -211,7 +225,11 @@ test("synthesizes one full report from node outputs and verified structured data
         bullets: completeBullets(),
         analystView: "增长质量取决于需求能否延续。",
         report: completeReport(),
-        keyMetrics: [{ metricKey: "revenue", currentValue: "120", evidenceIds: [`ev:${prepared.blocks[0].blockId}`] }],
+        keyMetrics: [
+          { metricKey: "revenue", currentValue: "120", evidenceIds: [`ev:${prepared.blocks[0].blockId}`] },
+          { metricKey: "segment_revenue", currentValue: "60", evidenceIds: [`ev:${prepared.blocks[0].blockId}`] },
+          { metricKey: "invented_metric", currentValue: "9", evidenceIds: [`ev:${prepared.blocks[0].blockId}`] },
+        ],
         changes: { qoq: [], yoy: [], guidance: [], risks: [] },
         dataQuality: { coverage: 1, warnings: [] },
       };
@@ -226,6 +244,8 @@ test("synthesizes one full report from node outputs and verified structured data
   assert.equal(result.summary.nodes?.length, 1);
   assert.doesNotMatch(JSON.stringify(synthesisPayload), /RAW-FILING-MARKER/);
   assert.match(synthesisSystem, /JSON/i);
+  assert.deepEqual(result.artifact.report.keyMetrics.map((metric) => metric.metricKey), ["revenue", "segment_revenue"]);
+  assert.equal(result.artifact.report.keyMetrics.find((metric) => metric.metricKey === "revenue")?.yoy, "+20.0%");
 });
 
 function normalizePlan(sectionId: string) {
@@ -241,30 +261,23 @@ function normalizePlan(sectionId: string) {
   };
 }
 
-test("runs routing, module extraction and full synthesis as separate operations", async () => {
+test("keeps XBRL as the numeric source and folds node facts into the same report", async () => {
   const prepared = await prepareSecFiling(filing, {
     userAgent: "test@example.com",
     fetcher: async () => new Response("<h1>Item 8. Financial Statements</h1><p>Revenue was 120 USDm.</p>"),
   });
-  const context: SecAnalysisContext = {
-    currentPeriodId: prepared.periodId,
-    qoqPeriodId: null,
-    yoyPeriodId: null,
-    qoq: {},
-    yoy: {},
-    activeMemory: [],
-  };
+  const context = analysisContext(prepared.periodId, xbrlHistory("120", "100"));
   const calls: string[] = [];
+  let nodePayload: Record<string, unknown> = {};
   const model: SecModelCall = async (stage, _system, payload) => {
     calls.push(stage);
-    if (stage === "router") {
-      return { selections: SEC_ANALYSIS_MODULES.map((module) => ({ moduleKey: module.key, blockIds: [prepared.blocks[0].blockId], confidence: 1 })) };
-    }
-    if (stage.startsWith("module:")) {
-      const current = payload as { current: { evidence: Array<{ evidenceId: string }> } };
+    if (stage.startsWith("node:")) {
+      nodePayload = payload as Record<string, unknown>;
+      const evidence = (payload as { evidence: Array<{ evidenceId: string }> }).evidence;
       return {
-        facts: [{ metricKey: "revenue", value: "120", unit: "USDm", basis: "gaap", sourceLabel: "fact_source_reported", evidenceIds: [current.current.evidence[0].evidenceId], confidence: "high" }],
-        claims: [], memoryCandidates: [], missingFields: [], evidenceCoverage: 1,
+        findings: [{ label: "收入", detail: "收入达到 1.2 亿美元。", importance: "high" }],
+        narrative: "收入增长由核心业务需求推动。",
+        facts: [{ metricKey: "segment_revenue", value: "60", unit: "USDm", basis: "gaap", sourceLabel: "fact_source_reported", evidenceIds: [evidence[0].evidenceId], confidence: "high" }],
       };
     }
     return {
@@ -278,51 +291,28 @@ test("runs routing, module extraction and full synthesis as separate operations"
     };
   };
 
-  const router = await routePreparedSecFiling(prepared, context, model);
-  const modules = await Promise.all(SEC_ANALYSIS_MODULES.map((module) => analyzePreparedSecModule(module.key, prepared, context, router, model)));
   const plan = normalizePlan(prepared.outline[0].id);
-  const nodes = [{
-    id: "revenue-growth",
-    title: "收入增长",
-    status: "complete" as const,
-    findings: [{ label: "收入", detail: "收入达到 1.2 亿美元。", importance: "high" as const }],
-    narrative: "收入增长由核心业务需求推动。",
-    evidence: [],
-  }];
-  const result = await summarizePreparedSecFiling(prepared, context, router, modules, model, new Date("2026-08-05T00:00:00.000Z"), plan, nodes);
+  const brief = buildPreparedSecBrief(prepared, context);
+  const node = await analyzePreparedSecNode(prepared, plan.nodes[0], model, brief);
+  const result = await summarizePreparedSecFiling(prepared, context, model, new Date("2026-08-05T00:00:00.000Z"), plan, [node], brief);
 
-  assert.equal(modules.every((module) => module.verificationStatus === "verified"), true);
+  assert.deepEqual(calls, ["node:revenue-growth", "synthesis"]);
+  assert.deepEqual(nodePayload.xbrlFacts, brief.currentFacts);
+  assert.ok(Array.isArray(nodePayload.allowedMetricKeys));
+  assert.deepEqual(node.facts?.map((fact) => fact.metricKey), ["segment_revenue"]);
   assert.equal(result.artifact.report.dataQuality.verificationStatus, "partial");
-  assert.deepEqual(calls, ["router", ...SEC_ANALYSIS_MODULES.map((module) => `module:${module.key}`), "synthesis"]);
+  assert.deepEqual(result.artifact.comparisons.map((comparison) => comparison.comparisonType), ["yoy"]);
+  assert.equal(result.artifact.comparisons[0].priorPeriodId, "MSFT:2025-06-30:annual");
 });
 
-test("rejects a model-reported verified summary when module extraction found no facts", async () => {
+test("rejects a model-reported verified summary when no fact source produced a metric", async () => {
   const prepared = await prepareSecFiling(filing, {
     userAgent: "test@example.com",
     fetcher: async () => new Response("<h1>Item 8. Financial Statements</h1><p>No usable values.</p>"),
   });
-  const context: SecAnalysisContext = {
-    currentPeriodId: prepared.periodId,
-    qoqPeriodId: null,
-    yoyPeriodId: null,
-    qoq: {},
-    yoy: {},
-    activeMemory: [],
-  };
-  const modules = SEC_ANALYSIS_MODULES.map((module) => ({
-    moduleKey: module.key,
-    facts: [],
-    claims: [],
-    memoryCandidates: [],
-    missingFields: [...module.fields],
-    evidenceCoverage: 0,
-    verificationStatus: "failed" as const,
-  }));
   const result = await summarizePreparedSecFiling(
     prepared,
-    context,
-    { selections: [], source: "fallback", status: "failed", missingModules: SEC_ANALYSIS_MODULES.map((module) => module.key) },
-    modules,
+    analysisContext(prepared.periodId),
     async () => ({
       headline: "verified",
       bullets: completeBullets(),
@@ -353,17 +343,10 @@ test("rejects an incomplete synthesis before it can replace the last successful 
     userAgent: "test@example.com",
     fetcher: async () => new Response("<h1>Revenue</h1><p>Revenue increased 18%.</p>"),
   });
-  const modules = SEC_ANALYSIS_MODULES.map((module) => ({
-    moduleKey: module.key,
-    facts: module.key === "performance" ? [{ metricKey: "revenue", value: "120", unit: "USDm", evidenceIds: [`ev:${prepared.blocks[0].blockId}`] }] : [],
-    claims: [], memoryCandidates: [], missingFields: [], evidenceCoverage: 1, verificationStatus: "verified" as const,
-  }));
 
   await assert.rejects(summarizePreparedSecFiling(
     prepared,
-    { currentPeriodId: prepared.periodId, qoqPeriodId: null, yoyPeriodId: null, qoq: {}, yoy: {}, activeMemory: [] },
-    { selections: [], source: "fallback", status: "partial", missingModules: [] },
-    modules,
+    analysisContext(prepared.periodId, xbrlHistory("120")),
     async () => ({
       headline: "收入增长",
       bullets: [{ label: "收入", detail: "收入增长。", importance: "high" }],
@@ -382,18 +365,11 @@ test("accepts complete synthesis reports outside the former length range", async
     userAgent: "test@example.com",
     fetcher: async () => new Response("<h1>Revenue</h1><p>Revenue increased 18%.</p>"),
   });
-  const modules = SEC_ANALYSIS_MODULES.map((module) => ({
-    moduleKey: module.key,
-    facts: module.key === "performance" ? [{ metricKey: "revenue", value: "120", unit: "USDm", evidenceIds: [`ev:${prepared.blocks[0].blockId}`] }] : [],
-    claims: [], memoryCandidates: [], missingFields: [], evidenceCoverage: 1, verificationStatus: "verified" as const,
-  }));
 
   for (const report of ["简明但完整的研报正文。", "长篇研报正文。".repeat(1_000)]) {
     const result = await summarizePreparedSecFiling(
       prepared,
-      { currentPeriodId: prepared.periodId, qoqPeriodId: null, yoyPeriodId: null, qoq: {}, yoy: {}, activeMemory: [] },
-      { selections: [], source: "fallback", status: "partial", missingModules: [] },
-      modules,
+      analysisContext(prepared.periodId, xbrlHistory("120")),
       async () => ({
         headline: "收入增长",
         bullets: completeBullets(),

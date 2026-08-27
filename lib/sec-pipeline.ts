@@ -1,27 +1,17 @@
 import {
   buildFilingBlocks,
-  buildModulePayload,
   buildPeriodIdentity,
-  buildRouterPayload,
   buildSecAnalysisBrief,
-  compareSnapshots,
-  fallbackRouterResult,
   hashString,
-  normalizeModuleAnalysis,
   normalizeManagerReview,
   normalizePublishedReport,
-  normalizeRouterResult,
-  SEC_ANALYSIS_MODULES,
   SEC_ANALYSIS_SCHEMA_VERSION,
+  type AnalysisFact,
   type ComparisonResult,
   type FilingBlock,
   type ManagerReview,
-  type ModuleAnalysis,
-  type RouterResult,
-  type SecAnalysisModuleKey,
   type SecAnalysisBrief,
   type SecHistorySnapshot,
-  type SnapshotSummary,
 } from "./sec-analysis.ts";
 import {
   buildSecNodeInput,
@@ -138,6 +128,14 @@ export async function planPreparedSecFiling(prepared: PreparedSecFiling, model: 
   return normalizeSecNodePlan(value, prepared.outline);
 }
 
+export function selectNodeBlocks(prepared: PreparedSecFiling, sections: Array<{ id: string; title: string; text: string }>): FilingBlock[] {
+  const selectedText = sections.map((section) => section.text).join("\n");
+  return prepared.blocks
+    .filter((block) => selectedText.includes(block.body.slice(0, Math.min(120, block.body.length)))
+      || sections.some((section) => section.title === block.heading))
+    .slice(0, 12);
+}
+
 export async function analyzePreparedSecNode(
   prepared: PreparedSecFiling,
   spec: SecNodeSpec,
@@ -146,8 +144,10 @@ export async function analyzePreparedSecNode(
 ): Promise<SecNodeResult> {
   const input = buildSecNodeInput(spec, prepared.outline, prepared.document.text);
   if (!input.sections.length) {
-    return { id: spec.id, title: spec.title, status: "empty", findings: [], narrative: "", evidence: [] };
+    return { id: spec.id, title: spec.title, status: "empty", findings: [], narrative: "", facts: [], evidence: [] };
   }
+  const nodeBlocks = selectNodeBlocks(prepared, input.sections);
+  const evidenceIds = nodeBlocks.map((block) => `ev:${block.blockId}`);
   try {
     const value = await model(`node:${spec.id}`, nodeSystemPrompt(), {
       ticker: prepared.filing.ticker,
@@ -158,15 +158,12 @@ export async function analyzePreparedSecNode(
       acceptanceCriteria: spec.acceptanceCriteria ?? [],
       history: brief ? brief.history.series.filter((series) => spec.historySeriesIds?.includes(series.seriesId)) : [],
       memory: brief ? brief.memoryItems.filter((item) => spec.memoryIds?.includes(item.memoryId)) : [],
-      currentFacts: brief?.currentFacts ?? [],
+      xbrlFacts: brief?.currentFacts ?? [],
+      allowedMetricKeys: brief?.allowedMetricKeys ?? [],
+      evidence: nodeBlocks.map((block) => ({ evidenceId: `ev:${block.blockId}`, heading: block.heading, preview: block.preview })),
       sections: input.sections.map(({ id, title, text, compressed }) => ({ id, title, text, compressed })),
     });
-    const normalized = normalizeSecNodeResult(value, spec, input.evidence);
-    const selectedText = input.sections.map((section) => section.text).join("\n");
-    const evidenceIds = prepared.blocks
-      .filter((block) => selectedText.includes(block.body.slice(0, Math.min(120, block.body.length))) || input.sections.some((section) => section.title === block.heading))
-      .map((block) => `ev:${block.blockId}`)
-      .slice(0, 12);
+    const normalized = normalizeSecNodeResult(value, spec, input.evidence, new Set(evidenceIds));
     return { ...normalized, evidenceIds };
   } catch (error) {
     return {
@@ -175,7 +172,9 @@ export async function analyzePreparedSecNode(
       status: "error",
       findings: [],
       narrative: "",
+      facts: [],
       evidence: input.evidence,
+      evidenceIds,
       error: error instanceof Error ? error.message : "node failed",
     };
   }
@@ -184,7 +183,6 @@ export async function analyzePreparedSecNode(
 export function buildPreparedSecBrief(
   prepared: PreparedSecFiling,
   context: SecAnalysisContext,
-  moduleAnalyses: ModuleAnalysis[],
   history: SecHistorySnapshot = context.history ?? { registryVersion: "sec-canonical-series.v1", series: [] },
 ): SecAnalysisBrief {
   return buildSecAnalysisBrief({
@@ -192,11 +190,10 @@ export function buildPreparedSecBrief(
     filingId: prepared.filing.accessionNumber,
     periodId: prepared.periodId,
     periodScope: prepared.periodScope,
-    modules: moduleAnalyses,
+    reportDate: prepared.filing.reportDate,
     history,
     memorySummary: context.companyMemorySummary ?? "",
     memoryItems: context.memoryItems ?? [],
-    validEvidenceIds: new Set(prepared.blocks.map((block) => `ev:${block.blockId}`)),
   });
 }
 
@@ -250,50 +247,9 @@ export async function summarizePreparedSecEvent(
   return summary;
 }
 
-export async function routePreparedSecFiling(prepared: PreparedSecFiling, context: SecAnalysisContext, model: SecModelCall): Promise<RouterResult> {
-  const priorModules = [
-    ...Object.entries(context.qoq).map(([moduleKey, prior]) => prior ? { moduleKey: moduleKey as SecAnalysisModuleKey, periodId: prior.periodId } : null),
-    ...Object.entries(context.yoy).map(([moduleKey, prior]) => prior ? { moduleKey: moduleKey as SecAnalysisModuleKey, periodId: prior.periodId } : null),
-  ].filter((item): item is { moduleKey: SecAnalysisModuleKey; periodId: string } => Boolean(item));
-  const value = await model("router", routerSystemPrompt(), buildRouterPayload(prepared.filing, prepared.blocks, priorModules));
-  const router = normalizeRouterResult(value, prepared.blocks);
-  return router.selections.length ? router : fallbackRouterResult(prepared.blocks);
-}
-
-export async function analyzePreparedSecModule(
-  moduleKey: SecAnalysisModuleKey,
-  prepared: PreparedSecFiling,
-  context: SecAnalysisContext,
-  router: RouterResult,
-  model: SecModelCall,
-): Promise<ModuleAnalysis> {
-  const moduleDefinition = SEC_ANALYSIS_MODULES.find((item) => item.key === moduleKey);
-  if (!moduleDefinition) throw new Error(`Unknown SEC analysis module: ${moduleKey}`);
-  const selection = router.selections.find((item) => item.moduleKey === moduleKey);
-  const selectedIds = new Set(selection?.blockIds ?? []);
-  const currentBlocks = prepared.blocks.filter((block) => selectedIds.has(block.blockId)).slice(0, 8);
-  if (!currentBlocks.length) {
-    return { moduleKey, facts: [], claims: [], memoryCandidates: [], missingFields: [...moduleDefinition.fields], evidenceCoverage: 0, verificationStatus: "failed" };
-  }
-  const payload = buildModulePayload({
-    moduleKey,
-    filing: prepared.filing,
-    currentBlocks,
-    currentFacts: [],
-    qoq: context.qoq[moduleKey],
-    yoy: context.yoy[moduleKey],
-    activeMemory: context.activeMemory,
-    precomputedDeltas: [],
-  });
-  const value = await model(`module:${moduleKey}`, moduleSystemPrompt(moduleKey), payload);
-  return normalizeModuleAnalysis(value, moduleKey, new Set(prepared.blocks.map((block) => `ev:${block.blockId}`)));
-}
-
 export async function summarizePreparedSecFiling(
   prepared: PreparedSecFiling,
   context: SecAnalysisContext,
-  router: RouterResult,
-  moduleAnalyses: ModuleAnalysis[],
   model: SecModelCall,
   now = new Date(),
   plan?: SecNodePlan,
@@ -301,25 +257,12 @@ export async function summarizePreparedSecFiling(
   brief?: SecAnalysisBrief,
   review?: ManagerReview,
 ): Promise<{ artifact: SecAnalysisArtifact; summary: SecFilingSummary }> {
-  const snapshots = moduleAnalyses.map((analysis): SnapshotSummary => ({
-    ticker: prepared.filing.ticker,
-    periodId: prepared.periodId,
-    filingId: prepared.filing.accessionNumber,
-    moduleKey: analysis.moduleKey,
-    facts: analysis.facts,
-    claims: analysis.claims,
-    memoryCandidates: analysis.memoryCandidates,
-    missingFields: analysis.missingFields,
-    evidenceCoverage: analysis.evidenceCoverage,
-    verificationStatus: analysis.verificationStatus,
-  }));
-  const qoqResults = snapshots.flatMap((snapshot) => context.qoq[snapshot.moduleKey] ? [compareSnapshots("qoq", snapshot, context.qoq[snapshot.moduleKey]!)] : []);
-  const yoyResults = snapshots.flatMap((snapshot) => context.yoy[snapshot.moduleKey] ? [compareSnapshots("yoy", snapshot, context.yoy[snapshot.moduleKey]!)] : []);
-  const qoq = mergeComparisons("qoq", qoqResults, prepared.periodId, context.qoqPeriodId);
-  const yoy = mergeComparisons("yoy", yoyResults, prepared.periodId, context.yoyPeriodId);
   const usableNodes = nodes.filter((node) => node.status === "complete" && (node.narrative || node.findings.length));
   if (!plan?.nodes.length || !usableNodes.length) throw new Error("Manager produced no usable analysis nodes");
-  const finalBrief = brief ?? buildPreparedSecBrief(prepared, context, moduleAnalyses);
+  const finalBrief = brief ?? buildPreparedSecBrief(prepared, context);
+  const nodeFacts = nodes.flatMap((node) => node.facts ?? []);
+  const qoq = comparisonFromBrief("qoq", finalBrief, context.qoqPeriodId);
+  const yoy = comparisonFromBrief("yoy", finalBrief, context.yoyPeriodId);
   const finalReview = review ?? {
     status: "complete" as const,
     questions: plan.nodes.map((node) => ({ questionId: node.id, status: "answered" as const, explanation: "Completed before v3 review injection" })),
@@ -328,8 +271,9 @@ export async function summarizePreparedSecFiling(
   const validEvidenceIds = [...new Set(prepared.blocks.map((block) => `ev:${block.blockId}`))].sort();
   const summaryPayload = {
     brief: finalBrief,
-    nodeAnalyses: usableNodes.map(({ id, title, findings, narrative }) => ({ id, title, findings, narrative })),
+    nodeAnalyses: usableNodes.map(({ id, title, findings, narrative, facts }) => ({ id, title, findings, narrative, facts: facts ?? [] })),
     managerReview: finalReview,
+    allowedMetricKeys: [...new Set([...finalBrief.allowedMetricKeys, ...nodeFacts.map((fact) => fact.metricKey)])],
     outputSchema: {
       headline: "string",
       bullets: "[{label, detail, importance}]",
@@ -347,7 +291,7 @@ export async function summarizePreparedSecFiling(
     reportVersion: `${SEC_ANALYSIS_SCHEMA_VERSION}:${hashString(JSON.stringify(summaryPayload))}`,
   }, new Set(validEvidenceIds));
   report = addDeterministicDeltas(report, qoq, yoy);
-  report = enforceDeterministicReportQuality(report, moduleAnalyses);
+  report = enforceDeterministicReportQuality(report, finalBrief, nodeFacts);
   report = {
     ...report,
     dataQuality: {
@@ -364,12 +308,8 @@ export async function summarizePreparedSecFiling(
     periodId: prepared.periodId,
     periodScope: prepared.periodScope,
     blocks: prepared.blocks,
-    moduleAnalyses,
-    snapshots,
-    comparisons: [...qoqResults, ...yoyResults],
-    memoryCandidates: moduleAnalyses.flatMap((analysis) => analysis.memoryCandidates),
+    comparisons: [qoq, yoy].filter((comparison): comparison is ComparisonResult => Boolean(comparison)),
     report,
-    router,
     brief: finalBrief,
     managerReview: finalReview,
     validEvidenceIds,
@@ -421,19 +361,10 @@ function parseTickerMap(payload: unknown): Record<string, SecCompany> {
   return result;
 }
 
-function routerSystemPrompt() {
-  return [
-    "You are a filing section router.",
-    "Select relevant blocks based on the data needs, not exact heading names.",
-    "Only return block IDs present in the supplied inventory. Do not extract facts yet.",
-    "Return JSON: {\"selections\":[{\"moduleKey\":\"\",\"blockIds\":[],\"expectedFields\":[],\"priority\":\"high|medium|low\",\"needFullText\":true,\"confidence\":0.0}]}",
-  ].join("\n");
-}
-
 function managerSystemPrompt() {
   return [
     "你是负责美股财报研究的主编，正在为一份 SEC filing 编排分析任务。",
-    "输入包含已核验事实、历史序列、预计算比较、Company Memory、缺失字段、证据质量和章节标题，不含 filing 正文。",
+    "输入包含已核验的 XBRL 本期事实、历史序列、预计算的同比环比、Company Memory、缺失序列和章节标题，不含 filing 正文。",
     "只选择能改变投资判断的实质主题，通常输出 6 至 12 个节点；结构很短时可以更少，不要按 Item 顺序逐项复述。",
     "优先覆盖经营驱动、分部与 KPI、利润率与成本、现金流与资本投入、资本配置、管理层展望和重大风险，但只在标题清单确有对应章节时选择。",
     "并购、减值、重大诉讼、分部重组、会计政策变更等特殊事项应独立成节点。",
@@ -459,10 +390,14 @@ function nodeSystemPrompt() {
   return [
     "你是美股基本面研究团队的分段分析师，只处理主编交给你的一个任务。",
     "只使用给定的英文 SEC 原文章节，不引入外部信息，不编造数字。",
+    "xbrlFacts 是已核验的本期 XBRL 数值，直接引用即可，不要从正文重新抠这些数字，也不要与之矛盾。",
     "回答 question；数字必须带口径和比较期间，并说明变化方向及驱动原因。",
     "原文无法回答时将 narrative 留空，不要输出空泛措辞。",
     "findings 输出 2 至 6 条具体事实；narrative 输出 300 至 700 字简体中文，可用空行分段，不要使用 Markdown。",
-    "输出 JSON：{\"findings\":[{\"label\":\"\",\"detail\":\"\",\"importance\":\"high|medium|low\"}],\"narrative\":\"\"}",
+    "facts 只收录 xbrlFacts 之外、正文明确披露的结构化数值：分部收入与利润率、管理层 KPI、指引数字、一次性项目。",
+    "metricKey 优先使用 allowedMetricKeys 中的值；属于管理层自定义 KPI 时使用 business_kpi 并在 definition 写出该 KPI 的原文定义。",
+    "每条 fact 必须给出 unit、basis 和至少一个来自 evidence 清单的 evidenceId；无法引用证据的数值直接省略。",
+    "输出 JSON：{\"findings\":[{\"label\":\"\",\"detail\":\"\",\"importance\":\"high|medium|low\"}],\"narrative\":\"\",\"facts\":[{\"metricKey\":\"\",\"definition\":\"\",\"value\":\"\",\"unit\":\"\",\"currency\":\"\",\"periodScope\":\"\",\"basis\":\"gaap|non_gaap|management_kpi|derived\",\"sourceLabel\":\"fact_source_reported|management_adjusted|derived_calculation\",\"confidence\":\"high|medium|low\",\"evidenceIds\":[\"\"]}]}",
   ].join("\n");
 }
 
@@ -476,19 +411,11 @@ function eventSummarySystemPrompt() {
   ].join("\n");
 }
 
-function moduleSystemPrompt(moduleKey: SecAnalysisModuleKey) {
-  return [
-    "You are a financial filing module analyst.",
-    `Module: ${moduleKey}.`,
-    "Use only the supplied evidence. Preserve GAAP, non-GAAP, management KPI, units, periods, and definitions.",
-    "Every fact and claim must cite one or more evidence IDs.",
-    "Return one JSON object using the exact outputSchema keys and types in the user payload.",
-  ].join("\n");
-}
-
 function synthesisSystemPrompt() {
   return [
     "你是美股基本面研究团队的总编。输入只有最终 SecAnalysisBrief、完成节点和 Manager Review，不含 filing 原文。",
+    "brief.currentFacts 与 brief.comparisons 来自 SEC XBRL，是本期数字和同比环比的唯一权威来源；节点的 facts 用于补充分部、KPI 与指引。",
+    "keyMetrics 的 metricKey 必须来自 allowedMetricKeys，超出列表的指标会被丢弃。",
     "完整研报的章节逻辑必须来自 nodeAnalyses，不要重新套用固定主题模板。",
     "数字、同比、环比和证据只能使用结构化输入中已有的值；不得编造或把 qoq 与 yoy 混写。",
     "report 输出 900 至 1,600 字简体中文正文，按投资者阅读逻辑用空行分段，不要使用 Markdown 标题或项目符号。",
@@ -498,21 +425,36 @@ function synthesisSystemPrompt() {
   ].join("\n");
 }
 
-function mergeComparisons(
+function comparisonFromBrief(
   comparisonType: "qoq" | "yoy",
-  results: ComparisonResult[],
-  currentPeriodId: string,
-  priorPeriodId: string | null,
+  brief: SecAnalysisBrief,
+  knownPriorPeriodId: string | null,
 ): ComparisonResult | null {
+  const entries = brief.comparisons.filter((comparison) => comparison.comparisonType === comparisonType);
+  const priorPeriodId = knownPriorPeriodId ?? priorPeriodIdFromEntries(brief, entries);
   if (!priorPeriodId) return null;
   return {
     comparisonType,
-    currentPeriodId,
+    currentPeriodId: brief.periodId,
     priorPeriodId,
-    comparability: results.some((result) => result.comparability === "full") ? "full" : results.length ? "partial" : "not_comparable",
-    metricDeltas: results.flatMap((result) => result.metricDeltas),
-    narrativeDeltas: results.flatMap((result) => result.narrativeDeltas),
+    comparability: entries.length ? "full" : "not_comparable",
+    metricDeltas: entries.map((entry) => ({
+      metricKey: entry.seriesId,
+      currentValue: entry.currentValue,
+      priorValue: entry.priorValue,
+      percentageDelta: entry.percentageDelta,
+      comparable: true,
+      reason: undefined,
+    })),
+    narrativeDeltas: [],
   };
+}
+
+function priorPeriodIdFromEntries(brief: SecAnalysisBrief, entries: SecAnalysisBrief["comparisons"]): string | null {
+  const counts = new Map<string, number>();
+  for (const entry of entries) counts.set(entry.priorEndDate, (counts.get(entry.priorEndDate) ?? 0) + 1);
+  const [priorEndDate] = [...counts.entries()].sort((left, right) => right[1] - left[1] || right[0].localeCompare(left[0]))[0] ?? [];
+  return priorEndDate ? `${brief.ticker}:${priorEndDate}:${brief.periodScope}` : null;
 }
 
 function addDeterministicDeltas(report: SecAnalysisArtifact["report"], qoq: ComparisonResult | null, yoy: ComparisonResult | null) {
@@ -532,19 +474,26 @@ function addDeterministicDeltas(report: SecAnalysisArtifact["report"], qoq: Comp
   };
 }
 
-function enforceDeterministicReportQuality(report: SecAnalysisArtifact["report"], moduleAnalyses: ModuleAnalysis[]): SecAnalysisArtifact["report"] {
-  const factKeys = new Set(moduleAnalyses.flatMap((module) => module.facts.map((fact) => fact.metricKey)));
-  const informativeModules = moduleAnalyses.filter((module) => module.facts.length + module.claims.length > 0).length;
-  const keyMetrics = report.keyMetrics.filter((metric) => factKeys.has(metric.metricKey));
-  const coverage = moduleAnalyses.length ? informativeModules / moduleAnalyses.length : 0;
-  const verificationStatus = !factKeys.size || !keyMetrics.length
+function enforceDeterministicReportQuality(
+  report: SecAnalysisArtifact["report"],
+  brief: SecAnalysisBrief,
+  nodeFacts: AnalysisFact[],
+): SecAnalysisArtifact["report"] {
+  const allowed = new Map<string, AnalysisFact>();
+  for (const fact of [...brief.currentFacts, ...nodeFacts]) allowed.set(fact.metricKey, fact);
+  const keyMetrics = report.keyMetrics.filter((metric) => allowed.has(metric.metricKey));
+  const coverage = brief.allowedMetricKeys.length
+    ? brief.currentFacts.length / brief.allowedMetricKeys.length
+    : 0;
+  const verificationStatus = !allowed.size || !keyMetrics.length
     ? "failed"
-    : factKeys.size >= 3 && keyMetrics.length >= 2 && informativeModules >= 3
+    : brief.currentFacts.length >= 3 && keyMetrics.length >= 2
       ? "verified"
       : "partial";
   const warnings = [...report.dataQuality.warnings];
   if (verificationStatus === "failed") warnings.push("No evidence-grounded financial metrics passed deterministic verification");
   else if (verificationStatus === "partial") warnings.push("Verified evidence coverage is below the full-report threshold");
+  if (brief.missingSeriesIds.length) warnings.push(`XBRL has no current-period value for: ${brief.missingSeriesIds.join(", ")}`);
   return {
     ...report,
     keyMetrics,

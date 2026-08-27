@@ -3,20 +3,23 @@ export const SEC_ANALYSIS_PROMPT_VERSION = "sec-analysis-prompt.v3";
 export const MAX_REPAIR_ROUNDS = 2;
 export const MAX_REPAIR_NODES_PER_ROUND = 4;
 
-export type SecCanonicalSeriesId =
-  | "revenue"
-  | "gross_profit"
-  | "gross_margin"
-  | "operating_income"
-  | "operating_margin"
-  | "net_income"
-  | "diluted_eps"
-  | "operating_cash_flow"
-  | "capex"
-  | "free_cash_flow"
-  | "cash"
-  | "debt"
-  | "shares";
+export const SEC_CANONICAL_SERIES_IDS = [
+  "revenue",
+  "gross_profit",
+  "gross_margin",
+  "operating_income",
+  "operating_margin",
+  "net_income",
+  "diluted_eps",
+  "operating_cash_flow",
+  "capex",
+  "free_cash_flow",
+  "cash",
+  "debt",
+  "shares",
+] as const;
+
+export type SecCanonicalSeriesId = typeof SEC_CANONICAL_SERIES_IDS[number];
 
 export type HistoricalObservation = {
   observationId: string;
@@ -70,13 +73,12 @@ export type CompanyMemoryItem = {
 };
 
 export type SecAnalysisBrief = {
-  version: "sec-analysis-brief.v1";
+  version: "sec-analysis-brief.v2";
   ticker: string;
   filingId: string;
   periodId: string;
   periodScope: "quarter" | "annual";
   currentFacts: AnalysisFact[];
-  currentClaims: AnalysisClaim[];
   history: SecHistorySnapshot;
   comparisons: Array<{
     seriesId: SecCanonicalSeriesId;
@@ -92,12 +94,8 @@ export type SecAnalysisBrief = {
   }>;
   companyMemorySummary: string;
   memoryItems: CompanyMemoryItem[];
-  missingFields: string[];
-  evidenceQuality: {
-    coverage: number;
-    invalidEvidenceIds: string[];
-    failedModules: SecAnalysisModuleKey[];
-  };
+  allowedMetricKeys: SecCanonicalSeriesId[];
+  missingSeriesIds: SecCanonicalSeriesId[];
 };
 
 export type SecNodeSpecV2 = {
@@ -129,81 +127,6 @@ export type ManagerReview = {
   stopReason: "complete" | "max_rounds" | "no_progress" | "analysis_incomplete" | null;
 };
 
-export const SEC_DATA_NEEDS = {
-  coreFacts: [
-    "revenue",
-    "revenue_growth",
-    "gross_profit",
-    "gross_margin",
-    "operating_income",
-    "operating_margin",
-    "net_income",
-    "eps",
-    "operating_cash_flow",
-    "capex",
-    "free_cash_flow",
-    "cash",
-    "debt",
-    "segment_revenue",
-    "segment_margin",
-    "guidance",
-    "capital_return",
-  ],
-  narrativeNeeds: [
-    "growth_driver",
-    "volume_price_mix",
-    "demand_and_backlog",
-    "ai_and_cloud",
-    "cost_and_margin_driver",
-    "capex_and_capacity",
-    "liquidity",
-    "material_risk",
-    "accounting_change",
-    "internal_control",
-    "subsequent_event",
-  ],
-  comparisons: ["qoq", "yoy", "guidance_revision", "disclosure_change"],
-} as const;
-
-export const SEC_ANALYSIS_MODULES = [
-  {
-    key: "performance",
-    fields: ["revenue", "revenue_growth", "gross_profit", "operating_income", "net_income", "eps"],
-    questions: ["What changed in reported performance?", "What explains the direction and pace of growth?"],
-  },
-  {
-    key: "segments_and_kpis",
-    fields: ["segment_revenue", "segment_margin", "business_kpi", "backlog"],
-    questions: ["Which segment or KPI drove the difference?", "Did the issuer change the definition or grouping?"],
-  },
-  {
-    key: "margins_and_costs",
-    fields: ["gross_margin", "operating_margin", "cost_driver", "one_off"],
-    questions: ["What moved margins?", "Is the movement recurring or below-the-line?"],
-  },
-  {
-    key: "cash_and_capital",
-    fields: ["operating_cash_flow", "capex", "free_cash_flow", "cash", "debt", "capital_return"],
-    questions: ["How did cash conversion and capital intensity change?", "Did liquidity or capital allocation change?"],
-  },
-  {
-    key: "guidance_and_tone",
-    fields: ["guidance", "outlook", "management_claim"],
-    questions: ["Did guidance change for the same target period?", "Did management tone strengthen or weaken?"],
-  },
-  {
-    key: "risks_and_controls",
-    fields: ["material_risk", "accounting_change", "internal_control", "subsequent_event"],
-    questions: ["What risks or controls were added, changed, resolved, or merely repeated?"],
-  },
-  {
-    key: "capital_allocation",
-    fields: ["buyback", "dividend", "debt_repayment", "acquisition", "capex_commitment"],
-    questions: ["What changed in capital allocation and future commitments?"],
-  },
-] as const;
-
-export type SecAnalysisModuleKey = typeof SEC_ANALYSIS_MODULES[number]["key"];
 export type SecComparisonType = "qoq" | "yoy" | "guidance_revision" | "disclosure_change";
 
 export function buildPeriodIdentity(ticker: string, form: string, reportDate: string): { periodId: string; periodScope: "quarter" | "annual" } {
@@ -226,22 +149,6 @@ export type FilingBlock = {
   numericDensity: number;
   tableCount: number;
   contentHash: string;
-};
-
-export type RouterSelection = {
-  moduleKey: SecAnalysisModuleKey;
-  blockIds: string[];
-  expectedFields: string[];
-  priority: "high" | "medium" | "low";
-  needFullText: boolean;
-  confidence: number;
-};
-
-export type RouterResult = {
-  selections: RouterSelection[];
-  source: "model" | "fallback";
-  status: "complete" | "partial" | "failed";
-  missingModules: SecAnalysisModuleKey[];
 };
 
 export type AnalysisFact = {
@@ -275,41 +182,6 @@ export type MemoryCandidate = AnalysisClaim & {
   memoryType: "guidance" | "risk" | "commitment" | "definition" | "driver" | "one_off";
   firstSeenPeriod?: string;
   expectedResolutionPeriod?: string;
-};
-
-export type ModuleAnalysis = {
-  moduleKey: SecAnalysisModuleKey;
-  facts: AnalysisFact[];
-  claims: AnalysisClaim[];
-  memoryCandidates: MemoryCandidate[];
-  missingFields: string[];
-  evidenceCoverage: number;
-  verificationStatus: "verified" | "partial" | "failed";
-};
-
-export type SnapshotSummary = {
-  ticker: string;
-  periodId: string;
-  filingId: string;
-  moduleKey: SecAnalysisModuleKey;
-  facts: AnalysisFact[];
-  claims: AnalysisClaim[];
-  memoryCandidates: MemoryCandidate[];
-  missingFields: string[];
-  evidenceCoverage: number;
-  verificationStatus: ModuleAnalysis["verificationStatus"];
-};
-
-export type PriorSnapshotContext = {
-  periodId: string;
-  moduleKey: SecAnalysisModuleKey;
-  facts: AnalysisFact[];
-  claims: AnalysisClaim[];
-  activeMemory: Array<Pick<MemoryCandidate, "topicKey" | "statement" | "memoryType" | "materialityScore" | "confidence" | "evidenceIds"> & {
-    firstSeenPeriod: string;
-    lastConfirmedPeriod: string;
-    status: string;
-  }>;
 };
 
 export type ComparisonResult = {
@@ -366,58 +238,62 @@ export type PublishedSecReport = {
   };
 };
 
+export const SEC_CURRENT_PERIOD_TOLERANCE_DAYS = 10;
+
 export function buildSecAnalysisBrief(args: {
   ticker: string;
   filingId: string;
   periodId: string;
   periodScope: "quarter" | "annual";
-  modules: ModuleAnalysis[];
+  reportDate: string;
   history: SecHistorySnapshot;
   memorySummary: string;
   memoryItems: CompanyMemoryItem[];
-  validEvidenceIds: Set<string>;
 }): SecAnalysisBrief {
-  const currentFacts = args.modules.flatMap((module) => module.facts);
-  const currentClaims = args.modules.flatMap((module) => module.claims);
-  const suppliedEvidence = [...currentFacts, ...currentClaims].flatMap((item) => item.evidenceIds);
-  const invalidEvidenceIds = [...new Set(suppliedEvidence.filter((id) => !args.validEvidenceIds.has(id)))].sort();
-  const validCitations = suppliedEvidence.filter((id) => args.validEvidenceIds.has(id)).length;
+  const currentFacts: AnalysisFact[] = [];
   const comparisons: SecAnalysisBrief["comparisons"] = [];
-  for (const fact of currentFacts) {
-    const seriesId = canonicalSeriesId(fact.metricKey);
-    if (!seriesId) continue;
-    const series = args.history.series.find((item) => item.seriesId === seriesId);
-    const currentEndDate = periodEnd(args.periodId);
-    const observations = (args.periodScope === "annual" ? series?.annual ?? [] : series?.quarters ?? []).filter((item) => item.endDate < currentEndDate);
+  const missingSeriesIds: SecCanonicalSeriesId[] = [];
+  for (const series of args.history.series) {
+    const observations = args.periodScope === "annual" ? series.annual : series.quarters;
+    const current = observations.find((item) =>
+      item.endDate <= args.reportDate && dateDistanceDays(item.endDate, args.reportDate) <= SEC_CURRENT_PERIOD_TOLERANCE_DAYS);
+    if (!current) {
+      missingSeriesIds.push(series.seriesId);
+      continue;
+    }
+    currentFacts.push(factFromObservation(current));
+    const earlier = observations.filter((item) => item.endDate < current.endDate && item.unit === current.unit && item.basis === current.basis);
+    const priors = {
+      qoq: args.periodScope === "annual" ? undefined : earlier[0],
+      yoy: earlier.find((item) => {
+        const distance = dateDistanceDays(item.endDate, current.endDate);
+        return args.periodScope === "annual" ? distance >= 300 && distance <= 800 : distance >= 300 && distance <= 450;
+      }),
+    } as const;
     for (const comparisonType of ["qoq", "yoy"] as const) {
-      const prior = comparisonType === "qoq"
-        ? observations[0]
-        : observations.find((item) => dateDistanceDays(item.endDate, currentEndDate) >= 300 && dateDistanceDays(item.endDate, currentEndDate) <= 450);
-      if (!prior || fact.unit !== prior.unit || (fact.currency ?? "") !== (prior.currency ?? "") || fact.basis !== prior.basis) continue;
-      const currentNumber = numericValue(fact.value);
-      const priorNumber = numericValue(prior.value);
+      const prior = priors[comparisonType];
+      if (!prior) continue;
       comparisons.push({
-        seriesId,
+        seriesId: series.seriesId,
         comparisonType,
-        currentValue: fact.value,
+        currentValue: current.value,
         priorValue: prior.value,
-        percentageDelta: currentNumber !== null && priorNumber !== null && priorNumber !== 0 ? String((currentNumber - priorNumber) / Math.abs(priorNumber)) : undefined,
-        unit: fact.unit,
-        currency: fact.currency,
-        basis: fact.basis,
-        currentEndDate,
+        percentageDelta: percentageDelta(current.value, prior.value),
+        unit: current.unit,
+        currency: current.currency,
+        basis: current.basis,
+        currentEndDate: current.endDate,
         priorEndDate: prior.endDate,
       });
     }
   }
   return {
-    version: "sec-analysis-brief.v1",
+    version: "sec-analysis-brief.v2",
     ticker: args.ticker,
     filingId: args.filingId,
     periodId: args.periodId,
     periodScope: args.periodScope,
     currentFacts,
-    currentClaims,
     history: {
       registryVersion: args.history.registryVersion,
       series: args.history.series.map((series) => ({ ...series, quarters: series.quarters.slice(0, 8), annual: series.annual.slice(0, 5) })),
@@ -425,13 +301,32 @@ export function buildSecAnalysisBrief(args: {
     comparisons,
     companyMemorySummary: args.memorySummary.slice(0, 2_500),
     memoryItems: args.memoryItems.filter((item) => item.status === "active" || item.status === "provisional" || (item.status === "stale" && item.duePeriod)).slice(0, 20),
-    missingFields: [...new Set(args.modules.flatMap((module) => module.missingFields))].sort(),
-    evidenceQuality: {
-      coverage: suppliedEvidence.length ? validCitations / suppliedEvidence.length : 0,
-      invalidEvidenceIds,
-      failedModules: args.modules.filter((module) => module.verificationStatus === "failed").map((module) => module.moduleKey),
-    },
+    allowedMetricKeys: [...SEC_CANONICAL_SERIES_IDS],
+    missingSeriesIds: [...new Set(missingSeriesIds)].sort(),
   };
+}
+
+function factFromObservation(observation: HistoricalObservation): AnalysisFact {
+  return {
+    factId: observation.observationId,
+    metricKey: observation.seriesId,
+    value: observation.value,
+    unit: observation.unit,
+    currency: observation.currency,
+    periodScope: observation.periodScope,
+    basis: observation.basis === "derived" ? "derived" : "gaap",
+    evidenceIds: [`xbrl:${observation.observationId}`],
+    confidence: "high",
+    sourceLabel: observation.basis === "derived" ? "derived_calculation" : "fact_source_reported",
+    definitionHash: observation.xbrlConcept ?? observation.derivationFormula,
+  };
+}
+
+function percentageDelta(current: string, prior: string): string | undefined {
+  const currentNumber = numericValue(current);
+  const priorNumber = numericValue(prior);
+  if (currentNumber === null || priorNumber === null || priorNumber === 0) return undefined;
+  return String((currentNumber - priorNumber) / Math.abs(priorNumber));
 }
 
 export function normalizeManagerReview(value: unknown, validNodeIds: Set<string>, validSectionIds: Set<string>): ManagerReview {
@@ -534,219 +429,34 @@ export function buildFilingBlocks(text: string, accessionNumber: string): Filing
   });
 }
 
-export function buildRouterPayload(
-  filing: { ticker: string; form: string; filingDate: string; reportDate: string; accessionNumber: string },
-  blocks: FilingBlock[],
-  priorModules: Array<{ moduleKey: SecAnalysisModuleKey; periodId: string }>,
-) {
-  const inventoryBlocks = blocks.length <= 240
-    ? blocks
-    : [...blocks.slice(0, 60), ...[...blocks].sort((left, right) => right.numericDensity - left.numericDensity).slice(0, 140), ...blocks.slice(-40)]
-      .filter((block, index, all) => all.findIndex((item) => item.blockId === block.blockId) === index);
-  return {
-    task: "Select filing blocks for financial analysis. Choose only block IDs from this filing.",
-    filing,
-    dataNeeds: SEC_DATA_NEEDS,
-    modules: SEC_ANALYSIS_MODULES,
-    priorModules,
-    inventory: inventoryBlocks.map((item) => ({
-      blockId: item.blockId,
-      ordinal: item.ordinal,
-      heading: item.heading,
-      headingPath: item.headingPath,
-      elementType: item.elementType,
-      preview: item.preview,
-      tokenCount: item.tokenCount,
-      numericDensity: item.numericDensity,
-      tableCount: item.tableCount,
-      contentHash: item.contentHash,
-    })),
-    outputSchema: {
-      selections: "[{moduleKey, blockIds, expectedFields, priority, needFullText, confidence}]",
-    },
-  };
-}
-
-export function normalizeRouterResult(value: unknown, blocks: FilingBlock[]): RouterResult {
-  const root = asRecord(value);
-  const validIds = new Set(blocks.map((block) => block.blockId));
-  const moduleKeys = new Set<SecAnalysisModuleKey>(SEC_ANALYSIS_MODULES.map((module) => module.key));
-  const rawSelections = Array.isArray(root?.selections) ? root.selections : [];
-  const normalizedSelections = rawSelections.flatMap((raw): RouterSelection[] => {
-    const item = asRecord(raw);
-    const moduleKey = String(item?.moduleKey ?? "") as SecAnalysisModuleKey;
-    if (!moduleKeys.has(moduleKey)) return [];
-    const blockIds = Array.isArray(item?.blockIds)
-      ? item.blockIds.map(String).filter((blockId) => validIds.has(blockId)).slice(0, 16)
-      : [];
-    if (!blockIds.length) return [];
-    const priority = item?.priority === "high" || item?.priority === "low" ? item.priority : "medium";
-    const confidence = clamp(Number(item?.confidence ?? 0), 0, 1);
-    return [{
-      moduleKey,
-      blockIds,
-      expectedFields: Array.isArray(item?.expectedFields) ? item.expectedFields.map(String).slice(0, 20) : [],
-      priority,
-      needFullText: item?.needFullText === true,
-      confidence,
-    }];
-  });
-  const selections = [...normalizedSelections.reduce((grouped, selection) => {
-    const existing = grouped.get(selection.moduleKey);
-    if (!existing) {
-      grouped.set(selection.moduleKey, selection);
-      return grouped;
-    }
-    const priority = existing.priority === "high" || selection.priority === "high"
-      ? "high"
-      : existing.priority === "medium" || selection.priority === "medium" ? "medium" : "low";
-    grouped.set(selection.moduleKey, {
-      moduleKey: selection.moduleKey,
-      blockIds: [...new Set([...existing.blockIds, ...selection.blockIds])].slice(0, 16),
-      expectedFields: [...new Set([...existing.expectedFields, ...selection.expectedFields])].slice(0, 20),
-      priority,
-      needFullText: existing.needFullText || selection.needFullText,
-      confidence: Math.max(existing.confidence, selection.confidence),
-    });
-    return grouped;
-  }, new Map<SecAnalysisModuleKey, RouterSelection>()).values()];
-  const selectedModules = new Set(selections.map((selection) => selection.moduleKey));
-  const missingModules = SEC_ANALYSIS_MODULES.map((module) => module.key).filter((key) => !selectedModules.has(key));
-  return {
-    selections,
-    source: selections.length ? "model" : "fallback",
-    status: selections.length === SEC_ANALYSIS_MODULES.length ? "complete" : selections.length ? "partial" : "failed",
-    missingModules,
-  };
-}
-
-export function fallbackRouterResult(blocks: FilingBlock[]): RouterResult {
-  const ranked = [...blocks].sort((left, right) => right.numericDensity - left.numericDensity || right.tokenCount - left.tokenCount);
-  const blockIds = ranked.slice(0, 18).map((block) => block.blockId);
-  return {
-    source: "fallback",
-    status: blockIds.length ? "partial" : "failed",
-    missingModules: SEC_ANALYSIS_MODULES.map((module) => module.key),
-    selections: blockIds.length ? SEC_ANALYSIS_MODULES.map((module) => ({
-      moduleKey: module.key,
-      blockIds,
-      expectedFields: [...module.fields],
-      priority: "medium" as const,
-      needFullText: false,
-      confidence: 0.2,
-    })) : [],
-  };
-}
-
-export function buildModulePayload(args: {
-  moduleKey: SecAnalysisModuleKey;
-  filing: { ticker: string; form: string; reportDate: string; accessionNumber: string };
-  currentBlocks: FilingBlock[];
-  currentFacts: AnalysisFact[];
-  qoq?: PriorSnapshotContext;
-  yoy?: PriorSnapshotContext;
-  activeMemory: PriorSnapshotContext["activeMemory"];
-  precomputedDeltas: ComparisonResult[];
-}) {
-  const moduleDefinition = SEC_ANALYSIS_MODULES.find((item) => item.key === args.moduleKey);
-  return {
-    task: "Extract verified facts and explain changes. Do not invent unavailable values.",
-    filing: args.filing,
-    module: { key: args.moduleKey, fields: moduleDefinition?.fields ?? [], questions: moduleDefinition?.questions ?? [] },
-    current: {
-      facts: args.currentFacts,
-      evidence: args.currentBlocks.map((block) => ({
-        blockId: block.blockId,
-        evidenceId: `ev:${block.blockId}`,
-        headingPath: block.headingPath,
-        excerpt: block.body.slice(0, 3_200),
-      })),
-    },
-    comparisons: {
-      qoq: compactPriorContext(args.qoq),
-      yoy: compactPriorContext(args.yoy),
-      precomputedDeltas: args.precomputedDeltas,
-    },
-    activeMemory: args.activeMemory.slice(0, 5),
-    outputSchema: {
-      facts: [{
-        metricKey: "specific_snake_case_metric_key",
-        definition: "stable English metric definition without period or value",
-        value: "string",
-        unit: "string",
-        currency: "string",
-        periodScope: "string",
-        basis: "gaap|non_gaap|management_kpi|derived|unknown",
-        evidenceIds: ["ev:<supplied blockId>"],
-        confidence: "high|medium|low",
-        sourceLabel: "fact_source_reported|management_adjusted|derived_calculation|unknown",
-      }],
-      claims: [{
-        topicKey: "string",
-        claimType: "driver|guidance|risk|one_off|accounting|commitment|tone",
-        statement: "string",
-        direction: "positive|negative|mixed|neutral|unknown",
-        horizon: "current|next_period|longer_term|unknown",
-        materialityScore: "number 0-100",
-        confidence: "high|medium|low",
-        evidenceIds: ["ev:<supplied blockId>"],
-      }],
-      memoryCandidates: [],
-      missingFields: ["string"],
-      evidenceCoverage: "number 0-1",
-    },
-    rules: [
-      "Use the exact outputSchema keys and value types.",
-      "Copy evidenceId values exactly from current.evidence; do not return quotes or evidence objects.",
-      "Every fact and claim must cite evidence IDs.",
-      "For business_kpi fields, never return business_kpi; use a specific snake_case metricKey and a stable English definition without period names, dates, or values.",
-      "Put undisclosed field names in missingFields; do not create not_disclosed facts.",
-      "Do not calculate numeric deltas; use precomputed deltas.",
-      "Do not treat not_mentioned as withdrawn.",
-    ],
-  };
-}
-
-export function normalizeModuleAnalysis(value: unknown, moduleKey: SecAnalysisModuleKey, validEvidenceIds: Set<string>): ModuleAnalysis {
-  const root = asRecord(value);
-  const facts = Array.isArray(root?.facts) ? root.facts.flatMap((raw): AnalysisFact[] => {
-    const item = asRecord(raw);
-    const evidenceIds = evidenceList(item?.evidenceIds, validEvidenceIds);
-    const valueText = String(item?.value ?? "").trim();
-    const rawMetricKey = String(item?.metricKey ?? "").trim();
-    const definition = normalizeMetricDefinition(item?.definition);
+export function normalizeAnalysisFacts(value: unknown, validEvidenceIds: Set<string>): AnalysisFact[] {
+  const raw = Array.isArray(value) ? value : [];
+  return raw.flatMap((item): AnalysisFact[] => {
+    const fact = asRecord(item);
+    const evidenceIds = evidenceList(fact?.evidenceIds, validEvidenceIds);
+    const valueText = String(fact?.value ?? "").trim();
+    const rawMetricKey = String(fact?.metricKey ?? "").trim();
+    const definition = normalizeMetricDefinition(fact?.definition);
     const definitionKey = definition.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80);
     const metricKey = rawMetricKey === "business_kpi" && definitionKey ? definitionKey : rawMetricKey;
     if (!metricKey || !valueText || !evidenceIds.length) return [];
-    const basis = item?.basis === "gaap" || item?.basis === "non_gaap" || item?.basis === "management_kpi" || item?.basis === "derived" ? item.basis : "unknown";
-    const sourceLabel = item?.sourceLabel === "fact_source_reported" || item?.sourceLabel === "management_adjusted" || item?.sourceLabel === "derived_calculation" ? item.sourceLabel : "unknown";
-    const unit = String(item?.unit ?? "").slice(0, 30);
-    const currency = /^(?:%|percent|percentage|ratio)$/i.test(unit.trim()) ? "" : String(item?.currency ?? "").slice(0, 8);
+    const basis = fact?.basis === "gaap" || fact?.basis === "non_gaap" || fact?.basis === "management_kpi" || fact?.basis === "derived" ? fact.basis : "unknown";
+    const sourceLabel = fact?.sourceLabel === "fact_source_reported" || fact?.sourceLabel === "management_adjusted" || fact?.sourceLabel === "derived_calculation" ? fact.sourceLabel : "unknown";
+    const unit = String(fact?.unit ?? "").slice(0, 30);
+    const currency = /^(?:%|percent|percentage|ratio)$/i.test(unit.trim()) ? "" : String(fact?.currency ?? "").slice(0, 8);
     return [{
       metricKey,
       value: valueText.slice(0, 80),
       unit,
       currency,
-      periodScope: String(item?.periodScope ?? "").slice(0, 40),
+      periodScope: String(fact?.periodScope ?? "").slice(0, 40),
       basis,
       evidenceIds,
-      confidence: confidence(item?.confidence),
+      confidence: confidence(fact?.confidence),
       sourceLabel,
-      definitionHash: definition ? hashString(definition) : String(item?.definitionHash ?? "").slice(0, 80),
+      definitionHash: definition ? hashString(definition) : undefined,
     }];
-  }) : [];
-  const claims = Array.isArray(root?.claims) ? root.claims.flatMap((raw): AnalysisClaim[] => normalizeClaim(raw, validEvidenceIds)) : [];
-  const memoryCandidates = Array.isArray(root?.memoryCandidates) ? root.memoryCandidates.flatMap((raw): MemoryCandidate[] => {
-    const claim = normalizeClaim(raw, validEvidenceIds)[0];
-    const item = asRecord(raw);
-    if (!claim) return [];
-    const memoryType = item?.memoryType === "guidance" || item?.memoryType === "risk" || item?.memoryType === "commitment" || item?.memoryType === "definition" || item?.memoryType === "one_off" ? item.memoryType : "driver";
-    return [{ ...claim, memoryType, firstSeenPeriod: String(item?.firstSeenPeriod ?? "") || undefined, expectedResolutionPeriod: String(item?.expectedResolutionPeriod ?? "") || undefined }];
-  }) : [];
-  const missingFields = Array.isArray(root?.missingFields) ? root.missingFields.map(String).slice(0, 30) : [];
-  const evidenceCoverage = clamp(Number(root?.evidenceCoverage ?? (facts.length || claims.length ? 1 : 0)), 0, 1);
-  const verificationStatus = evidenceCoverage >= 0.9 ? "verified" : evidenceCoverage > 0 ? "partial" : "failed";
-  return { moduleKey, facts, claims, memoryCandidates, missingFields, evidenceCoverage, verificationStatus };
+  }).slice(0, 24);
 }
 
 function normalizeMetricDefinition(value: unknown): string {
@@ -756,68 +466,6 @@ function normalizeMetricDefinition(value: unknown): string {
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim()
     .slice(0, 240);
-}
-
-export function compareSnapshots(
-  comparisonType: SecComparisonType,
-  current: SnapshotSummary,
-  prior: PriorSnapshotContext,
-): ComparisonResult {
-  const priorFacts = new Map(prior.facts.map((fact) => [`${fact.metricKey}:${fact.unit}:${fact.basis}:${fact.definitionHash ?? ""}`, fact]));
-  const metricDeltas: ComparisonResult["metricDeltas"] = current.facts.flatMap((fact): ComparisonResult["metricDeltas"] => {
-    const match = priorFacts.get(`${fact.metricKey}:${fact.unit}:${fact.basis}:${fact.definitionHash ?? ""}`);
-    if (!match) return [];
-    const currentNumber = numericValue(fact.value);
-    const priorNumber = numericValue(match.value);
-    if (currentNumber === null || priorNumber === null) return [{ metricKey: fact.metricKey, currentValue: fact.value, priorValue: match.value, reason: "non_numeric" }];
-    const absoluteDelta = String(currentNumber - priorNumber);
-    const percentageDelta = priorNumber === 0 ? undefined : String((currentNumber - priorNumber) / Math.abs(priorNumber));
-    return [{ metricKey: fact.metricKey, currentValue: fact.value, priorValue: match.value, absoluteDelta, percentageDelta }];
-  });
-  const priorClaims = new Map(prior.claims.map((claim) => [claim.topicKey, claim]));
-  const currentTopics = new Set(current.claims.map((claim) => claim.topicKey));
-  const narrativeDeltas: ComparisonResult["narrativeDeltas"] = current.claims.map((claim) => {
-    const previous = priorClaims.get(claim.topicKey);
-    const changeType = !previous
-      ? "introduced"
-      : claim.direction !== previous.direction || claim.statement !== previous.statement
-        ? claim.direction === "positive" && previous.direction !== "positive" ? "strengthened" : "weakened"
-        : "reaffirmed";
-    return { topicKey: claim.topicKey, changeType: changeType as ComparisonResult["narrativeDeltas"][number]["changeType"], currentStatement: claim.statement, priorStatement: previous?.statement, evidenceIds: [...new Set([...claim.evidenceIds, ...(previous?.evidenceIds ?? [])])], materialityScore: Math.max(claim.materialityScore, previous?.materialityScore ?? 0) };
-  });
-  for (const previous of prior.claims) {
-    if (!currentTopics.has(previous.topicKey)) narrativeDeltas.push({ topicKey: previous.topicKey, changeType: "not_mentioned", priorStatement: previous.statement, evidenceIds: previous.evidenceIds, materialityScore: previous.materialityScore });
-  }
-  return {
-    comparisonType,
-    currentPeriodId: current.periodId,
-    priorPeriodId: prior.periodId,
-    comparability: metricDeltas.length || narrativeDeltas.length ? "full" : "not_comparable",
-    metricDeltas,
-    narrativeDeltas,
-  };
-}
-
-export function buildSummaryPayload(args: {
-  ticker: string;
-  periodId: string;
-  moduleSnapshots: SnapshotSummary[];
-  qoq: ComparisonResult | null;
-  yoy: ComparisonResult | null;
-}) {
-  return {
-    task: "Compose the front-end report from verified module snapshots. Do not add facts.",
-    ticker: args.ticker,
-    periodId: args.periodId,
-    moduleSnapshots: args.moduleSnapshots,
-    comparisons: { qoq: args.qoq, yoy: args.yoy },
-    outputSchema: {
-      headline: "string",
-      keyMetrics: "[{metricKey,currentValue,qoq,yoy,status,evidenceIds}]",
-      changes: "{qoq,yoy,guidance,risks}",
-      dataQuality: "{coverage,verificationStatus,warnings}",
-    },
-  };
 }
 
 export function normalizePublishedReport(
@@ -883,16 +531,6 @@ function normalizeClaim(value: unknown, validEvidenceIds: Set<string>): Analysis
   }];
 }
 
-function compactPriorContext(value: PriorSnapshotContext | undefined) {
-  if (!value) return null;
-  return {
-    periodId: value.periodId,
-    facts: value.facts.slice(0, 30),
-    claims: value.claims.slice(0, 8).map((claim) => ({ ...claim, statement: claim.statement.slice(0, 240) })),
-    activeMemory: value.activeMemory.slice(0, 5),
-  };
-}
-
 function evidenceList(value: unknown, validEvidenceIds: Set<string>): string[] {
   if (!Array.isArray(value)) return [];
   const ids = value.map(String).filter(Boolean);
@@ -936,10 +574,6 @@ function canonicalSeriesId(metricKey: string): SecCanonicalSeriesId | null {
 function canonicalSeriesIds(value: unknown): SecCanonicalSeriesId[] {
   if (!Array.isArray(value)) return [];
   return [...new Set(value.map(String).map(canonicalSeriesId).filter((item): item is SecCanonicalSeriesId => Boolean(item)))].slice(0, 12);
-}
-
-function periodEnd(periodId: string): string {
-  return periodId.split(":")[1] ?? "";
 }
 
 function dateDistanceDays(left: string, right: string): number {

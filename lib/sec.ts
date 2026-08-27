@@ -1,4 +1,4 @@
-import type { ManagerReview, PublishedSecReport, SecNodeSpecV2 } from "./sec-analysis.ts";
+import type { AnalysisFact, ManagerReview, PublishedSecReport, SecNodeSpecV2 } from "./sec-analysis.ts";
 
 export const SEC_SUMMARY_VERSION = 5;
 
@@ -60,6 +60,7 @@ export type SecNodeResult = {
   status: "complete" | "empty" | "error";
   findings: SecSummaryBullet[];
   narrative: string;
+  facts?: AnalysisFact[];
   evidence: SecWorkflowEvidence[];
   evidenceIds?: string[];
   error?: string;

@@ -2,10 +2,8 @@ import type { SecFiling, SecFilingSummary, SecFilingWithSummary } from "./sec.ts
 import {
   buildPeriodIdentity,
   SEC_ANALYSIS_PROMPT_VERSION,
-  SEC_ANALYSIS_SCHEMA_VERSION,
   type CompanyMemoryItem,
   type HistoricalObservation,
-  type PriorSnapshotContext,
   type PublishedSecReport,
   type SecHistorySnapshot,
 } from "./sec-analysis.ts";
@@ -302,8 +300,6 @@ export class D1SecRepository implements SecRepository {
       `).bind(filing.ticker, filing.reportDate).first<{ periodId: string }>())?.periodId ?? null
       : null;
     const yoyPeriodId = await this.findYearAgoPeriod(filing.ticker, filing.reportDate, periodScope);
-    const qoq = qoqPeriodId ? await this.loadSnapshots(qoqPeriodId, filing.ticker) : {};
-    const yoy = yoyPeriodId ? await this.loadSnapshots(yoyPeriodId, filing.ticker) : {};
     const activeMemoryRows = await this.database.prepare(`
       SELECT memory_id AS memoryId, module_key AS moduleKey, topic_key AS topicKey, statement,
         memory_type AS memoryType, materiality_score AS materialityScore,
@@ -377,19 +373,6 @@ export class D1SecRepository implements SecRepository {
       currentPeriodId: periodId,
       qoqPeriodId,
       yoyPeriodId,
-      qoq,
-      yoy,
-      activeMemory: activeMemoryRows.results.map((row) => ({
-        topicKey: row.topicKey,
-        statement: row.statement,
-        memoryType: row.memoryType,
-        materialityScore: row.materialityScore,
-        confidence: row.confidence,
-        evidenceIds: parseJson<string[]>(row.evidenceIds) ?? [],
-        firstSeenPeriod: row.firstSeenPeriod,
-        lastConfirmedPeriod: row.lastConfirmedPeriod,
-        status: row.status,
-      })),
       history,
       companyMemorySummary: (thread?.summary ?? buildCompanyMemorySummary(memoryItems)).slice(0, 2_500),
       memoryItems,
@@ -490,83 +473,6 @@ export class D1SecRepository implements SecRepository {
       `).bind(`ev:${block.blockId}`, filing.accessionNumber, block.blockId, `block:${block.ordinal}`, block.body.slice(0, 900), block.contentHash).run();
     }
 
-    for (const snapshot of artifact.snapshots) {
-      const snapshotId = `${snapshot.periodId}:${snapshot.moduleKey}:${hashJson(snapshot)}`;
-      await this.database.prepare(`
-        INSERT INTO sec_module_snapshots (
-          snapshot_id, ticker, period_id, filing_id, module_key, input_hash,
-          schema_version, model_version, prompt_version, payload,
-          evidence_coverage, verification_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(snapshot_id) DO UPDATE SET payload = excluded.payload,
-          evidence_coverage = excluded.evidence_coverage,
-          verification_status = excluded.verification_status
-      `).bind(
-        snapshotId,
-        filing.ticker,
-        snapshot.periodId,
-        snapshot.filingId,
-        snapshot.moduleKey,
-        hashJson(snapshot),
-        SEC_ANALYSIS_SCHEMA_VERSION,
-        "runtime-model",
-        SEC_ANALYSIS_PROMPT_VERSION,
-        JSON.stringify(snapshot),
-        Math.round(snapshot.evidenceCoverage * 100),
-        snapshot.verificationStatus,
-      ).run();
-
-      for (const fact of snapshot.facts) {
-        const factId = `${snapshot.periodId}:${fact.metricKey}:${hashJson(fact)}`;
-        const dimensions = { periodScope: fact.periodScope ?? "", definitionHash: fact.definitionHash ?? "" };
-        const dimensionsHash = hashJson(dimensions);
-        await this.database.prepare(`
-          INSERT INTO sec_facts (
-            fact_id, filing_id, period_id, metric_key, series_id,
-            dimensions_hash, dimensions, value_decimal, raw_value, unit,
-            currency, basis, evidence_label, xbrl_concept, context_ref,
-            derivation_formula, evidence_id, quality_status, observation_start,
-            observation_end, source_filed_at, source_accession, source_version
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?, NULL, ?, ?, ?, ?)
-          ON CONFLICT(period_id, series_id, dimensions_hash, basis) DO UPDATE SET
-            filing_id = excluded.filing_id,
-            value_decimal = excluded.value_decimal,
-            raw_value = excluded.raw_value,
-            unit = excluded.unit,
-            currency = excluded.currency,
-            evidence_label = excluded.evidence_label,
-            derivation_formula = excluded.derivation_formula,
-            evidence_id = excluded.evidence_id,
-            quality_status = excluded.quality_status,
-            observation_end = excluded.observation_end,
-            source_filed_at = excluded.source_filed_at,
-            source_accession = excluded.source_accession,
-            source_version = excluded.source_version
-        `).bind(
-          factId,
-          filing.accessionNumber,
-          snapshot.periodId,
-          fact.metricKey,
-          fact.metricKey,
-          dimensionsHash,
-          JSON.stringify(dimensions),
-          fact.value,
-          fact.value,
-          fact.unit,
-          fact.currency ?? "",
-          fact.basis,
-          fact.sourceLabel,
-          fact.basis === "derived" ? "model-derived" : "model-extracted",
-          fact.evidenceIds[0] ?? "",
-          fact.sourceLabel === "fact_source_reported" ? "verified" : "pending_fact_check",
-          filing.reportDate,
-          filing.filingDate,
-          filing.accessionNumber,
-          SEC_ANALYSIS_SCHEMA_VERSION,
-        ).run();
-      }
-    }
-
     for (const comparison of artifact.comparisons) {
       const comparisonId = `${comparison.currentPeriodId}:${comparison.priorPeriodId}:${comparison.comparisonType}`;
       await this.database.prepare(`
@@ -590,9 +496,7 @@ export class D1SecRepository implements SecRepository {
 
     const runTime = new Date().toISOString();
     const stages = [
-      { stage: "router", input: artifact.router, status: artifact.router.status, outputR2Key: artifact.artifactKeys?.router },
-      ...artifact.moduleAnalyses.map((analysis) => ({ stage: `module:${analysis.moduleKey}`, input: analysis, status: analysis.verificationStatus, outputR2Key: artifact.artifactKeys?.[`module:${analysis.moduleKey}`] })),
-      ...(artifact.brief ? [{ stage: "brief", input: artifact.brief, status: artifact.brief.evidenceQuality.invalidEvidenceIds.length ? "failed" : "complete", outputR2Key: artifact.artifactKeys?.brief }] : []),
+      ...(artifact.brief ? [{ stage: "brief", input: artifact.brief, status: artifact.brief.missingSeriesIds.length ? "partial" : "complete", outputR2Key: artifact.artifactKeys?.brief }] : []),
       ...(artifact.artifactKeys?.plan ? [{ stage: "manager-plan", input: artifact.artifactKeys.plan, status: "complete", outputR2Key: artifact.artifactKeys.plan }] : []),
       ...(artifact.artifactKeys?.nodes ? [{ stage: "nodes", input: artifact.artifactKeys.nodes, status: artifact.managerReview?.status ?? "complete", outputR2Key: artifact.artifactKeys.nodes }] : []),
       ...(artifact.managerReview ? [{ stage: "manager-review", input: artifact.managerReview, status: artifact.managerReview.status, outputR2Key: artifact.artifactKeys?.["manager-review"] }] : []),
@@ -882,26 +786,6 @@ export class D1SecRepository implements SecRepository {
     `).bind(ticker, reportDate, reportDate).first<{ periodId: string }>())?.periodId ?? null;
   }
 
-  private async loadSnapshots(periodId: string, ticker: string): Promise<Partial<Record<import("./sec-analysis.ts").SecAnalysisModuleKey, PriorSnapshotContext>>> {
-    const rows = await this.database.prepare(`
-      SELECT module_key AS moduleKey, payload
-      FROM sec_module_snapshots
-      WHERE ticker = ? AND period_id = ? AND verification_status IN ('verified', 'partial')
-    `).bind(ticker, periodId).all<{ moduleKey: string; payload: string }>();
-    const result: Partial<Record<import("./sec-analysis.ts").SecAnalysisModuleKey, PriorSnapshotContext>> = {};
-    for (const row of rows.results) {
-      const payload = parseJson<PriorSnapshotContext & { moduleKey: string }>(row.payload);
-      if (!payload) continue;
-      result[row.moduleKey as import("./sec-analysis.ts").SecAnalysisModuleKey] = {
-        periodId,
-        moduleKey: row.moduleKey as import("./sec-analysis.ts").SecAnalysisModuleKey,
-        facts: payload.facts ?? [],
-        claims: payload.claims ?? [],
-        activeMemory: [],
-      };
-    }
-    return result;
-  }
 }
 
 function parseJson<T>(value: string): T | null {

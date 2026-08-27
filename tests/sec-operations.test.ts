@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { SecAnalysisArtifact, SecAnalysisContext } from "../lib/sec-types.ts";
+import type { SecAnalysisArtifact } from "../lib/sec-types.ts";
 import type { SecFiling, SecNodeSpec } from "../lib/sec.ts";
 import { callWorkerSecModel, createSecPipelineOperations, type SecPipelineEnv } from "../workers/sec-cron/operations.ts";
 import { modelExecutionForAttempt, retryDelayForAttempt } from "../workers/sec-cron/retry-policy.ts";
@@ -46,52 +46,6 @@ test("sends an explicit fallback model override to B.ai", async () => {
   assert.equal(requestedModel, "hy3");
 });
 
-test("module stages read compact R2 slices after routing instead of reparsing the full filing", async () => {
-  const objects = new Map<string, string>();
-  const bucket = {
-    async get(key: string) {
-      const value = objects.get(key);
-      return value === undefined ? null : { async text() { return value; } };
-    },
-    async put(key: string, value: string) {
-      objects.set(key, value);
-      return {};
-    },
-  };
-  const env = {
-    WEB_APP_ORIGIN: "https://site.test",
-    SEC_REFRESH_KEY: "refresh-key",
-    SEC_USER_AGENT: "test@example.com",
-    AI_API_KEY: "worker-model-secret",
-    SEC_FILINGS: bucket,
-  } as SecPipelineEnv;
-  let modelCalls = 0;
-  const fetcher: typeof fetch = async (input, init) => {
-    const request = new Request(input, init);
-    if (request.url === filing.documentUrl) {
-      return new Response("<h1>Item 8. Financial Statements</h1><p>Revenue was 120 USDm.</p>");
-    }
-    const body = JSON.parse(String(init?.body ?? "{}")) as { messages?: Array<{ content?: string }> };
-    const payload = JSON.parse(body.messages?.[1]?.content ?? "{}") as { current?: { evidence?: Array<{ evidenceId: string }> } };
-    if (modelCalls++ === 0) {
-      const full = JSON.parse(objects.get("filings/MSFT/annual.json") ?? "{}") as { blocks?: Array<{ blockId: string }> };
-      return Response.json({ choices: [{ message: { content: JSON.stringify({ selections: [{ moduleKey: "performance", blockIds: [full.blocks?.[0]?.blockId], confidence: 1 }] }) } }] });
-    }
-    const evidenceId = payload.current?.evidence?.[0]?.evidenceId;
-    return Response.json({ choices: [{ message: { content: JSON.stringify({ facts: [{ metricKey: "revenue", value: "120", unit: "USDm", evidenceIds: [evidenceId] }], evidenceCoverage: 1 }) } }] });
-  };
-  const operations = createSecPipelineOperations(env, fetcher);
-  const context: SecAnalysisContext = { currentPeriodId: "MSFT:2026-06-30:annual", qoqPeriodId: null, yoyPeriodId: null, qoq: {}, yoy: {}, activeMemory: [] };
-  const reference = await operations.prepare(filing);
-  const router = await operations.route(filing, reference, context);
-  objects.delete(reference.key);
-
-  const analysis = await operations.analyzeModule("performance", filing, reference, context, router);
-
-  assert.equal(analysis.facts[0]?.metricKey, "revenue");
-  assert.ok([...objects.keys()].some((key) => key.endsWith("/modules/performance.json")));
-});
-
 test("scheduled analysis does not overlap an already running filing job", async () => {
   const env = {
     WEB_APP_ORIGIN: "https://site.test",
@@ -128,18 +82,17 @@ test("calls B.ai from the workflow worker when its shared AI secret is configure
   const fetcher: typeof fetch = async (input) => {
     const url = String(input);
     requests.push(url);
-    if (url === filing.documentUrl) return new Response("<h1>Revenue</h1><p>Revenue was 120 USDm.</p>");
+    if (url === filing.documentUrl) return new Response("<h1>Item 7. Management Discussion</h1><p>Revenue was 120 USDm.</p>");
     if (url === "https://api.b.ai/v1/chat/completions") {
-      const full = JSON.parse(objects.get("filings/MSFT/annual.json") ?? "{}") as { blocks?: Array<{ blockId: string }> };
-      return Response.json({ choices: [{ message: { content: JSON.stringify({ selections: [{ moduleKey: "performance", blockIds: [full.blocks?.[0]?.blockId], confidence: 1 }] }) } }] });
+      const prepared = JSON.parse(objects.get("filings/MSFT/annual.json") ?? "{}") as { outline?: Array<{ id: string }> };
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ nodes: [{ id: "growth", title: "增长质量", question: "增长由什么驱动？", sectionIds: [prepared.outline?.[0]?.id] }] }) } }] });
     }
     throw new Error(`Unexpected request: ${url}`);
   };
   const operations = createSecPipelineOperations(env, fetcher);
-  const context: SecAnalysisContext = { currentPeriodId: "MSFT:2026-06-30:annual", qoqPeriodId: null, yoyPeriodId: null, qoq: {}, yoy: {}, activeMemory: [] };
   const reference = await operations.prepare(filing);
 
-  await operations.route(filing, reference, context);
+  await operations.plan(filing, reference);
 
   assert.ok(requests.includes("https://api.b.ai/v1/chat/completions"));
   assert.equal(requests.some((url) => url.includes("/api/internal/sec/model")), false);
@@ -219,37 +172,12 @@ test("publishes cited evidence in bounded D1 bridge calls", async () => {
       async put() { return {}; },
     },
   } as SecPipelineEnv;
-  const facts = citedBlocks.map((block, index) => ({
-    metricKey: `metric_${index}`,
-    value: String(index),
-    unit: "USDm",
-    basis: "gaap" as const,
-    evidenceIds: [`ev:${block.blockId}`],
-    confidence: "high" as const,
-    sourceLabel: "fact_source_reported" as const,
-  }));
-  const snapshot = {
-    ticker: "MSFT",
-    periodId: prepared.periodId,
-    filingId: filing.accessionNumber,
-    moduleKey: "performance" as const,
-    facts,
-    claims: [],
-    memoryCandidates: [],
-    missingFields: [],
-    evidenceCoverage: 1,
-    verificationStatus: "verified" as const,
-  };
   const artifact = {
     filing,
     periodId: prepared.periodId,
     periodScope: prepared.periodScope,
     blocks: [],
-    moduleAnalyses: [snapshot],
-    snapshots: [snapshot],
     comparisons: [],
-    memoryCandidates: [],
-    router: { selections: [], source: "fallback" as const, status: "complete" as const, missingModules: [] },
     report: {
       ticker: "MSFT",
       periodId: prepared.periodId,
@@ -268,7 +196,7 @@ test("publishes cited evidence in bounded D1 bridge calls", async () => {
 
   await createSecPipelineOperations(env, fetcher).publish(artifact, null);
 
-  assert.equal(published.length, 6);
+  assert.equal(published.length, 5);
   assert.deepEqual(published.flatMap((body) => body.artifact.blocks.map((block) => block.blockId)), citedBlocks.map((block) => block.blockId));
   assert.ok(published.slice(0, -1).every((body) => body.artifact.report.dataQuality.verificationStatus === "failed"));
   assert.equal(published.at(-1)?.artifact.report.dataQuality.verificationStatus, "verified");

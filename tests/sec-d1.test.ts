@@ -218,7 +218,7 @@ test("replaces a reparsed filing block by its filing ordinal", async () => {
   assert.match(blockStatement, /block_id = excluded\.block_id/);
 });
 
-test("stores same-metric filing facts under distinct reporting-period dimensions", async () => {
+test("stores same-series XBRL observations under distinct reporting-period dimensions", async () => {
   const factWrites: unknown[][] = [];
   const factStatements: string[] = [];
   const database = {
@@ -243,34 +243,36 @@ test("stores same-metric filing facts under distinct reporting-period dimensions
     filingDate: "2026-07-30", reportDate: "2026-06-30", accessionNumber: "acc-1", primaryDocument: "msft.htm",
     description: "Annual report", items: "", documentUrl: "https://sec.test/msft.htm", indexUrl: "https://sec.test/index.htm",
   };
-  const factBase = {
-    metricKey: "revenue", unit: "USD millions", currency: "USD", basis: "gaap" as const,
-    evidenceIds: ["ev:block-1"], confidence: "high" as const, sourceLabel: "fact_source_reported" as const,
-  };
-  const snapshot = {
-    ticker: "MSFT", periodId: "MSFT:2026-06-30:annual", filingId: "acc-1", moduleKey: "performance" as const,
-    facts: [
-      { ...factBase, value: "331839", periodScope: "FY2026" },
-      { ...factBase, value: "281724", periodScope: "FY2025" },
-    ],
-    claims: [], memoryCandidates: [], missingFields: [], evidenceCoverage: 1, verificationStatus: "verified" as const,
-  };
-  const artifact = {
-    filing, periodId: snapshot.periodId, periodScope: "annual" as const, blocks: [],
-    moduleAnalyses: [snapshot], snapshots: [snapshot], comparisons: [], memoryCandidates: [],
-    router: { selections: [], source: "fallback" as const, status: "failed" as const, missingModules: [] },
-    report: {
-      ticker: "MSFT", periodId: snapshot.periodId, reportVersion: "v1", headline: "", keyMetrics: [],
-      changes: { qoq: [], yoy: [], guidance: [], risks: [] },
-      dataQuality: { coverage: 0, verificationStatus: "failed" as const, warnings: [] },
-    },
-  } satisfies SecAnalysisArtifact;
+  const observation = (endDate: string, value: string) => ({
+    observationId: `xbrl:revenue:${endDate}`,
+    seriesId: "revenue" as const,
+    metricKey: "revenue",
+    value,
+    unit: "USD",
+    currency: "USD",
+    basis: "gaap" as const,
+    periodScope: "annual" as const,
+    startDate: `${endDate.slice(0, 4)}-07-01`,
+    endDate,
+    sourceAccession: "acc-1",
+    sourceFiledAt: "2026-07-30",
+    sourceVersion: "sec-canonical-series.v1",
+    qualityStatus: "validated_xbrl" as const,
+    xbrlConcept: "us-gaap:Revenues",
+  });
 
-  await new D1SecRepository(database).saveAnalysis(artifact);
+  await new D1SecRepository(database).saveHistory(filing, {
+    registryVersion: "sec-canonical-series.v1",
+    series: [{
+      seriesId: "revenue",
+      quarters: [],
+      annual: [observation("2026-06-30", "331839"), observation("2025-06-30", "281724")],
+    }],
+  });
 
   assert.equal(factWrites.length, 2);
   assert.notEqual(factWrites[0][5], factWrites[1][5]);
-  assert.deepEqual(factWrites.map((values) => JSON.parse(String(values[6])).periodScope), ["FY2026", "FY2025"]);
+  assert.deepEqual(factWrites.map((values) => JSON.parse(String(values[6])).endDate), ["2026-06-30", "2025-06-30"]);
   assert.ok(factStatements.every((sql) => /ON CONFLICT\(period_id, series_id, dimensions_hash, basis\)/.test(sql)));
 });
 

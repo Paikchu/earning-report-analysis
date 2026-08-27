@@ -2,13 +2,10 @@ import {
   MAX_REPAIR_NODES_PER_ROUND,
   MAX_REPAIR_ROUNDS,
   buildSecAnalysisBrief,
-  SEC_ANALYSIS_MODULES,
   SEC_ANALYSIS_SCHEMA_VERSION,
   unresolvedFingerprint,
   type ManagerRepairTask,
   type ManagerReview,
-  type ModuleAnalysis,
-  type RouterResult,
   type SecAnalysisBrief,
 } from "../../lib/sec-analysis.ts";
 import type {
@@ -109,14 +106,12 @@ export type SecPipelineOperations = {
   shouldAnalyze(filing: SecFiling, requestedBy: SecWorkflowParams["requestedBy"]): Promise<boolean>;
   getContext(filing: SecFiling): Promise<SecAnalysisContext>;
   prepare(filing: SecFiling): Promise<PreparedFilingReference>;
-  route(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, execution?: SecModelExecution): Promise<RouterResult>;
-  analyzeModule(moduleKey: ModuleAnalysis["moduleKey"], filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, router: RouterResult, execution?: SecModelExecution): Promise<ModuleAnalysis>;
-  buildBrief?(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, modules: ModuleAnalysis[]): Promise<SecAnalysisBrief>;
+  buildBrief?(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext): Promise<SecAnalysisBrief>;
   plan(filing: SecFiling, prepared: PreparedFilingReference, brief?: SecAnalysisBrief, execution?: SecModelExecution): Promise<SecNodePlan>;
   analyzeNode(spec: SecNodeSpec, filing: SecFiling, prepared: PreparedFilingReference, brief?: SecAnalysisBrief, round?: number, execution?: SecModelExecution): Promise<SecNodeResult>;
   review?(filing: SecFiling, prepared: PreparedFilingReference, brief: SecAnalysisBrief, plan: SecNodePlan, nodes: SecNodeResult[], round: number, execution?: SecModelExecution): Promise<ManagerReview>;
   summarizeEvent(filing: SecFiling, prepared: PreparedFilingReference, execution?: SecModelExecution): Promise<SecFilingSummary>;
-  summarize(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, router: RouterResult, modules: ModuleAnalysis[], plan: SecNodePlan, nodes: SecNodeResult[], brief?: SecAnalysisBrief, review?: ManagerReview, execution?: SecModelExecution): Promise<{ artifact: SecAnalysisArtifact; summary: SecFilingSummary | null }>;
+  summarize(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, plan: SecNodePlan, nodes: SecNodeResult[], brief?: SecAnalysisBrief, review?: ManagerReview, execution?: SecModelExecution): Promise<{ artifact: SecAnalysisArtifact; summary: SecFilingSummary | null }>;
   publish(artifact: SecAnalysisArtifact, summary: SecFilingSummary | null): Promise<void | { memoryJobId?: string }>;
   enqueueMemory?(jobId: string, ticker: string): Promise<void>;
   publishEvent(summary: SecFilingSummary): Promise<void>;
@@ -171,31 +166,10 @@ export async function executeSecAnalysisWorkflow(
       const context = await step.do(`context:${accession}`, () => operations.getContext(filing));
       await markJobStage(step, operations, baseJob, "prepare");
       const prepared = await step.do(`prepare:${accession}`, () => operations.prepare(filing));
-      await markJobStage(step, operations, baseJob, "router");
-      const router = await step.do(`router:${accession}`, (stepContext) => operations.route(filing, prepared, context, executionFor(stepContext)));
-      await markJobStage(step, operations, baseJob, "modules");
-      const modules = await Promise.all(SEC_ANALYSIS_MODULES.map(async (module) => {
-        try {
-          return await step.do(
-            `module:${accession}:${module.key}`,
-            (stepContext) => operations.analyzeModule(module.key, filing, prepared, context, router, executionFor(stepContext)),
-          );
-        } catch {
-          return {
-            moduleKey: module.key,
-            facts: [],
-            claims: [],
-            memoryCandidates: [],
-            missingFields: [...module.fields],
-            evidenceCoverage: 0,
-            verificationStatus: "failed" as const,
-          };
-        }
-      }));
       await markJobStage(step, operations, baseJob, "brief");
       const brief = await step.do(`brief:${accession}`, async () => operations.buildBrief
-        ? operations.buildBrief(filing, prepared, context, modules)
-        : buildFallbackBrief(filing, context, modules));
+        ? operations.buildBrief(filing, prepared, context)
+        : buildFallbackBrief(filing, context));
       assertBriefCanProceed(brief);
       await markJobStage(step, operations, baseJob, "manager");
       const plan = await step.do(`manager:${accession}`, (stepContext) => operations.plan(filing, prepared, brief, executionFor(stepContext)));
@@ -212,21 +186,9 @@ export async function executeSecAnalysisWorkflow(
           : Promise.resolve(fallbackManagerReview(plan, currentNodes)),
         repair: (task, round, execution) => operations.analyzeNode({ ...task, id: task.targetNodeId }, filing, prepared, brief, round, execution),
       });
-      const managerReview: ManagerReview = brief.evidenceQuality.failedModules.length
-        ? {
-          ...loop.review,
-          status: "partial",
-          unresolvedQuestions: [...new Set([
-            ...loop.review.unresolvedQuestions,
-            ...brief.evidenceQuality.failedModules.map((moduleKey) => `module:${moduleKey}`),
-          ])],
-          stopReason: loop.review.stopReason === "no_progress" || loop.review.stopReason === "max_rounds"
-            ? loop.review.stopReason
-            : "analysis_incomplete",
-        }
-        : loop.review;
+      const managerReview: ManagerReview = loop.review;
       await markJobStage(step, operations, baseJob, "synthesis");
-      const result = await step.do(`synthesis:${accession}`, (stepContext) => operations.summarize(filing, prepared, context, router, modules, plan, loop.nodes, brief, managerReview, executionFor(stepContext)));
+      const result = await step.do(`synthesis:${accession}`, (stepContext) => operations.summarize(filing, prepared, context, plan, loop.nodes, brief, managerReview, executionFor(stepContext)));
       result.artifact.report.dataQuality = {
         ...result.artifact.report.dataQuality,
         analysisStatus: managerReview.status === "complete" ? "complete" : "partial",
@@ -321,31 +283,22 @@ function markJobStage(
   }));
 }
 
-function buildFallbackBrief(filing: SecFiling, context: SecAnalysisContext, modules: ModuleAnalysis[]): SecAnalysisBrief {
+function buildFallbackBrief(filing: SecFiling, context: SecAnalysisContext): SecAnalysisBrief {
   return buildSecAnalysisBrief({
     ticker: filing.ticker,
     filingId: filing.accessionNumber,
     periodId: context.currentPeriodId,
     periodScope: /^(10-K|20-F)/.test(filing.form) ? "annual" : "quarter",
-    modules,
+    reportDate: filing.reportDate,
     history: context.history ?? { registryVersion: "sec-canonical-series.v1", series: [] },
     memorySummary: context.companyMemorySummary ?? "",
     memoryItems: context.memoryItems ?? [],
-    validEvidenceIds: new Set(modules.flatMap((module) => [...module.facts, ...module.claims].flatMap((item) => item.evidenceIds))),
   });
 }
 
 function assertBriefCanProceed(brief: SecAnalysisBrief): void {
-  if (!brief.currentFacts.length) throw new Error("No core facts passed factual verification");
-  if (brief.evidenceQuality.invalidEvidenceIds.length) throw new Error("Brief contains illegal evidence IDs");
+  if (!brief.history.series.length) throw new Error("No core facts passed factual verification");
   const identities = new Map<string, string>();
-  for (const fact of brief.currentFacts) {
-    const key = `${fact.metricKey}:${fact.definitionHash ?? ""}:${fact.periodScope ?? brief.periodId}:${fact.basis}`;
-    const unit = `${fact.unit}:${fact.currency ?? ""}`;
-    const previous = identities.get(key);
-    if (previous && previous !== unit) throw new Error(`Conflicting fact units for ${fact.metricKey}`);
-    identities.set(key, unit);
-  }
   for (const series of brief.history.series) {
     for (const observation of [...series.quarters, ...series.annual]) {
       const key = `history:${series.seriesId}:${observation.periodScope}:${observation.startDate ?? "instant"}:${observation.endDate}:${observation.basis}`;

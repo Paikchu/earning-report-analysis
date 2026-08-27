@@ -3,16 +3,10 @@ import type {
   ComparisonResult,
   CompanyMemoryItem,
   FilingBlock,
-  ModuleAnalysis,
-  MemoryCandidate,
   ManagerReview,
-  PriorSnapshotContext,
   PublishedSecReport,
-  RouterResult,
   SecAnalysisBrief,
   SecHistorySnapshot,
-  SecAnalysisModuleKey,
-  SnapshotSummary,
 } from "./sec-analysis.ts";
 
 export type SecCacheRecord<T> = {
@@ -34,9 +28,6 @@ export type SecAnalysisContext = {
   currentPeriodId: string;
   qoqPeriodId: string | null;
   yoyPeriodId: string | null;
-  qoq: Partial<Record<SecAnalysisModuleKey, PriorSnapshotContext>>;
-  yoy: Partial<Record<SecAnalysisModuleKey, PriorSnapshotContext>>;
-  activeMemory: PriorSnapshotContext["activeMemory"];
   history?: SecHistorySnapshot;
   companyMemorySummary?: string;
   memoryItems?: CompanyMemoryItem[];
@@ -47,12 +38,8 @@ export type SecAnalysisArtifact = {
   periodId: string;
   periodScope: "quarter" | "annual";
   blocks: FilingBlock[];
-  moduleAnalyses: ModuleAnalysis[];
-  snapshots: SnapshotSummary[];
   comparisons: ComparisonResult[];
-  memoryCandidates: MemoryCandidate[];
   report: PublishedSecReport;
-  router: RouterResult;
   brief?: SecAnalysisBrief;
   managerReview?: ManagerReview;
   validEvidenceIds?: string[];

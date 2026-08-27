@@ -1,12 +1,10 @@
 import {
   analyzePreparedSecNode,
-  analyzePreparedSecModule,
   buildPreparedSecBrief,
   discoverSecTicker,
   planPreparedSecFiling,
   prepareSecFiling,
   reviewPreparedSecAnalysis,
-  routePreparedSecFiling,
   summarizePreparedSecEvent,
   summarizePreparedSecFiling,
   type PreparedSecFiling,
@@ -14,13 +12,7 @@ import {
 } from "../../lib/sec-pipeline.ts";
 import type { SecAnalysisArtifact } from "../../lib/sec-types.ts";
 import type { SecFilingSummary, SecNodePlan, SecNodeResult, SecNodeSpec } from "../../lib/sec.ts";
-import {
-  fallbackRouterResult,
-  SEC_ANALYSIS_MODULES,
-  SEC_ANALYSIS_SCHEMA_VERSION,
-  type ManagerReview,
-  type RouterResult,
-} from "../../lib/sec-analysis.ts";
+import { SEC_ANALYSIS_SCHEMA_VERSION, type ManagerReview } from "../../lib/sec-analysis.ts";
 import { normalizeCompanyFacts } from "../../lib/sec-history.ts";
 import { siteHeaders, type SecCronEnv } from "./core.ts";
 import type { SecModelExecution } from "./retry-policy.ts";
@@ -40,8 +32,6 @@ export type SecPipelineEnv = SecCronEnv & {
 };
 
 const PUBLISH_BLOCK_CHUNK_SIZE = 5;
-const PUBLISH_MEMORY_CHUNK_SIZE = 15;
-const PUBLISH_COMPARISON_CHUNK_SIZE = 30;
 
 export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof fetch = fetch): SecPipelineOperations {
   const modelFor = (execution?: SecModelExecution): SecModelCall => async (stage, system, payload) => {
@@ -73,38 +63,11 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       await env.SEC_FILINGS.put(key, JSON.stringify(prepared), { httpMetadata: { contentType: "application/json" } });
       return { key, filing };
     },
-    route: async (_filing, reference, context, execution) => {
-      const prepared = await readPrepared(env.SEC_FILINGS, reference);
-      let router: RouterResult;
-      try {
-        router = await routePreparedSecFiling(prepared, context, modelFor(execution));
-      } catch (error) {
-        if (execution && !execution.finalAttempt) throw error;
-        router = fallbackRouterResult(prepared.blocks);
-      }
-      await Promise.all(SEC_ANALYSIS_MODULES.map(async (module) => {
-        const selected = new Set(router.selections.find((selection) => selection.moduleKey === module.key)?.blockIds ?? []);
-        const slice: PreparedSecFiling = {
-          ...prepared,
-          blocks: prepared.blocks.filter((block) => selected.has(block.blockId)).slice(0, 8),
-          document: { text: "", headings: [] },
-          outline: [],
-        };
-        await env.SEC_FILINGS.put(modulePreparedKey(reference, module.key), JSON.stringify(slice), { httpMetadata: { contentType: "application/json" } });
-      }));
-      await putArtifact(env.SEC_FILINGS, reference, "router", router);
-      return router;
-    },
-    analyzeModule: async (moduleKey, _filing, reference, context, router, execution) => {
-      const result = await analyzePreparedSecModule(moduleKey, await readPrepared(env.SEC_FILINGS, { ...reference, key: modulePreparedKey(reference, moduleKey) }), context, router, modelFor(execution));
-      await putArtifact(env.SEC_FILINGS, reference, `modules/${moduleKey}`, result);
-      return result;
-    },
-    buildBrief: async (filing, reference, context, modules) => {
+    buildBrief: async (filing, reference, context) => {
       const prepared = await readPrepared(env.SEC_FILINGS, reference);
       const history = await fetchCompanyHistory(filing.cik, filing.ticker, env.SEC_USER_AGENT, fetcher).catch(() => context.history ?? { registryVersion: "sec-canonical-series.v1", series: [] });
       const persisted = await sitePost<{ context?: typeof context }>(env, fetcher, "/api/internal/sec/context", { filing, history }).catch(() => ({ context: undefined }));
-      const brief = buildPreparedSecBrief(prepared, persisted.context ?? { ...context, history }, modules, history);
+      const brief = buildPreparedSecBrief(prepared, persisted.context ?? { ...context, history }, history);
       await putArtifact(env.SEC_FILINGS, reference, "brief", brief);
       return brief;
     },
@@ -124,10 +87,10 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       return result;
     },
     summarizeEvent: async (_filing, reference, execution) => summarizePreparedSecEvent(await readPrepared(env.SEC_FILINGS, reference), modelFor(execution)),
-    summarize: async (_filing, reference, context, router, modules, plan, nodes, brief, review, execution) => {
+    summarize: async (_filing, reference, context, plan, nodes, brief, review, execution) => {
       await putArtifact(env.SEC_FILINGS, reference, "nodes/final", nodes);
       if (review) await putArtifact(env.SEC_FILINGS, reference, "manager-review/final", review);
-      const result = await summarizePreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), context, router, modules, modelFor(execution), new Date(), plan, nodes, brief, review);
+      const result = await summarizePreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), context, modelFor(execution), new Date(), plan, nodes, brief, review);
       const synthesisKey = await putArtifact(env.SEC_FILINGS, reference, "synthesis", result);
       return { ...result, artifact: { ...result.artifact, blocks: [], artifactKeys: collectArtifactKeys(reference, synthesisKey) } };
     },
@@ -139,10 +102,7 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       const deferredArtifact: SecAnalysisArtifact = {
         ...artifact,
         blocks: [],
-        moduleAnalyses: [],
-        snapshots: [],
         comparisons: [],
-        memoryCandidates: [],
         report: {
           ...artifact.report,
           dataQuality: { ...artifact.report.dataQuality, verificationStatus: "failed" },
@@ -151,17 +111,8 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       for (const blocks of chunks(citedBlocks, PUBLISH_BLOCK_CHUNK_SIZE)) {
         await sitePost(env, fetcher, "/api/internal/sec/publish", { artifact: { ...deferredArtifact, blocks }, summary: null });
       }
-      for (const snapshot of artifact.snapshots) {
-        await sitePost(env, fetcher, "/api/internal/sec/publish", { artifact: { ...deferredArtifact, snapshots: [snapshot] }, summary: null });
-      }
-      for (const comparisons of chunks(artifact.comparisons, PUBLISH_COMPARISON_CHUNK_SIZE)) {
-        await sitePost(env, fetcher, "/api/internal/sec/publish", { artifact: { ...deferredArtifact, comparisons }, summary: null });
-      }
-      for (const memoryCandidates of chunks(artifact.memoryCandidates, PUBLISH_MEMORY_CHUNK_SIZE)) {
-        await sitePost(env, fetcher, "/api/internal/sec/publish", { artifact: { ...deferredArtifact, memoryCandidates }, summary: null });
-      }
       return sitePost<{ memoryJobId?: string }>(env, fetcher, "/api/internal/sec/publish", {
-        artifact: { ...artifact, blocks: [], snapshots: [], comparisons: [], memoryCandidates: [] } satisfies SecAnalysisArtifact,
+        artifact: { ...artifact, blocks: [] } satisfies SecAnalysisArtifact,
         summary,
       });
     },
@@ -195,10 +146,6 @@ export async function sitePost<T = Record<string, unknown>>(env: SecPipelineEnv,
 
 function preparedKey(ticker: string, accessionNumber: string) {
   return `filings/${ticker}/${accessionNumber}.json`;
-}
-
-function modulePreparedKey(reference: PreparedFilingReference, moduleKey: string) {
-  return `${reference.key.replace(/\.json$/, "")}/modules/${moduleKey}.json`;
 }
 
 function collectReferencedBlockIds(artifact: SecAnalysisArtifact): Set<string> {
@@ -260,13 +207,11 @@ async function putArtifact(bucket: R2BucketLike, reference: PreparedFilingRefere
 function collectArtifactKeys(reference: PreparedFilingReference, synthesisKey: string): Record<string, string> {
   const prefix = `${reference.key.replace(/^filings\//, "analysis/").replace(/\.json$/, "")}/${SEC_ANALYSIS_SCHEMA_VERSION}`;
   return {
-    router: `${prefix}/router.json`,
     brief: `${prefix}/brief.json`,
     plan: `${prefix}/manager-plan.json`,
     "manager-review": `${prefix}/manager-review/final.json`,
     nodes: `${prefix}/nodes/final.json`,
     synthesis: synthesisKey,
-    ...Object.fromEntries(SEC_ANALYSIS_MODULES.map((module) => [`module:${module.key}`, `${prefix}/modules/${module.key}.json`])),
   };
 }
 

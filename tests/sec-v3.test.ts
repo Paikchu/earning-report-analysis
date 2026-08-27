@@ -8,7 +8,6 @@ import {
   unresolvedFingerprint,
   type CompanyMemoryItem,
   type HistoricalObservation,
-  type ModuleAnalysis,
 } from "../lib/sec-analysis.ts";
 import {
   COMPANY_FACTS_REGISTRY_VERSION,
@@ -94,19 +93,13 @@ test("does not classify a nine-month 10-Q cumulative fact as an annual observati
   assert.equal(revenue?.quarters.some((item) => item.sourceAccession === "nine-month"), false);
 });
 
-test("builds a Manager brief with verified facts, history, memory, gaps, and deterministic comparisons", () => {
+test("builds a Manager brief from XBRL facts, history, memory, and deterministic comparisons", () => {
   const evidenceId = "ev:test-block";
-  const modules: ModuleAnalysis[] = [{
-    moduleKey: "performance",
-    facts: [{ metricKey: "revenue", value: "120", unit: "USD", currency: "USD", periodScope: "quarter", basis: "gaap", evidenceIds: [evidenceId], confidence: "high", sourceLabel: "fact_source_reported" }],
-    claims: [{ topicKey: "demand", claimType: "driver", statement: "Demand improved.", direction: "positive", horizon: "current", materialityScore: 80, confidence: "high", evidenceIds: [evidenceId] }],
-    memoryCandidates: [], missingFields: ["segment_margin"], evidenceCoverage: 0.8, verificationStatus: "partial",
-  }];
-  const observation: HistoricalObservation = {
-    observationId: "history-1", seriesId: "revenue", metricKey: "revenue", value: "100", unit: "USD", currency: "USD", basis: "gaap",
-    periodScope: "quarter", startDate: "2025-10-01", endDate: "2025-12-31", sourceAccession: "prior", sourceFiledAt: "2026-02-01",
+  const observation = (endDate: string, startDate: string, value: string, id: string): HistoricalObservation => ({
+    observationId: id, seriesId: "revenue", metricKey: "revenue", value, unit: "USD", currency: "USD", basis: "gaap",
+    periodScope: "quarter", startDate, endDate, sourceAccession: id, sourceFiledAt: endDate,
     sourceVersion: COMPANY_FACTS_REGISTRY_VERSION, qualityStatus: "validated_xbrl",
-  };
+  });
   const memory: CompanyMemoryItem = {
     memoryId: "memory-1", ticker: issuer, kind: "judgment", topicKey: "margin-recovery", statement: "Margins should recover next quarter.",
     status: "active", materialityScore: 85, confidence: "medium", evidenceIds: [evidenceId], firstSeenPeriod: "2025Q4", lastConfirmedPeriod: "2025Q4",
@@ -114,15 +107,30 @@ test("builds a Manager brief with verified facts, history, memory, gaps, and det
   };
   const brief = buildSecAnalysisBrief({
     ticker: issuer, filingId: "filing-1", periodId: `${issuer}:2026-03-31:quarter`, periodScope: "quarter",
-    modules, history: { registryVersion: COMPANY_FACTS_REGISTRY_VERSION, series: [{ seriesId: "revenue", quarters: [observation], annual: [] }] },
-    memorySummary: "Margin recovery remains due.", memoryItems: [memory], validEvidenceIds: new Set([evidenceId]),
+    reportDate: "2026-03-31",
+    history: {
+      registryVersion: COMPANY_FACTS_REGISTRY_VERSION,
+      series: [{
+        seriesId: "revenue",
+        quarters: [
+          observation("2026-03-31", "2026-01-01", "120", "current"),
+          observation("2025-12-31", "2025-10-01", "100", "history-1"),
+          observation("2025-03-31", "2025-01-01", "96", "history-4"),
+        ],
+        annual: [],
+      }],
+    },
+    memorySummary: "Margin recovery remains due.", memoryItems: [memory],
   });
 
   assert.equal(brief.currentFacts.length, 1);
-  assert.equal(brief.history.series[0].quarters.length, 1);
+  assert.equal(brief.currentFacts[0].value, "120");
+  assert.deepEqual(brief.currentFacts[0].evidenceIds, ["xbrl:current"]);
+  assert.equal(brief.history.series[0].quarters.length, 3);
   assert.equal(brief.memoryItems[0].memoryId, "memory-1");
-  assert.ok(brief.missingFields.includes("segment_margin"));
-  assert.equal(brief.evidenceQuality.invalidEvidenceIds.length, 0);
+  assert.equal(brief.comparisons.find((item) => item.comparisonType === "qoq")?.percentageDelta, "0.2");
+  assert.equal(brief.comparisons.find((item) => item.comparisonType === "yoy")?.percentageDelta, "0.25");
+  assert.deepEqual(brief.missingSeriesIds, []);
 });
 
 test("passes historical series and Company Memory into the Manager plan", async () => {
@@ -133,7 +141,7 @@ test("passes historical series and Company Memory into the Manager plan", async 
   };
   const prepared = await prepareSecFiling(filing, { userAgent: "test@example.com", fetcher: async () => new Response("<h1>Revenue</h1><p>Revenue was 120.</p>") });
   const memory = { memoryId: "memory-1", ticker: issuer, kind: "fact" as const, topicKey: "backlog", statement: "Backlog expanded.", status: "active" as const, materialityScore: 80, confidence: "high" as const, evidenceIds: ["ev:1"], firstSeenPeriod: "2025Q4", lastConfirmedPeriod: "2025Q4" };
-  const brief = buildSecAnalysisBrief({ ticker: issuer, filingId: filing.accessionNumber, periodId: prepared.periodId, periodScope: "quarter", modules: [], history: normalizeCompanyFacts(issuer, companyFactsPayload()), memorySummary: "Backlog expanded.", memoryItems: [memory], validEvidenceIds: new Set() });
+  const brief = buildSecAnalysisBrief({ ticker: issuer, filingId: filing.accessionNumber, periodId: prepared.periodId, periodScope: "quarter", reportDate: filing.reportDate, history: normalizeCompanyFacts(issuer, companyFactsPayload()), memorySummary: "Backlog expanded.", memoryItems: [memory] });
   let managerPayload = "";
 
   await planPreparedSecFiling(prepared, async (_stage, _system, payload) => {
@@ -141,7 +149,7 @@ test("passes historical series and Company Memory into the Manager plan", async 
     return { nodes: [{ id: "growth", title: "Growth", question: "What changed?", sectionIds: [prepared.outline[0].id], historySeriesIds: ["revenue"], memoryIds: ["memory-1"], acceptanceCriteria: ["Explain the driver"], materiality: "high" }] };
   }, brief);
 
-  assert.match(managerPayload, /sec-analysis-brief\.v1/);
+  assert.match(managerPayload, /sec-analysis-brief\.v2/);
   assert.match(managerPayload, /memory-1/);
   assert.match(managerPayload, /registryVersion/);
 });
