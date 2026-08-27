@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   analyzePreparedSecNode,
   buildPreparedSecBrief,
+  failedSecNode,
   discoverSecTicker,
   planPreparedSecFiling,
   prepareSecFiling,
@@ -173,18 +174,46 @@ test("isolates a failed dynamic node while preserving completed node analysis", 
       narrative: "云需求推动本期收入增长。",
     };
   });
-  const failed = await analyzePreparedSecNode(prepared, {
-    id: "risk-review",
-    title: "风险变化",
-    question: "风险发生了什么变化？",
-    sectionIds: [sectionId],
-    keywords: ["risk"],
-  }, async () => { throw new Error("DeepSeek node HTTP 500"); });
+  const spec = { id: "risk-review", title: "风险变化", question: "风险发生了什么变化？", sectionIds: [sectionId], keywords: ["risk"] };
+
+  // A provider failure must surface so the Workflow step can retry on the fallback model.
+  await assert.rejects(
+    analyzePreparedSecNode(prepared, spec, async () => { throw new Error("DeepSeek node HTTP 500"); }),
+    /HTTP 500/,
+  );
+
+  const degraded = failedSecNode(spec, new Error("DeepSeek node HTTP 500"));
 
   assert.equal(complete.status, "complete");
   assert.equal(complete.findings[0].label, "收入");
-  assert.equal(failed.status, "error");
-  assert.match(failed.error ?? "", /HTTP 500/);
+  assert.equal(degraded.status, "error");
+  assert.match(degraded.error ?? "", /HTTP 500/);
+});
+
+test("node facts must cite a block the node actually read", async () => {
+  const prepared = await prepareSecFiling(filing, {
+    userAgent: "test@example.com",
+    fetcher: async () => new Response("<h1>Item 8. Financial Statements</h1><p>Segment revenue was 60 USDm this quarter.</p>"),
+  });
+  const spec = { id: "segments", title: "分部", question: "分部收入如何？", sectionIds: [prepared.outline[0].id], keywords: ["segment"] };
+  let offered: Array<{ evidenceId: string }> = [];
+
+  const node = await analyzePreparedSecNode(prepared, spec, async (_stage, _system, payload) => {
+    offered = (payload as { evidence: Array<{ evidenceId: string }> }).evidence;
+    return {
+      findings: [{ label: "分部", detail: "分部收入 60 百万美元。", importance: "high" }],
+      narrative: "分部收入增长。",
+      facts: [
+        { metricKey: "segment_revenue", value: "60", unit: "USDm", basis: "gaap", sourceLabel: "fact_source_reported", confidence: "high", evidenceIds: [offered[0]?.evidenceId] },
+        { metricKey: "backlog", value: "999", unit: "USDm", basis: "gaap", sourceLabel: "fact_source_reported", confidence: "high", evidenceIds: ["condensed-consolidated-statements-of-cash-flows"] },
+      ],
+    };
+  });
+
+  assert.ok(offered.length > 0, "the node must be handed real evidence ids to cite");
+  assert.ok(node.evidenceIds!.length > 0, "section overlap must resolve to blocks");
+  assert.deepEqual(node.facts?.map((fact) => fact.metricKey), ["segment_revenue"]);
+  assert.deepEqual(node.facts?.[0].evidenceIds, [offered[0].evidenceId]);
 });
 
 test("synthesizes one full report from node outputs and verified structured data without raw filing text", async () => {
@@ -226,7 +255,7 @@ test("synthesizes one full report from node outputs and verified structured data
         analystView: "增长质量取决于需求能否延续。",
         report: completeReport(),
         keyMetrics: [
-          { metricKey: "Total Revenues", currentValue: "120", evidenceIds: [`ev:${prepared.blocks[0].blockId}`] },
+          { metricKey: "Total Revenues", currentValue: "120", evidenceIds: ["xbrl:revenue:2026-06-30"] },
           { metricKey: "segment_revenue", currentValue: "60", evidenceIds: [`ev:${prepared.blocks[0].blockId}`] },
           { metricKey: "invented_metric", currentValue: "9", evidenceIds: [`ev:${prepared.blocks[0].blockId}`] },
         ],
@@ -247,6 +276,8 @@ test("synthesizes one full report from node outputs and verified structured data
   assert.deepEqual(result.artifact.report.keyMetrics.map((metric) => metric.metricKey), ["revenue", "segment_revenue"]);
   assert.equal(result.artifact.report.keyMetrics.find((metric) => metric.metricKey === "revenue")?.yoy, "+20.0%");
   assert.ok(result.artifact.report.dataQuality.warnings.some((warning) => warning.includes("invented_metric")));
+  // A metric grounded in XBRL must survive: the brief's evidence namespace is valid evidence.
+  assert.deepEqual(result.artifact.report.keyMetrics[0].evidenceIds, ["xbrl:revenue:2026-06-30"]);
 });
 
 test("drops unverifiable keyMetrics instead of failing the whole report", async () => {

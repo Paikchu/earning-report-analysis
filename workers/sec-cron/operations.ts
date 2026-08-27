@@ -1,6 +1,7 @@
 import {
   analyzePreparedSecNode,
   buildPreparedSecBrief,
+  failedSecNode,
   discoverSecTicker,
   planPreparedSecFiling,
   prepareSecFiling,
@@ -87,7 +88,16 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       return plan;
     },
     analyzeNode: async (spec: SecNodeSpec, _filing, reference, brief, round = 0, execution): Promise<SecNodeResult> => {
-      const result = await analyzePreparedSecNode(await readPrepared(env.SEC_FILINGS, reference), spec, modelFor(execution), brief);
+      const prepared = await readPrepared(env.SEC_FILINGS, reference);
+      let result: SecNodeResult;
+      try {
+        result = await analyzePreparedSecNode(prepared, spec, modelFor(execution), brief);
+      } catch (error) {
+        // Rethrow so the Workflow step retries and escalates to the fallback model; only the
+        // final attempt degrades to an error node so one flaky response cannot lose the filing.
+        if (execution && !execution.finalAttempt) throw error;
+        result = failedSecNode(spec, error);
+      }
       await putArtifact(env.SEC_FILINGS, reference, `nodes/round-${round}/${spec.id}`, result);
       return result;
     },

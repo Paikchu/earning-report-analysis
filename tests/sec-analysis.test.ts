@@ -26,6 +26,24 @@ test("builds stable filing blocks with numeric density and evidence-sized previe
   assert.equal(blocks[2].blockId.startsWith("acc-1:block:"), true);
 });
 
+test("blocks record the span they occupy in the source text", () => {
+  const source = [
+    "Item 1. Business",
+    "The company operates a cloud platform.",
+    "Item 7. Management Discussion",
+    "Revenue increased 20% and operating margin expanded.",
+  ].join("\n");
+  const built = buildFilingBlocks(source, "acc-2");
+
+  for (const block of built) {
+    assert.ok(block.end > block.start, `${block.blockId} must span forward`);
+    // Whitespace is normalized inside a block, so compare on the collapsed form.
+    const slice = source.slice(block.start, block.end).replace(/\s+/g, " ").trim();
+    assert.equal(slice, block.body.replace(/\n/g, " "));
+  }
+  assert.ok(built[0].end <= built[1].start, "block spans must not overlap");
+});
+
 test("splits umbrella business KPIs by normalized definition", () => {
   const facts = normalizeAnalysisFacts([
     {
@@ -125,7 +143,7 @@ test("derives current facts and both comparisons from XBRL alone", () => {
   });
 
   assert.deepEqual(brief.currentFacts.map((fact) => [fact.metricKey, fact.value, fact.unit]), [["revenue", "120", "USD"]]);
-  assert.deepEqual(brief.currentFacts[0].evidenceIds, ["xbrl:xbrl:revenue:2026-06-30"]);
+  assert.deepEqual(brief.currentFacts[0].evidenceIds, ["xbrl:revenue:2026-06-30"]);
   assert.equal(brief.comparisons.find((item) => item.comparisonType === "qoq")?.percentageDelta, "0.2");
   assert.equal(brief.comparisons.find((item) => item.comparisonType === "yoy")?.percentageDelta, "0.25");
   assert.ok(brief.allowedMetricKeys.includes("free_cash_flow"));

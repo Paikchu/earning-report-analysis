@@ -143,12 +143,15 @@ export async function planPreparedSecFiling(prepared: PreparedSecFilingMeta, mod
   return normalizeSecNodePlan(value, prepared.outline);
 }
 
-export function selectNodeBlocks(prepared: PreparedSecFiling, sections: Array<{ id: string; title: string; text: string }>): FilingBlock[] {
-  const selectedText = sections.map((section) => section.text).join("\n");
-  return prepared.blocks
-    .filter((block) => selectedText.includes(block.body.slice(0, Math.min(120, block.body.length)))
-      || sections.some((section) => section.title === block.heading))
-    .slice(0, 12);
+/**
+ * Blocks whose character span overlaps one of the node's outline sections. Text matching cannot
+ * work here: buildFilingBlocks normalizes whitespace, so a block body is not a verbatim substring
+ * of the document it came from.
+ */
+export function selectNodeBlocks(blocks: FilingBlock[], sections: Array<{ start: number; end: number }>): FilingBlock[] {
+  return blocks
+    .filter((block) => sections.some((section) => block.start < section.end && block.end > section.start))
+    .slice(0, 24);
 }
 
 export async function analyzePreparedSecNode(
@@ -161,38 +164,42 @@ export async function analyzePreparedSecNode(
   if (!input.sections.length) {
     return { id: spec.id, title: spec.title, status: "empty", findings: [], narrative: "", facts: [], evidence: [] };
   }
-  const nodeBlocks = selectNodeBlocks(prepared, input.sections);
+  const nodeSections = spec.sectionIds.flatMap((id) => {
+    const section = prepared.outline.find((candidate) => candidate.id === id);
+    return section ? [section] : [];
+  });
+  const nodeBlocks = selectNodeBlocks(prepared.blocks, nodeSections);
   const evidenceIds = nodeBlocks.map((block) => `ev:${block.blockId}`);
-  try {
-    const value = await model(`node:${spec.id}`, nodeSystemPrompt(), {
-      ticker: prepared.filing.ticker,
-      companyName: prepared.filing.companyName,
-      form: prepared.filing.form,
-      reportDate: prepared.filing.reportDate,
-      task: { title: spec.title, question: spec.question },
-      acceptanceCriteria: spec.acceptanceCriteria ?? [],
-      history: brief ? brief.history.series.filter((series) => spec.historySeriesIds?.includes(series.seriesId)) : [],
-      memory: brief ? brief.memoryItems.filter((item) => spec.memoryIds?.includes(item.memoryId)) : [],
-      xbrlFacts: brief?.currentFacts ?? [],
-      allowedMetricKeys: brief?.allowedMetricKeys ?? [],
-      evidence: nodeBlocks.map((block) => ({ evidenceId: `ev:${block.blockId}`, heading: block.heading, preview: block.preview })),
-      sections: input.sections.map(({ id, title, text, compressed }) => ({ id, title, text, compressed })),
-    });
-    const normalized = normalizeSecNodeResult(value, spec, input.evidence, new Set(evidenceIds));
-    return { ...normalized, evidenceIds };
-  } catch (error) {
-    return {
-      id: spec.id,
-      title: spec.title,
-      status: "error",
-      findings: [],
-      narrative: "",
-      facts: [],
-      evidence: input.evidence,
-      evidenceIds,
-      error: error instanceof Error ? error.message : "node failed",
-    };
-  }
+  const value = await model(`node:${spec.id}`, nodeSystemPrompt(), {
+    ticker: prepared.filing.ticker,
+    companyName: prepared.filing.companyName,
+    form: prepared.filing.form,
+    reportDate: prepared.filing.reportDate,
+    task: { title: spec.title, question: spec.question },
+    acceptanceCriteria: spec.acceptanceCriteria ?? [],
+    history: brief ? brief.history.series.filter((series) => spec.historySeriesIds?.includes(series.seriesId)) : [],
+    memory: brief ? brief.memoryItems.filter((item) => spec.memoryIds?.includes(item.memoryId)) : [],
+    xbrlFacts: brief?.currentFacts ?? [],
+    allowedMetricKeys: brief?.allowedMetricKeys ?? [],
+    evidence: nodeBlocks.map((block) => ({ evidenceId: `ev:${block.blockId}`, heading: block.heading, preview: block.preview })),
+    sections: input.sections.map(({ id, title, text, compressed }) => ({ id, title, text, compressed })),
+  });
+  const normalized = normalizeSecNodeResult(value, spec, input.evidence, new Set(evidenceIds));
+  return { ...normalized, evidenceIds };
+}
+
+/** Degrades a node the model could not produce, once retries with the fallback model are exhausted. */
+export function failedSecNode(spec: SecNodeSpec, error: unknown): SecNodeResult {
+  return {
+    id: spec.id,
+    title: spec.title,
+    status: "error",
+    findings: [],
+    narrative: "",
+    facts: [],
+    evidence: [],
+    error: error instanceof Error ? error.message : "node failed",
+  };
 }
 
 export function buildPreparedSecBrief(
@@ -283,7 +290,10 @@ export async function summarizePreparedSecFiling(
     questions: plan.nodes.map((node) => ({ questionId: node.id, status: "answered" as const, explanation: "Completed before v3 review injection" })),
     repairTasks: [], unresolvedQuestions: [], coverageScore: 1, stopReason: "complete" as const,
   };
-  const validEvidenceIds = [...new Set(prepared.blockIds)].sort();
+  const validEvidenceIds = [...new Set([
+    ...prepared.blockIds,
+    ...finalBrief.currentFacts.flatMap((fact) => fact.evidenceIds),
+  ])].sort();
   const summaryPayload = {
     brief: finalBrief,
     nodeAnalyses: usableNodes.map(({ id, title, findings, narrative, facts }) => ({ id, title, findings, narrative, facts: facts ?? [] })),

@@ -125,7 +125,7 @@ test("builds a Manager brief from XBRL facts, history, memory, and deterministic
 
   assert.equal(brief.currentFacts.length, 1);
   assert.equal(brief.currentFacts[0].value, "120");
-  assert.deepEqual(brief.currentFacts[0].evidenceIds, ["xbrl:current"]);
+  assert.deepEqual(brief.currentFacts[0].evidenceIds, ["current"]);
   assert.equal(brief.history.series[0].quarters.length, 3);
   assert.equal(brief.memoryItems[0].memoryId, "memory-1");
   assert.equal(brief.comparisons.find((item) => item.comparisonType === "qoq")?.percentageDelta, "0.2");

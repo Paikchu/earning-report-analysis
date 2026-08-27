@@ -1,6 +1,6 @@
 export const SEC_ANALYSIS_SCHEMA_VERSION = "sec-analysis.v3";
 export const SEC_ANALYSIS_PROMPT_VERSION = "sec-analysis-prompt.v3";
-export const MAX_REPAIR_ROUNDS = 1;
+export const MAX_REPAIR_ROUNDS = 2;
 export const MAX_REPAIR_NODES_PER_ROUND = 3;
 
 export const SEC_CANONICAL_SERIES_IDS = [
@@ -140,6 +140,9 @@ export function buildPeriodIdentity(ticker: string, form: string, reportDate: st
 export type FilingBlock = {
   blockId: string;
   ordinal: number;
+  /** Character span in the cleaned filing text, used to map blocks onto outline sections. */
+  start: number;
+  end: number;
   heading: string;
   headingPath: string;
   elementType: "heading_and_text" | "text" | "table_like";
@@ -315,7 +318,7 @@ function factFromObservation(observation: HistoricalObservation): AnalysisFact {
     currency: observation.currency,
     periodScope: observation.periodScope,
     basis: observation.basis === "derived" ? "derived" : "gaap",
-    evidenceIds: [`xbrl:${observation.observationId}`],
+    evidenceIds: [observation.observationId],
     confidence: "high",
     sourceLabel: observation.basis === "derived" ? "derived_calculation" : "fact_source_reported",
     definitionHash: observation.xbrlConcept ?? observation.derivationFormula,
@@ -393,25 +396,32 @@ export function unresolvedFingerprint(review: ManagerReview): string {
 }
 
 export function buildFilingBlocks(text: string, accessionNumber: string): FilingBlock[] {
-  const lines = String(text ?? "")
-    .split(/\n+/)
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-  const chunks: string[] = [];
-  let current = "";
+  const source = String(text ?? "");
+  const lines: Array<{ text: string; start: number; end: number }> = [];
+  for (const match of source.matchAll(/[^\n]+/g)) {
+    const normalized = match[0].replace(/\s+/g, " ").trim();
+    if (!normalized || match.index === undefined) continue;
+    lines.push({ text: normalized, start: match.index, end: match.index + match[0].length });
+  }
+  const chunks: Array<{ body: string; start: number; end: number }> = [];
+  let current: { body: string; start: number; end: number } | null = null;
   for (const line of lines) {
-    const candidate = current ? `${current}\n${line}` : line;
-    if (current && (candidate.length > 2_400 || isStructuralHeading(line))) {
+    if (!current) {
+      current = { body: line.text, start: line.start, end: line.end };
+      continue;
+    }
+    const candidate = `${current.body}\n${line.text}`;
+    if (candidate.length > 2_400 || isStructuralHeading(line.text)) {
       chunks.push(current);
-      current = line;
+      current = { body: line.text, start: line.start, end: line.end };
     } else {
-      current = candidate;
+      current = { body: candidate, start: current.start, end: line.end };
     }
   }
   if (current) chunks.push(current);
 
   let heading = "Document";
-  return chunks.map((body, index) => {
+  return chunks.map(({ body, start, end }, index) => {
     const firstLine = body.split("\n")[0] ?? "";
     if (isStructuralHeading(firstLine)) heading = firstLine.slice(0, 160);
     const blockId = `${accessionNumber}:block:${String(index + 1).padStart(4, "0")}:${hashString(body)}`;
@@ -420,6 +430,8 @@ export function buildFilingBlocks(text: string, accessionNumber: string): Filing
     return {
       blockId,
       ordinal: index,
+      start,
+      end,
       heading,
       headingPath: `${heading} / block ${index + 1}`,
       elementType: tableLikeLines >= 2 ? "table_like" : isStructuralHeading(firstLine) ? "heading_and_text" : "text",
@@ -537,9 +549,9 @@ function normalizeClaim(value: unknown, validEvidenceIds: Set<string>): Analysis
 
 function evidenceList(value: unknown, validEvidenceIds: Set<string>): string[] {
   if (!Array.isArray(value)) return [];
-  const ids = value.map(String).filter(Boolean);
-  if (!validEvidenceIds.size) return ids.slice(0, 10);
-  return ids
+  return value
+    .map(String)
+    .filter(Boolean)
     .map((id) => validEvidenceIds.has(id) ? id : `ev:${id}`)
     .filter((id) => validEvidenceIds.has(id))
     .slice(0, 10);
