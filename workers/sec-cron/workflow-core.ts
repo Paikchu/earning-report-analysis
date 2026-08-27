@@ -482,7 +482,7 @@ function assertBriefCanProceed(brief: SecAnalysisBrief): void {
   if (brief.evidenceQuality.invalidEvidenceIds.length) throw new Error("Brief contains illegal evidence IDs");
   const identities = new Map<string, string>();
   for (const fact of brief.currentFacts) {
-    const key = `${fact.metricKey}:${fact.periodScope ?? brief.periodId}:${fact.basis}`;
+    const key = `${fact.metricKey}:${fact.definitionHash ?? ""}:${fact.periodScope ?? brief.periodId}:${fact.basis}`;
     const unit = `${fact.unit}:${fact.currency ?? ""}`;
     const previous = identities.get(key);
     if (previous && previous !== unit) throw new Error(`Conflicting fact units for ${fact.metricKey}`);

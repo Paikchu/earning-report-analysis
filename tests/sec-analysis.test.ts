@@ -65,7 +65,8 @@ test("module payload gives the model the exact persisted JSON contract", () => {
   });
 
   assert.deepEqual(payload.outputSchema.facts, [{
-    metricKey: "string",
+    metricKey: "specific_snake_case_metric_key",
+    definition: "stable English metric definition without period or value",
     value: "string",
     unit: "string",
     currency: "string",
@@ -75,6 +76,44 @@ test("module payload gives the model the exact persisted JSON contract", () => {
     confidence: "high|medium|low",
     sourceLabel: "fact_source_reported|management_adjusted|derived_calculation|unknown",
   }]);
+  assert.ok(payload.rules.some((rule) => rule.includes("never return business_kpi")));
+});
+
+test("splits umbrella business KPIs by normalized definition", () => {
+  const evidenceId = `ev:${blocks[2].blockId}`;
+  const result = normalizeModuleAnalysis({
+    facts: [
+      {
+        metricKey: "business_kpi",
+        definition: "Geographic revenue by customer headquarters",
+        value: "United States $60,074 million",
+        unit: "USD millions",
+        currency: "USD",
+        periodScope: "quarterly_and_half_yearly",
+        basis: "management_kpi",
+        evidenceIds: [evidenceId],
+      },
+      {
+        metricKey: "business_kpi",
+        definition: "Revenue from customers headquartered outside the United States",
+        value: "38%",
+        unit: "percent",
+        currency: "USD",
+        periodScope: "quarterly_and_half_yearly",
+        basis: "management_kpi",
+        evidenceIds: [evidenceId],
+      },
+    ],
+  }, "segments_and_kpis", new Set([evidenceId]));
+
+  assert.deepEqual(result.facts.map((fact) => fact.metricKey), [
+    "geographic_revenue_by_customer_headquarters",
+    "revenue_from_customers_headquartered_outside_the_united_states",
+  ]);
+  assert.equal(result.facts[0].periodScope, "quarterly_and_half_yearly");
+  assert.notEqual(result.facts[0].definitionHash, result.facts[1].definitionHash);
+  assert.match(result.facts[0].definitionHash ?? "", /^[0-9a-f]{8}$/);
+  assert.equal(result.facts[1].currency, "");
 });
 
 test("bounds the dynamic router inventory for large annual filings", () => {

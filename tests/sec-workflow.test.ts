@@ -305,6 +305,50 @@ test("treats missing core facts as a hard failure and keeps the last successful 
   assert.equal(published, 0);
 });
 
+test("uses definition hashes to distinguish KPI facts before enforcing units", async () => {
+  const base = operations();
+  const ops = operations({
+    async analyzeModule(moduleKey, ...args) {
+      if (moduleKey !== "segments_and_kpis") return base.analyzeModule(moduleKey, ...args);
+      return {
+        moduleKey,
+        facts: [
+          { metricKey: "business_kpi", value: "60074", unit: "USD millions", currency: "USD", periodScope: "quarter_and_half_year", basis: "management_kpi", evidenceIds: ["ev:kpi"], confidence: "high", sourceLabel: "fact_source_reported", definitionHash: "revenue-hash" },
+          { metricKey: "business_kpi", value: "38", unit: "percent", currency: "", periodScope: "quarter_and_half_year", basis: "management_kpi", evidenceIds: ["ev:kpi"], confidence: "high", sourceLabel: "fact_source_reported", definitionHash: "share-hash" },
+        ],
+        claims: [], memoryCandidates: [], missingFields: [], evidenceCoverage: 1, verificationStatus: "verified",
+      };
+    },
+  });
+
+  const result = await executeSecAnalysisWorkflow({ ticker: "TESTCO", requestedBy: "manual" }, "workflow-kpi-definitions", stepRecorder([]), ops);
+
+  assert.deepEqual(result.failed, []);
+  assert.deepEqual(result.analyzed, [filing.accessionNumber]);
+});
+
+test("still rejects different units for the same KPI definition", async () => {
+  const base = operations();
+  const ops = operations({
+    async analyzeModule(moduleKey, ...args) {
+      if (moduleKey !== "segments_and_kpis") return base.analyzeModule(moduleKey, ...args);
+      return {
+        moduleKey,
+        facts: [
+          { metricKey: "customer_concentration", value: "38", unit: "percent", currency: "", periodScope: "quarter", basis: "management_kpi", evidenceIds: ["ev:kpi"], confidence: "high", sourceLabel: "fact_source_reported", definitionHash: "same-definition" },
+          { metricKey: "customer_concentration", value: "60074", unit: "USD millions", currency: "USD", periodScope: "quarter", basis: "management_kpi", evidenceIds: ["ev:kpi"], confidence: "high", sourceLabel: "fact_source_reported", definitionHash: "same-definition" },
+        ],
+        claims: [], memoryCandidates: [], missingFields: [], evidenceCoverage: 1, verificationStatus: "verified",
+      };
+    },
+  });
+
+  const result = await executeSecAnalysisWorkflow({ ticker: "TESTCO", requestedBy: "manual" }, "workflow-kpi-unit-conflict", stepRecorder([]), ops);
+
+  assert.deepEqual(result.failed, [filing.accessionNumber]);
+  assert.deepEqual(result.analyzed, []);
+});
+
 test("degrades one exhausted module to analysis-incomplete and continues with remaining facts", async () => {
   const base = operations();
   let published = 0;

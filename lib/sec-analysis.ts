@@ -803,7 +803,8 @@ export function buildModulePayload(args: {
     activeMemory: args.activeMemory.slice(0, 5),
     outputSchema: {
       facts: [{
-        metricKey: "string",
+        metricKey: "specific_snake_case_metric_key",
+        definition: "stable English metric definition without period or value",
         value: "string",
         unit: "string",
         currency: "string",
@@ -831,6 +832,7 @@ export function buildModulePayload(args: {
       "Use the exact outputSchema keys and value types.",
       "Copy evidenceId values exactly from current.evidence; do not return quotes or evidence objects.",
       "Every fact and claim must cite evidence IDs.",
+      "For business_kpi fields, never return business_kpi; use a specific snake_case metricKey and a stable English definition without period names, dates, or values.",
       "Put undisclosed field names in missingFields; do not create not_disclosed facts.",
       "Do not calculate numeric deltas; use precomputed deltas.",
       "Do not treat not_mentioned as withdrawn.",
@@ -844,21 +846,26 @@ export function normalizeModuleAnalysis(value: unknown, moduleKey: SecAnalysisMo
     const item = asRecord(raw);
     const evidenceIds = evidenceList(item?.evidenceIds, validEvidenceIds);
     const valueText = String(item?.value ?? "").trim();
-    const metricKey = String(item?.metricKey ?? "").trim();
+    const rawMetricKey = String(item?.metricKey ?? "").trim();
+    const definition = normalizeMetricDefinition(item?.definition);
+    const definitionKey = definition.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80);
+    const metricKey = rawMetricKey === "business_kpi" && definitionKey ? definitionKey : rawMetricKey;
     if (!metricKey || !valueText || !evidenceIds.length) return [];
     const basis = item?.basis === "gaap" || item?.basis === "non_gaap" || item?.basis === "management_kpi" || item?.basis === "derived" ? item.basis : "unknown";
     const sourceLabel = item?.sourceLabel === "fact_source_reported" || item?.sourceLabel === "management_adjusted" || item?.sourceLabel === "derived_calculation" ? item.sourceLabel : "unknown";
+    const unit = String(item?.unit ?? "").slice(0, 30);
+    const currency = /^(?:%|percent|percentage|ratio)$/i.test(unit.trim()) ? "" : String(item?.currency ?? "").slice(0, 8);
     return [{
       metricKey,
       value: valueText.slice(0, 80),
-      unit: String(item?.unit ?? "").slice(0, 30),
-      currency: String(item?.currency ?? "").slice(0, 8),
-      periodScope: String(item?.periodScope ?? "").slice(0, 20),
+      unit,
+      currency,
+      periodScope: String(item?.periodScope ?? "").slice(0, 40),
       basis,
       evidenceIds,
       confidence: confidence(item?.confidence),
       sourceLabel,
-      definitionHash: String(item?.definitionHash ?? "").slice(0, 80),
+      definitionHash: definition ? hashString(definition) : String(item?.definitionHash ?? "").slice(0, 80),
     }];
   }) : [];
   const claims = Array.isArray(root?.claims) ? root.claims.flatMap((raw): AnalysisClaim[] => normalizeClaim(raw, validEvidenceIds)) : [];
@@ -873,6 +880,15 @@ export function normalizeModuleAnalysis(value: unknown, moduleKey: SecAnalysisMo
   const evidenceCoverage = clamp(Number(root?.evidenceCoverage ?? (facts.length || claims.length ? 1 : 0)), 0, 1);
   const verificationStatus = evidenceCoverage >= 0.9 ? "verified" : evidenceCoverage > 0 ? "partial" : "failed";
   return { moduleKey, facts, claims, memoryCandidates, missingFields, evidenceCoverage, verificationStatus };
+}
+
+function normalizeMetricDefinition(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .slice(0, 240);
 }
 
 export function compareSnapshots(
