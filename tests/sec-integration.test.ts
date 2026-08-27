@@ -39,6 +39,14 @@ test("exposes the standalone stock and report routes", async () => {
   assert.doesNotMatch(header, /oai-authenticated-user-email|ChatGPT/);
 });
 
+test("restores the newest filing summary when the stock page is shown again", async () => {
+  const section = await readFile(new URL("../app/positions/[ticker]/SecFilingsSection.tsx", import.meta.url), "utf8");
+
+  assert.match(section, /addEventListener\("pageshow", restoreDefaultSummary\)/);
+  assert.match(section, /setOpenAccession\(filings\[0\]\?\.accessionNumber \?\? null\)/);
+  assert.match(section, /removeEventListener\("pageshow", restoreDefaultSummary\)/);
+});
+
 test("publishes public filing, search, and protected admin contracts", async () => {
   const routes = [
     "../app/api/v1/search/route.ts",

@@ -41,6 +41,13 @@ export function SecFilingsSection({ ticker }: { ticker: string }) {
     return () => window.clearTimeout(timer);
   }, [load]);
 
+  useEffect(() => {
+    if (filings.length === 0) return;
+    const restoreDefaultSummary = () => setOpenAccession(filings[0]?.accessionNumber ?? null);
+    window.addEventListener("pageshow", restoreDefaultSummary);
+    return () => window.removeEventListener("pageshow", restoreDefaultSummary);
+  }, [filings]);
+
   return (
     <section className="sec-filings-section" id="sec-filings" aria-labelledby="sec-filings-title">
       <div className="detail-section-heading">
