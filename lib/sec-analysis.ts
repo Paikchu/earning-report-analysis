@@ -265,9 +265,16 @@ export function buildSecAnalysisBrief(args: {
       continue;
     }
     currentFacts.push(factFromObservation(current));
-    const earlier = observations.filter((item) => item.endDate < current.endDate && item.unit === current.unit && item.basis === current.basis);
+    // Basis is deliberately not part of comparability: a quarter recovered by differencing
+    // year-to-date facts measures the same thing as one the issuer reported directly, and
+    // excluding it silently pushed the comparison several quarters back.
+    const earlier = observations.filter((item) => item.endDate < current.endDate
+      && item.unit === current.unit
+      && (item.currency ?? "") === (current.currency ?? ""));
     const priors = {
-      qoq: args.periodScope === "annual" ? undefined : earlier[0],
+      qoq: args.periodScope === "annual"
+        ? undefined
+        : earlier.find((item) => dateDistanceDays(item.endDate, current.endDate) <= 130),
       yoy: earlier.find((item) => {
         const distance = dateDistanceDays(item.endDate, current.endDate);
         return args.periodScope === "annual" ? distance >= 300 && distance <= 800 : distance >= 300 && distance <= 450;

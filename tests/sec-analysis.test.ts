@@ -149,6 +149,49 @@ test("derives current facts and both comparisons from XBRL alone", () => {
   assert.ok(brief.allowedMetricKeys.includes("free_cash_flow"));
 });
 
+test("compares a differenced quarter against the directly reported quarter before it", () => {
+  // A cash flow series mixes bases: Q1 is tagged directly, later quarters are recovered from
+  // year-to-date facts. The comparison must still use the immediately preceding quarter.
+  const mixed: SecHistorySnapshot = {
+    registryVersion: "sec-canonical-series.v1",
+    series: [{
+      seriesId: "operating_cash_flow",
+      quarters: [
+        { ...observation("operating_cash_flow", "2026-06-30", "4697"), basis: "derived" },
+        observation("operating_cash_flow", "2026-03-31", "3937"),
+        { ...observation("operating_cash_flow", "2025-09-30", "6238"), basis: "derived" },
+        { ...observation("operating_cash_flow", "2025-06-30", "2540"), basis: "derived" },
+      ],
+      annual: [],
+    }],
+  };
+  const brief = buildSecAnalysisBrief({
+    ticker: "TSLA", filingId: "acc-1", periodId: "TSLA:2026-06-30:quarter", periodScope: "quarter",
+    reportDate: "2026-06-30", history: mixed, memorySummary: "", memoryItems: [],
+  });
+
+  const qoq = brief.comparisons.find((item) => item.comparisonType === "qoq");
+  assert.equal(qoq?.priorEndDate, "2026-03-31", "must not skip the gaap quarter and reach back three quarters");
+  assert.equal(brief.comparisons.find((item) => item.comparisonType === "yoy")?.priorEndDate, "2025-06-30");
+});
+
+test("does not label a gap of several quarters as a quarter-over-quarter change", () => {
+  const gapped: SecHistorySnapshot = {
+    registryVersion: "sec-canonical-series.v1",
+    series: [{
+      seriesId: "revenue",
+      quarters: [observation("revenue", "2026-06-30", "120"), observation("revenue", "2025-09-30", "80")],
+      annual: [],
+    }],
+  };
+  const brief = buildSecAnalysisBrief({
+    ticker: "MSFT", filingId: "acc-1", periodId: "MSFT:2026-06-30:quarter", periodScope: "quarter",
+    reportDate: "2026-06-30", history: gapped, memorySummary: "", memoryItems: [],
+  });
+
+  assert.equal(brief.comparisons.some((item) => item.comparisonType === "qoq"), false);
+});
+
 test("reports series the filing period has no XBRL value for instead of guessing", () => {
   const brief = buildSecAnalysisBrief({
     ticker: "MSFT",
