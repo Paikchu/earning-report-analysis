@@ -64,8 +64,7 @@ function compactMemorySource(source: Record<string, unknown>) {
 
 function collectValidEvidenceIds(source: Record<string, unknown>): Set<string> {
   const artifact = record(source.artifact);
-  const ledger = record(artifact?.claimLedger);
-  return new Set(Array.isArray(ledger?.validEvidenceIds) ? ledger.validEvidenceIds.map(String) : []);
+  return new Set(Array.isArray(artifact?.validEvidenceIds) ? artifact.validEvidenceIds.map(String) : []);
 }
 
 function memoryExtractionSystemPrompt() {

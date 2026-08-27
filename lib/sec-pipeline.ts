@@ -1,6 +1,5 @@
 import {
   buildFilingBlocks,
-  buildClaimLedger,
   buildModulePayload,
   buildPeriodIdentity,
   buildRouterPayload,
@@ -15,7 +14,6 @@ import {
   SEC_ANALYSIS_MODULES,
   SEC_ANALYSIS_SCHEMA_VERSION,
   type ComparisonResult,
-  type ClaimLedger,
   type FilingBlock,
   type ManagerReview,
   type ModuleAnalysis,
@@ -227,10 +225,6 @@ export async function reviewPreparedSecAnalysis(
   return normalizeManagerReview(value, new Set(plan.nodes.map((node) => node.id)), new Set(prepared.outline.map((section) => section.id)));
 }
 
-export function buildPreparedClaimLedger(brief: SecAnalysisBrief, nodes: SecNodeResult[], comparisons: ComparisonResult[]): ClaimLedger {
-  return buildClaimLedger(brief, nodes.map((node) => ({ id: node.id, findings: node.findings, narrative: node.narrative, evidenceIds: node.evidenceIds })), comparisons);
-}
-
 export async function summarizePreparedSecEvent(
   prepared: PreparedSecFiling,
   model: SecModelCall,
@@ -306,7 +300,6 @@ export async function summarizePreparedSecFiling(
   nodes: SecNodeResult[] = [],
   brief?: SecAnalysisBrief,
   review?: ManagerReview,
-  ledger?: ClaimLedger,
 ): Promise<{ artifact: SecAnalysisArtifact; summary: SecFilingSummary }> {
   const snapshots = moduleAnalyses.map((analysis): SnapshotSummary => ({
     ticker: prepared.filing.ticker,
@@ -332,12 +325,11 @@ export async function summarizePreparedSecFiling(
     questions: plan.nodes.map((node) => ({ questionId: node.id, status: "answered" as const, explanation: "Completed before v3 review injection" })),
     repairTasks: [], unresolvedQuestions: [], coverageScore: 1, stopReason: "complete" as const,
   };
-  const finalLedger = ledger ?? buildPreparedClaimLedger(finalBrief, nodes, [...qoqResults, ...yoyResults]);
+  const validEvidenceIds = [...new Set(prepared.blocks.map((block) => `ev:${block.blockId}`))].sort();
   const summaryPayload = {
     brief: finalBrief,
     nodeAnalyses: usableNodes.map(({ id, title, findings, narrative }) => ({ id, title, findings, narrative })),
     managerReview: finalReview,
-    claimLedger: finalLedger,
     outputSchema: {
       headline: "string",
       bullets: "[{label, detail, importance}]",
@@ -353,7 +345,7 @@ export async function summarizePreparedSecFiling(
     ticker: prepared.filing.ticker,
     periodId: prepared.periodId,
     reportVersion: `${SEC_ANALYSIS_SCHEMA_VERSION}:${hashString(JSON.stringify(summaryPayload))}`,
-  }, new Set(prepared.blocks.map((block) => `ev:${block.blockId}`)));
+  }, new Set(validEvidenceIds));
   report = addDeterministicDeltas(report, qoq, yoy);
   report = enforceDeterministicReportQuality(report, moduleAnalyses);
   report = {
@@ -380,7 +372,7 @@ export async function summarizePreparedSecFiling(
     router,
     brief: finalBrief,
     managerReview: finalReview,
-    claimLedger: finalLedger,
+    validEvidenceIds,
   };
   const normalizedSummary = normalizeSecSummary({ ...summaryValue, source: "deepseek", version: SEC_SUMMARY_VERSION }, prepared.filing, now);
   if (!normalizedSummary.report) {
@@ -496,7 +488,7 @@ function moduleSystemPrompt(moduleKey: SecAnalysisModuleKey) {
 
 function synthesisSystemPrompt() {
   return [
-    "你是美股基本面研究团队的总编。输入只有最终 SecAnalysisBrief、完成节点、Manager Review 和 Claim Ledger，不含 filing 原文。",
+    "你是美股基本面研究团队的总编。输入只有最终 SecAnalysisBrief、完成节点和 Manager Review，不含 filing 原文。",
     "完整研报的章节逻辑必须来自 nodeAnalyses，不要重新套用固定主题模板。",
     "数字、同比、环比和证据只能使用结构化输入中已有的值；不得编造或把 qoq 与 yoy 混写。",
     "report 输出 900 至 1,600 字简体中文正文，按投资者阅读逻辑用空行分段，不要使用 Markdown 标题或项目符号。",

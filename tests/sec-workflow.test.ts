@@ -172,9 +172,8 @@ test("runs filing analysis as durable stages and fans modules out independently"
   assert.ok(steps.includes(`node:${filing.accessionNumber}:round:0:0:revenue-growth`));
   assert.ok(steps.includes(`node:${filing.accessionNumber}:round:0:1:cash-flow`));
   assert.ok(steps.includes(`manager-review:${filing.accessionNumber}:round:0`));
-  assert.ok(steps.includes(`claim-ledger:${filing.accessionNumber}`));
   assert.ok(steps.includes(`publish:${filing.accessionNumber}`));
-  assert.deepEqual(jobStages, ["context", "prepare", "router", "modules", "brief", "manager", "nodes-round-0", "manager-review", "claim-ledger", "synthesis", "publish", "published"]);
+  assert.deepEqual(jobStages, ["context", "prepare", "router", "modules", "brief", "manager", "nodes-round-0", "manager-review", "synthesis", "publish", "published"]);
   assert.ok(jobIds.every((jobId) => jobId.endsWith(":workflow-1")));
   assert.deepEqual(publishedSummary?.workflow?.nodes.map((node) => node.id), [
     "filing-selection",

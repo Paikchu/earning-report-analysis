@@ -129,25 +129,6 @@ export type ManagerReview = {
   stopReason: "complete" | "max_rounds" | "no_progress" | "analysis_incomplete" | null;
 };
 
-export type ClaimLedgerEntry = {
-  claimId: string;
-  kind: "fact" | "claim" | "comparison";
-  metricKey?: string;
-  statement?: string;
-  value?: string;
-  unit?: string;
-  currency?: string;
-  basis?: string;
-  periodId?: string;
-  evidenceIds: string[];
-};
-
-export type ClaimLedger = {
-  version: "sec-claim-ledger.v1";
-  entries: ClaimLedgerEntry[];
-  validEvidenceIds: string[];
-};
-
 export const SEC_DATA_NEEDS = {
   coreFacts: [
     "revenue",
@@ -510,74 +491,6 @@ export function unresolvedFingerprint(review: ManagerReview): string {
     .map((question) => `${question.questionId}:${question.status}`)
     .sort();
   return hashString(JSON.stringify(unresolved));
-}
-
-export function buildClaimLedger(
-  brief: SecAnalysisBrief,
-  nodeFindings: Array<{ id: string; findings: Array<{ label: string; detail: string }>; narrative?: string; evidenceIds?: string[] }>,
-  comparisons: ComparisonResult[],
-): ClaimLedger {
-  const entries: ClaimLedgerEntry[] = [];
-  for (const fact of brief.currentFacts) {
-    entries.push({
-      claimId: fact.factId ?? `fact:${hashString(JSON.stringify(fact))}`,
-      kind: "fact",
-      metricKey: fact.metricKey,
-      value: fact.value,
-      unit: fact.unit,
-      currency: fact.currency,
-      basis: fact.basis,
-      periodId: brief.periodId,
-      evidenceIds: fact.evidenceIds,
-    });
-  }
-  for (const claim of brief.currentClaims) {
-    entries.push({ claimId: claim.claimId ?? `claim:${hashString(JSON.stringify(claim))}`, kind: "claim", statement: claim.statement, periodId: claim.targetPeriodId ?? brief.periodId, evidenceIds: claim.evidenceIds });
-  }
-  for (const comparison of brief.comparisons) {
-    entries.push({
-      claimId: `brief-comparison:${hashString(JSON.stringify(comparison))}`,
-      kind: "comparison",
-      metricKey: comparison.seriesId,
-      statement: `${comparison.comparisonType}:${comparison.currentValue}:${comparison.priorValue}:${comparison.percentageDelta ?? ""}`,
-      value: comparison.currentValue,
-      unit: comparison.unit,
-      currency: comparison.currency,
-      basis: comparison.basis,
-      periodId: brief.periodId,
-      evidenceIds: [],
-    });
-  }
-  for (const comparison of comparisons) {
-    for (const delta of comparison.metricDeltas) {
-      entries.push({
-        claimId: `comparison:${hashString(JSON.stringify({ comparison, delta }))}`,
-        kind: "comparison",
-        metricKey: delta.metricKey,
-        statement: `${comparison.comparisonType}:${delta.currentValue}:${delta.priorValue}:${delta.percentageDelta ?? ""}`,
-        value: delta.currentValue,
-        periodId: comparison.currentPeriodId,
-        evidenceIds: [],
-      });
-    }
-  }
-  for (const node of nodeFindings) {
-    for (const finding of node.findings) entries.push({
-      claimId: `node:${node.id}:${hashString(`${finding.label}:${finding.detail}`)}`,
-      kind: "claim",
-      statement: `${finding.label}: ${finding.detail}`,
-      periodId: brief.periodId,
-      evidenceIds: node.evidenceIds ?? [],
-    });
-    if (node.narrative) entries.push({
-      claimId: `node:${node.id}:narrative:${hashString(node.narrative)}`,
-      kind: "claim",
-      statement: node.narrative,
-      periodId: brief.periodId,
-      evidenceIds: node.evidenceIds ?? [],
-    });
-  }
-  return { version: "sec-claim-ledger.v1", entries, validEvidenceIds: [...new Set(entries.flatMap((entry) => entry.evidenceIds))].sort() };
 }
 
 export function buildFilingBlocks(text: string, accessionNumber: string): FilingBlock[] {

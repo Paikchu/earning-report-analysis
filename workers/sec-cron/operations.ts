@@ -1,7 +1,6 @@
 import {
   analyzePreparedSecNode,
   analyzePreparedSecModule,
-  buildPreparedClaimLedger,
   buildPreparedSecBrief,
   discoverSecTicker,
   planPreparedSecFiling,
@@ -19,7 +18,6 @@ import {
   fallbackRouterResult,
   SEC_ANALYSIS_MODULES,
   SEC_ANALYSIS_SCHEMA_VERSION,
-  type ClaimLedger,
   type ManagerReview,
   type RouterResult,
 } from "../../lib/sec-analysis.ts";
@@ -125,16 +123,11 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       await putArtifact(env.SEC_FILINGS, reference, `manager-review/round-${round}`, result);
       return result;
     },
-    buildClaimLedger: async (_filing, reference, brief, nodes): Promise<ClaimLedger> => {
-      const result = buildPreparedClaimLedger(brief, nodes, []);
-      await putArtifact(env.SEC_FILINGS, reference, "nodes/final", nodes);
-      await putArtifact(env.SEC_FILINGS, reference, "claim-ledger", result);
-      return result;
-    },
     summarizeEvent: async (_filing, reference, execution) => summarizePreparedSecEvent(await readPrepared(env.SEC_FILINGS, reference), modelFor(execution)),
-    summarize: async (_filing, reference, context, router, modules, plan, nodes, brief, review, ledger, execution) => {
+    summarize: async (_filing, reference, context, router, modules, plan, nodes, brief, review, execution) => {
+      await putArtifact(env.SEC_FILINGS, reference, "nodes/final", nodes);
       if (review) await putArtifact(env.SEC_FILINGS, reference, "manager-review/final", review);
-      const result = await summarizePreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), context, router, modules, modelFor(execution), new Date(), plan, nodes, brief, review, ledger);
+      const result = await summarizePreparedSecFiling(await readPrepared(env.SEC_FILINGS, reference), context, router, modules, modelFor(execution), new Date(), plan, nodes, brief, review);
       const synthesisKey = await putArtifact(env.SEC_FILINGS, reference, "synthesis", result);
       return { ...result, artifact: { ...result.artifact, blocks: [], artifactKeys: collectArtifactKeys(reference, synthesisKey) } };
     },
@@ -272,7 +265,6 @@ function collectArtifactKeys(reference: PreparedFilingReference, synthesisKey: s
     plan: `${prefix}/manager-plan.json`,
     "manager-review": `${prefix}/manager-review/final.json`,
     nodes: `${prefix}/nodes/final.json`,
-    claimLedger: `${prefix}/claim-ledger.json`,
     synthesis: synthesisKey,
     ...Object.fromEntries(SEC_ANALYSIS_MODULES.map((module) => [`module:${module.key}`, `${prefix}/modules/${module.key}.json`])),
   };

@@ -596,7 +596,6 @@ export class D1SecRepository implements SecRepository {
       ...(artifact.artifactKeys?.plan ? [{ stage: "manager-plan", input: artifact.artifactKeys.plan, status: "complete", outputR2Key: artifact.artifactKeys.plan }] : []),
       ...(artifact.artifactKeys?.nodes ? [{ stage: "nodes", input: artifact.artifactKeys.nodes, status: artifact.managerReview?.status ?? "complete", outputR2Key: artifact.artifactKeys.nodes }] : []),
       ...(artifact.managerReview ? [{ stage: "manager-review", input: artifact.managerReview, status: artifact.managerReview.status, outputR2Key: artifact.artifactKeys?.["manager-review"] }] : []),
-      ...(artifact.claimLedger ? [{ stage: "claim-ledger", input: artifact.claimLedger, status: "complete", outputR2Key: artifact.artifactKeys?.claimLedger }] : []),
       { stage: "summary", input: artifact.report, status: artifact.report.dataQuality.verificationStatus, outputR2Key: artifact.artifactKeys?.synthesis },
     ];
     for (const stage of stages) {
@@ -630,7 +629,7 @@ export class D1SecRepository implements SecRepository {
     if (artifact.report.dataQuality.verificationStatus === "failed") throw new Error("Failed SEC analysis cannot be published");
     if (!this.database.batch) throw new Error("D1 batch is required for atomic SEC publication");
     const memoryJobId = `${artifact.filing.ticker}:${artifact.periodId}:${artifact.report.reportVersion}:memory`;
-    const sourceR2Key = artifact.artifactKeys?.synthesis ?? artifact.artifactKeys?.claimLedger;
+    const sourceR2Key = artifact.artifactKeys?.synthesis;
     if (!sourceR2Key) throw new Error("SEC publication is missing its R2 memory source");
     const statements = [
       this.database.prepare(`

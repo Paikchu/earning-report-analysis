@@ -1,7 +1,6 @@
 import type { SecFiling, SecFilingSummary } from "./sec.ts";
 import type {
   ComparisonResult,
-  ClaimLedger,
   CompanyMemoryItem,
   FilingBlock,
   ModuleAnalysis,
@@ -56,6 +55,6 @@ export type SecAnalysisArtifact = {
   router: RouterResult;
   brief?: SecAnalysisBrief;
   managerReview?: ManagerReview;
-  claimLedger?: ClaimLedger;
+  validEvidenceIds?: string[];
   artifactKeys?: Record<string, string>;
 };

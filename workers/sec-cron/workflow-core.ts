@@ -1,12 +1,10 @@
 import {
   MAX_REPAIR_NODES_PER_ROUND,
   MAX_REPAIR_ROUNDS,
-  buildClaimLedger,
   buildSecAnalysisBrief,
   SEC_ANALYSIS_MODULES,
   SEC_ANALYSIS_SCHEMA_VERSION,
   unresolvedFingerprint,
-  type ClaimLedger,
   type ManagerRepairTask,
   type ManagerReview,
   type ModuleAnalysis,
@@ -118,9 +116,8 @@ export type SecPipelineOperations = {
   plan(filing: SecFiling, prepared: PreparedFilingReference, brief?: SecAnalysisBrief, execution?: SecModelExecution): Promise<SecNodePlan>;
   analyzeNode(spec: SecNodeSpec, filing: SecFiling, prepared: PreparedFilingReference, brief?: SecAnalysisBrief, round?: number, execution?: SecModelExecution): Promise<SecNodeResult>;
   review?(filing: SecFiling, prepared: PreparedFilingReference, brief: SecAnalysisBrief, plan: SecNodePlan, nodes: SecNodeResult[], round: number, execution?: SecModelExecution): Promise<ManagerReview>;
-  buildClaimLedger?(filing: SecFiling, prepared: PreparedFilingReference, brief: SecAnalysisBrief, nodes: SecNodeResult[]): Promise<ClaimLedger>;
   summarizeEvent(filing: SecFiling, prepared: PreparedFilingReference, execution?: SecModelExecution): Promise<SecFilingSummary>;
-  summarize(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, router: RouterResult, modules: ModuleAnalysis[], plan: SecNodePlan, nodes: SecNodeResult[], brief?: SecAnalysisBrief, review?: ManagerReview, ledger?: ClaimLedger, execution?: SecModelExecution): Promise<{ artifact: SecAnalysisArtifact; summary: SecFilingSummary | null }>;
+  summarize(filing: SecFiling, prepared: PreparedFilingReference, context: SecAnalysisContext, router: RouterResult, modules: ModuleAnalysis[], plan: SecNodePlan, nodes: SecNodeResult[], brief?: SecAnalysisBrief, review?: ManagerReview, execution?: SecModelExecution): Promise<{ artifact: SecAnalysisArtifact; summary: SecFilingSummary | null }>;
   publish(artifact: SecAnalysisArtifact, summary: SecFilingSummary | null): Promise<void | { memoryJobId?: string }>;
   enqueueMemory?(jobId: string, ticker: string): Promise<void>;
   publishEvent(summary: SecFilingSummary): Promise<void>;
@@ -229,12 +226,8 @@ export async function executeSecAnalysisWorkflow(
             : "analysis_incomplete",
         }
         : loop.review;
-      await markJobStage(step, operations, baseJob, "claim-ledger");
-      const ledger = await step.do(`claim-ledger:${accession}`, () => operations.buildClaimLedger
-        ? operations.buildClaimLedger(filing, prepared, brief, loop.nodes)
-        : Promise.resolve(buildClaimLedger(brief, loop.nodes.map((node) => ({ id: node.id, findings: node.findings, narrative: node.narrative, evidenceIds: node.evidenceIds })), [])));
       await markJobStage(step, operations, baseJob, "synthesis");
-      const result = await step.do(`synthesis:${accession}`, (stepContext) => operations.summarize(filing, prepared, context, router, modules, plan, loop.nodes, brief, managerReview, ledger, executionFor(stepContext)));
+      const result = await step.do(`synthesis:${accession}`, (stepContext) => operations.summarize(filing, prepared, context, router, modules, plan, loop.nodes, brief, managerReview, executionFor(stepContext)));
       result.artifact.report.dataQuality = {
         ...result.artifact.report.dataQuality,
         analysisStatus: managerReview.status === "complete" ? "complete" : "partial",
