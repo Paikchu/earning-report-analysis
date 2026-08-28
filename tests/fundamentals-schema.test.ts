@@ -41,6 +41,16 @@ test("indexes the chart read path and enforces current observation identity", ()
   assert.equal(observationConfig.foreignKeys.length, 2);
 });
 
+test("serializes active fetch runs per ticker", () => {
+  const config = getTableConfig(fundamentalFetchRuns);
+  const activeIndex = config.indexes.find((item) =>
+    item.config.name === "fundamental_fetch_runs_running_ticker_idx");
+
+  assert.ok(activeIndex);
+  assert.equal(activeIndex.config.unique, true);
+  assert.ok(activeIndex.config.where);
+});
+
 test("keeps one active future chart plan per ticker", () => {
   const config = getTableConfig(fundamentalChartSpecs);
   const activeIndex = config.indexes.find((item) => item.config.name === "fundamental_chart_specs_active_ticker_idx");

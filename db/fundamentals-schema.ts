@@ -6,10 +6,18 @@ export const fundamentalFetchRuns = sqliteTable("fundamental_fetch_runs", {
   ticker: text("ticker").notNull(),
   source: text("source", { enum: ["yahoo_finance"] }).notNull().default("yahoo_finance"),
   status: text("status", { enum: ["running", "success", "failed"] }).notNull(),
+  qualityStatus: text("quality_status", { enum: ["pending", "complete", "partial", "rejected"] })
+    .notNull()
+    .default("pending"),
   requestHash: text("request_hash").notNull(),
   payloadHash: text("payload_hash"),
   parserVersion: text("parser_version").notNull(),
   catalogVersion: text("catalog_version").notNull(),
+  issueCount: integer("issue_count").notNull().default(0),
+  observationCount: integer("observation_count").notNull().default(0),
+  periodCount: integer("period_count").notNull().default(0),
+  leaseOwner: text("lease_owner"),
+  leaseUntil: text("lease_until"),
   startedAt: text("started_at").notNull(),
   fetchedAt: text("fetched_at"),
   completedAt: text("completed_at"),
@@ -18,6 +26,17 @@ export const fundamentalFetchRuns = sqliteTable("fundamental_fetch_runs", {
 }, (table) => [
   check("fundamental_fetch_runs_source_check", sql`${table.source} = 'yahoo_finance'`),
   check("fundamental_fetch_runs_status_check", sql`${table.status} IN ('running', 'success', 'failed')`),
+  check(
+    "fundamental_fetch_runs_quality_check",
+    sql`${table.qualityStatus} IN ('pending', 'complete', 'partial', 'rejected')`,
+  ),
+  check(
+    "fundamental_fetch_runs_counts_check",
+    sql`${table.issueCount} >= 0 AND ${table.observationCount} >= 0 AND ${table.periodCount} >= 0`,
+  ),
+  uniqueIndex("fundamental_fetch_runs_running_ticker_idx")
+    .on(table.ticker)
+    .where(sql`${table.status} = 'running'`),
   index("fundamental_fetch_runs_ticker_status_fetched_idx").on(table.ticker, table.status, table.fetchedAt),
 ]);
 

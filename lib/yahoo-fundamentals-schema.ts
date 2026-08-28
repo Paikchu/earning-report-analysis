@@ -45,7 +45,7 @@ export class YahooFundamentalsPayloadError extends Error {
 }
 
 export function parseYahooFundamentalsPayload(payload: unknown, expectedTicker?: string): YahooFundamentalsPayload {
-  const requestedTicker = expectedTicker === undefined ? "" : normalizeTicker(expectedTicker);
+  const requestedTicker = expectedTicker === undefined ? "" : normalizeFundamentalTicker(expectedTicker);
   if (expectedTicker !== undefined && !requestedTicker) {
     throw new YahooFundamentalsPayloadError("Expected ticker is invalid.");
   }
@@ -69,7 +69,7 @@ export function parseYahooFundamentalsPayload(payload: unknown, expectedTicker?:
     const result = asRecord(resultValue);
     const meta = asRecord(result?.meta);
     const sourceField = firstString(meta?.type);
-    const yahooSymbol = normalizeTicker(firstString(meta?.symbol));
+    const yahooSymbol = normalizeFundamentalTicker(firstString(meta?.symbol));
 
     if (!sourceField || !isYahooQuarterlyFundamentalField(sourceField)) {
       issues.push({
@@ -81,7 +81,7 @@ export function parseYahooFundamentalsPayload(payload: unknown, expectedTicker?:
     }
     receivedFields.add(sourceField);
 
-    if (!yahooSymbol || (requestedTicker && toYahooSymbol(requestedTicker) !== yahooSymbol)) {
+    if (!yahooSymbol || (requestedTicker && toYahooFundamentalSymbol(requestedTicker) !== yahooSymbol)) {
       issues.push({
         code: "invalid_symbol",
         sourceField,
@@ -181,12 +181,12 @@ function parseObservation(value: unknown): {
   };
 }
 
-function normalizeTicker(value: string): string {
+export function normalizeFundamentalTicker(value: string): string {
   const ticker = value.trim().toUpperCase();
   return /^[A-Z0-9][A-Z0-9.-]{0,14}$/.test(ticker) ? ticker : "";
 }
 
-function toYahooSymbol(value: string): string {
+export function toYahooFundamentalSymbol(value: string): string {
   return value.replaceAll(".", "-");
 }
 

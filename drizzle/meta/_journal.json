@@ -57,6 +57,13 @@
       "when": 1787893037171,
       "tag": "0007_yahoo_fundamentals_p1",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1787896203421,
+      "tag": "0008_yahoo_fundamentals_sync",
+      "breakpoints": true
     }
   ]
 }
