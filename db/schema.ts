@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
+export * from "./fundamentals-schema.ts";
+
 export const secCache = sqliteTable("sec_cache", {
   cacheKey: text("cache_key").primaryKey(),
   payload: text("payload").notNull(),
