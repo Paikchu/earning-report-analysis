@@ -3,7 +3,8 @@ import test from "node:test";
 
 import type { SecAnalysisArtifact } from "../lib/sec-types.ts";
 import type { SecFiling, SecNodeSpec } from "../lib/sec.ts";
-import { callWorkerSecModel, createSecPipelineOperations, type SecPipelineEnv } from "../workers/sec-cron/operations.ts";
+import { callWorkerSecModel, createSecPipelineOperations, modelForStage, type SecPipelineEnv } from "../workers/sec-cron/operations.ts";
+import { executeSecMemoryWorkflow } from "../workers/sec-cron/memory-workflow.ts";
 import { modelExecutionForAttempt, retryDelayForAttempt } from "../workers/sec-cron/retry-policy.ts";
 
 const filing: SecFiling = {
@@ -139,7 +140,7 @@ test("calls B.ai from the workflow worker when its shared AI secret is configure
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
     AI_API_KEY: "worker-model-secret",
-    SEC_ANALYSIS_MODEL: "deepseek-v4-flash",
+    SEC_ANALYSIS_MODEL: "glm-5.3-flash",
     SEC_FILINGS: {
       async get(key: string) {
         const value = objects.get(key);
@@ -356,4 +357,91 @@ test("publishes event summaries without creating a structured filing artifact", 
   assert.equal(requestBodies.length, 1);
   assert.deepEqual(requestBodies[0].filing, { ticker: "MSFT", form: "8-K", filingDate: "2026-08-10", accessionNumber: "event" });
   assert.equal("artifact" in requestBodies[0], false);
+});
+
+test("routes planning, review, and synthesis to the reasoning model and leaves node work on the primary", () => {
+  const tiered = { SEC_ANALYSIS_MODEL: "glm-5.3-flash", SEC_REASONING_MODEL: "glm-5.3" } as SecPipelineEnv;
+  const single = { SEC_ANALYSIS_MODEL: "glm-5.3-flash" } as SecPipelineEnv;
+
+  assert.equal(modelForStage(tiered, "manager"), "glm-5.3");
+  assert.equal(modelForStage(tiered, "manager-review:1"), "glm-5.3");
+  assert.equal(modelForStage(tiered, "synthesis"), "glm-5.3");
+  assert.equal(modelForStage(tiered, "synthesis:schema-retry"), "glm-5.3");
+  assert.equal(modelForStage(tiered, "node:revenue-growth"), undefined);
+  assert.equal(modelForStage(tiered, "event-summary"), undefined);
+  assert.equal(modelForStage(tiered, "manager", "hy3"), "hy3");
+  assert.equal(modelForStage(single, "manager"), undefined);
+});
+
+test("memory extraction receives this filing's claims, node verdicts, and prior memory ids", async () => {
+  const claim = { jobId: "job-1", ticker: "MSFT", filingId: "annual", periodId: "MSFT:2026-06-30:annual", sourceR2Key: "analysis/MSFT/annual/synthesis.json", ownerToken: "owner-1", leaseUntil: "2026-08-28T00:00:00.000Z" };
+  const source = {
+    artifact: {
+      validEvidenceIds: ["ev:block-1"],
+      brief: { memoryItems: [{ memoryId: "memory:guidance", topicKey: "guidance", statement: "Management guided to margin recovery." }] },
+      report: {
+        changes: {
+          guidance: [{ topicKey: "fy27-guidance", claimType: "guidance", statement: "FY27 revenue guided higher.", evidenceIds: ["ev:block-1"] }],
+          risks: [{ topicKey: "supply", claimType: "risk", statement: "Supply remains constrained.", evidenceIds: ["ev:block-1"] }],
+        },
+      },
+    },
+    summary: {
+      nodes: [{
+        id: "guidance",
+        title: "指引",
+        findings: [{ label: "指引", detail: "FY27 收入指引上修。", importance: "high" }],
+        narrative: "管理层上修了 FY27 指引。",
+        facts: [{ metricKey: "segment_revenue", value: "60", unit: "USDm", evidenceIds: ["ev:block-1"] }],
+        evidenceIds: ["ev:block-1"],
+        evidence: [{ start: 0, end: 30, score: 90, reasons: ["包含定量数据"], excerpt: "LOCATED-EXCERPT-MARKER" }],
+        memoryChecks: [{ memoryId: "memory:guidance", verdict: "confirmed", note: "Margin recovered.", evidenceIds: ["ev:block-1"] }],
+      }],
+    },
+  };
+  let modelPayload = "";
+  let committed: Record<string, unknown> | null = null;
+  const env = {
+    WEB_APP_ORIGIN: "https://site.test",
+    SEC_REFRESH_KEY: "refresh-key",
+    AI_API_KEY: "worker-model-secret",
+    SEC_FILINGS: {
+      async get(key: string) {
+        return key === claim.sourceR2Key ? { async text() { return JSON.stringify(source); } } : null;
+      },
+      async put() { return {}; },
+    },
+  } as unknown as SecPipelineEnv;
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = String(input);
+    if (url.endsWith("/api/internal/sec/memory/claim")) return Response.json({ claim });
+    if (url === "https://api.b.ai/v1/chat/completions") {
+      modelPayload = JSON.parse(String(init?.body ?? "{}")).messages[1].content;
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [
+        { candidateId: "c-1", memoryId: "memory:guidance", kind: "fact", topicKey: "margin", statement: "Margin recovered.", evidenceIds: ["ev:block-1"], materialityScore: 80, confidence: "high", disposition: "active" },
+        { candidateId: "c-2", memoryId: "memory:invented", kind: "fact", topicKey: "backlog", statement: "Backlog grew.", evidenceIds: ["ev:block-1"], materialityScore: 60, confidence: "medium", disposition: "active" },
+      ] }) } }] });
+    }
+    if (url.endsWith("/api/internal/sec/memory/commit")) {
+      committed = JSON.parse(String(init?.body ?? "{}"));
+      return Response.json({ status: "committed", noOp: false, itemCount: 2 });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  };
+
+  const result = await executeSecMemoryWorkflow({ jobId: "job-1", ticker: "MSFT" }, "instance-1", { do: (_name, callback) => callback() }, env, fetcher);
+
+  const payload = JSON.parse(modelPayload) as Record<string, unknown>;
+  assert.equal(result.status, "committed");
+  assert.deepEqual((payload.claims as Array<{ topicKey: string }>).map((item) => item.topicKey), ["fy27-guidance", "supply"]);
+  assert.deepEqual((payload.memoryChecks as Array<{ memoryId: string }>).map((item) => item.memoryId), ["memory:guidance"]);
+  assert.match(JSON.stringify(payload.outputSchema), /memoryId/);
+  // Node analysis reaches the extractor projected: the citable ids stay, the located excerpts go.
+  assert.equal(payload.nodeFindings, undefined);
+  assert.deepEqual((payload.nodeAnalyses as Array<{ evidenceIds: string[] }>)[0].evidenceIds, ["ev:block-1"]);
+  assert.match(modelPayload, /FY27 收入指引上修/);
+  assert.doesNotMatch(modelPayload, /LOCATED-EXCERPT-MARKER/);
+  const candidates = (committed as unknown as { extraction: { candidates: Array<{ memoryId?: string }> } }).extraction.candidates;
+  assert.equal(candidates[0].memoryId, "memory:guidance");
+  assert.equal(candidates[1].memoryId, undefined);
 });

@@ -52,6 +52,12 @@ npx wrangler deploy --config workers/sec-cron/wrangler.jsonc --env="" --keep-var
 
 `SEC_TRACKED_TICKERS` 只在 Pipeline Worker 的环境变量里维护；变更后重新部署，并观察 `/health` 返回的配置状态。
 
+`SEC_ANALYSIS_MODEL` 是所有阶段的主模型。可选的 `SEC_REASONING_MODEL` 只接管 Manager 规划、Manager Review 和 Synthesis——节点抽取、事件简析和 Memory 提取仍走主模型。不设置就是单模型，行为与之前一致；重试降级到 `hy3` 始终优先于这两者：
+
+```bash
+npx wrangler deploy --config workers/sec-cron/wrangler.jsonc --env="" --keep-vars --var "SEC_REASONING_MODEL:<model>"
+```
+
 `npm run sec-cron:check` 是不落地的干跑，可以在部署前确认绑定解析正确。
 
 ## 回滚

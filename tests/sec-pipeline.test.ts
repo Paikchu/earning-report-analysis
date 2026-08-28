@@ -450,3 +450,94 @@ test("accepts complete synthesis reports outside the former length range", async
     assert.equal(result.summary.report, report.slice(0, 6_000));
   }
 });
+
+test("node and synthesis prompts turn Company Memory into work rather than background reading", async () => {
+  const prepared = await prepareSecFiling(filing, {
+    userAgent: "test@example.com",
+    fetcher: async () => new Response("<h1>Revenue</h1><p>Revenue increased 18% and margins recovered.</p>"),
+  });
+  const memory = {
+    memoryId: "memory:margin", ticker: "MSFT", kind: "judgment" as const, topicKey: "margin-recovery",
+    statement: "Margins should recover next quarter.", status: "active" as const, materialityScore: 90,
+    confidence: "high" as const, evidenceIds: ["ev:prior"], firstSeenPeriod: "2026Q1", lastConfirmedPeriod: "2026Q1",
+    horizon: "2026Q2", nextTest: "Gross margin expands", falsifier: "Gross margin contracts",
+  };
+  const brief = buildPreparedSecBrief(prepared, {
+    ...analysisContext(prepared.periodId, xbrlHistory("120", "100")),
+    companyMemorySummary: "Margin recovery remains due.",
+    memoryItems: [memory],
+  });
+
+  let nodeSystem = "";
+  let nodePayload: unknown;
+  await analyzePreparedSecNode(prepared, nodeSpec({
+    id: "margin", title: "利润率", question: "利润率恢复了吗？", sectionIds: [prepared.outline[0].id],
+    memoryIds: ["memory:margin"],
+  }), async (_stage, system, payload) => {
+    nodeSystem = system;
+    nodePayload = payload;
+    return { narrative: "毛利率本期回升。", findings: [] };
+  }, brief);
+
+  assert.match(nodeSystem, /memoryChecks/);
+  assert.match(nodeSystem, /nextTest/);
+  assert.match(nodeSystem, /falsifier/);
+  assert.match(JSON.stringify(nodePayload), /memory:margin/);
+
+  let synthesisSystem = "";
+  let synthesisPayload = "";
+  await summarizePreparedSecFiling(
+    prepared,
+    analysisContext(prepared.periodId, xbrlHistory("120", "100")),
+    async (_stage, system, payload) => {
+      synthesisSystem = system;
+      synthesisPayload = JSON.stringify(payload);
+      return {
+        headline: "利润率回升", bullets: completeBullets(), analystView: "回升能否延续仍需观察。",
+        report: completeReport(), keyMetrics: [{ metricKey: "revenue", currentValue: "120", evidenceIds: ["xbrl:revenue:2026-06-30"] }],
+        changes: { qoq: [], yoy: [], guidance: [], risks: [] }, dataQuality: { coverage: 1, warnings: [] },
+      };
+    },
+    new Date("2026-08-05T00:00:00.000Z"),
+    normalizePlan(prepared.outline[0].id),
+    [{
+      id: "revenue-growth", title: "收入增长", status: "complete" as const, findings: [],
+      narrative: "毛利率本期回升。", evidence: [],
+      memoryChecks: [{ memoryId: "memory:margin", verdict: "confirmed" as const, note: "毛利率扩张。", evidenceIds: [`ev:${prepared.blocks[0].blockId}`] }],
+    }],
+    brief,
+  );
+
+  assert.match(synthesisSystem, /memoryChecks/);
+  assert.match(synthesisSystem, /记忆闭环/);
+  assert.match(synthesisPayload, /memory:margin/);
+});
+
+test("publishes manager planning defects and unanswered memory as report warnings", async () => {
+  const prepared = await prepareSecFiling(filing, {
+    userAgent: "test@example.com",
+    fetcher: async () => new Response("<h1>Revenue</h1><p>Revenue increased 18%.</p>"),
+  });
+  const plan = {
+    ...normalizePlan(prepared.outline[0].id),
+    warnings: ["Manager referenced memory ids that are not in the brief: memory:invented"],
+  };
+  plan.nodes[0].memoryIds = ["memory:margin"];
+
+  const result = await summarizePreparedSecFiling(
+    prepared,
+    analysisContext(prepared.periodId, xbrlHistory("120")),
+    async () => ({
+      headline: "收入增长", bullets: completeBullets(), analystView: "需求仍需观察。", report: completeReport(),
+      keyMetrics: [{ metricKey: "revenue", currentValue: "120", evidenceIds: ["xbrl:revenue:2026-06-30"] }],
+      changes: { qoq: [], yoy: [], guidance: [], risks: [] }, dataQuality: { coverage: 1, warnings: [] },
+    }),
+    new Date("2026-08-05T00:00:00.000Z"),
+    plan,
+    [{ id: "revenue-growth", title: "收入增长", status: "complete" as const, findings: [], narrative: "收入增长。", evidence: [] }],
+  );
+
+  const warnings = result.artifact.report.dataQuality.warnings;
+  assert.ok(warnings.some((warning) => warning.includes("memory:invented")));
+  assert.ok(warnings.some((warning) => warning.includes("no verdict on 1/1 assigned memory items")));
+});

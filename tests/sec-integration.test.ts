@@ -39,11 +39,13 @@ test("exposes the standalone stock and report routes", async () => {
   assert.doesNotMatch(header, /oai-authenticated-user-email|ChatGPT/);
 });
 
-test("restores the newest filing summary when the stock page is shown again", async () => {
+test("restores the default open filings when the stock page is shown again", async () => {
   const section = await readFile(new URL("../app/positions/[ticker]/SecFilingsSection.tsx", import.meta.url), "utf8");
 
   assert.match(section, /addEventListener\("pageshow", restoreDefaultSummary\)/);
-  assert.match(section, /setOpenAccession\(filings\[0\]\?\.accessionNumber \?\? null\)/);
+  assert.match(section, /setOpenAccessions\(new Set\(defaultOpenAccessions\(filingsRef\.current\)\)\)/);
+  // The default is every filing from the current year, falling back to the newest one.
+  assert.match(section, /return filings\[0\] \? \[filings\[0\]\.accessionNumber\] : \[\]/);
   assert.match(section, /removeEventListener\("pageshow", restoreDefaultSummary\)/);
 });
 
@@ -94,7 +96,7 @@ test("ships SEC analysis as a durable Cloudflare workflow with isolated model cr
   assert.match(workerConfig, /"r2_buckets"/);
   assert.doesNotMatch(workerConfig, /"SEC_TRACKED_TICKERS"\s*:\s*""/);
   assert.match(operations, /AI_API_KEY/);
-  assert.match(operations, /deepseek-v4-flash/);
+  assert.match(operations, /glm-5.3-flash/);
   assert.doesNotMatch(runtime, /AI_API_KEY/);
-  assert.doesNotMatch(runtime, /deepseek-v4-flash/);
+  assert.doesNotMatch(runtime, /glm-5.3-flash/);
 });

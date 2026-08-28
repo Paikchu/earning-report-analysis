@@ -140,7 +140,7 @@ export async function planPreparedSecFiling(prepared: PreparedSecFilingMeta, mod
     sections: describeSecOutline(prepared.outline),
     brief: brief ?? null,
   });
-  return normalizeSecNodePlan(value, prepared.outline);
+  return normalizeSecNodePlan(value, prepared.outline, brief ? new Set(brief.memoryItems.map((item) => item.memoryId)) : undefined);
 }
 
 /**
@@ -296,7 +296,7 @@ export async function summarizePreparedSecFiling(
   ])].sort();
   const summaryPayload = {
     brief: finalBrief,
-    nodeAnalyses: usableNodes.map(({ id, title, findings, narrative, facts }) => ({ id, title, findings, narrative, facts: facts ?? [] })),
+    nodeAnalyses: usableNodes.map(({ id, title, findings, narrative, facts, memoryChecks }) => ({ id, title, findings, narrative, facts: facts ?? [], memoryChecks: memoryChecks ?? [] })),
     managerReview: finalReview,
     allowedMetricKeys: [...new Set([...finalBrief.allowedMetricKeys, ...nodeFacts.map((fact) => fact.metricKey)])],
     outputSchema: {
@@ -321,6 +321,7 @@ export async function summarizePreparedSecFiling(
     ...report,
     dataQuality: {
       ...report.dataQuality,
+      warnings: [...new Set([...report.dataQuality.warnings, ...(plan.warnings ?? []), ...memoryCoverageWarnings(plan, nodes)])].slice(0, 20),
       analysisStatus: finalReview.status === "complete" ? "complete" : "partial",
       unresolvedQuestions: finalReview.unresolvedQuestions,
       failedNodeIds: nodes.filter((node) => node.status !== "complete").map((node) => node.id),
@@ -354,6 +355,19 @@ export async function summarizePreparedSecFiling(
     managerReview: finalReview,
   };
   return { artifact, summary };
+}
+
+/**
+ * The Manager assigning memory to a node means nothing until that node returns a verdict on it.
+ * Silence here used to be invisible, so it is published rather than swallowed.
+ */
+function memoryCoverageWarnings(plan: SecNodePlan, nodes: SecNodeResult[]): string[] {
+  const assigned = new Set(plan.nodes.flatMap((node) => node.memoryIds ?? []));
+  if (!assigned.size) return [];
+  const checked = new Set(nodes.flatMap((node) => node.memoryChecks ?? []).map((check) => check.memoryId));
+  const unchecked = [...assigned].filter((memoryId) => !checked.has(memoryId)).sort();
+  if (!unchecked.length) return [];
+  return [`Nodes returned no verdict on ${unchecked.length}/${assigned.size} assigned memory items: ${unchecked.slice(0, 8).join(", ")}`];
 }
 
 function appendAnalysisLimitations(report: string | undefined, review: ManagerReview, nodes: SecNodeResult[]): string | undefined {
@@ -417,12 +431,16 @@ function nodeSystemPrompt() {
     "只使用给定的英文 SEC 原文章节，不引入外部信息，不编造数字。",
     "xbrlFacts 是已核验的本期 XBRL 数值，直接引用即可，不要从正文重新抠这些数字，也不要与之矛盾。",
     "回答 question；数字必须带口径和比较期间，并说明变化方向及驱动原因。",
+    "memory 是这家公司过去财报留下的记忆，每一条都是你本节必须处理的问题：judgment 的 nextTest 是要验证的假设，falsifier 是推翻它的条件。",
+    "对 memory 中的每一条输出一条 memoryChecks：本期原文支持它写 confirmed，出现 falsifier 描述的情况写 contradicted，本节章节没有相关披露写 not_addressed。",
+    "confirmed 与 contradicted 必须给出至少一个 evidence 清单里的 evidenceId，并在 note 里写清原文依据；没有证据就只能写 not_addressed。",
+    "narrative 里要正面写出这些记忆本期成立还是被推翻，不要只在 memoryChecks 里给结论。",
     "原文无法回答时将 narrative 留空，不要输出空泛措辞。",
-    "findings 输出 2 至 6 条具体事实；narrative 输出 300 至 700 字简体中文，可用空行分段，不要使用 Markdown。",
+    "findings 输出 2 至 6 条具体事实；有实质内容时 narrative 输出 300 至 700 字简体中文，可用空行分段，不要使用 Markdown；无实质内容就留空，留空不扣分。",
     "facts 只收录 xbrlFacts 之外、正文明确披露的结构化数值：分部收入与利润率、管理层 KPI、指引数字、一次性项目。",
     "metricKey 优先使用 allowedMetricKeys 中的值；属于管理层自定义 KPI 时使用 business_kpi 并在 definition 写出该 KPI 的原文定义。",
     "每条 fact 必须给出 unit、basis 和至少一个来自 evidence 清单的 evidenceId；无法引用证据的数值直接省略。",
-    "输出 JSON：{\"findings\":[{\"label\":\"\",\"detail\":\"\",\"importance\":\"high|medium|low\"}],\"narrative\":\"\",\"facts\":[{\"metricKey\":\"\",\"definition\":\"\",\"value\":\"\",\"unit\":\"\",\"currency\":\"\",\"periodScope\":\"\",\"basis\":\"gaap|non_gaap|management_kpi|derived\",\"sourceLabel\":\"fact_source_reported|management_adjusted|derived_calculation\",\"confidence\":\"high|medium|low\",\"evidenceIds\":[\"\"]}]}",
+    "输出 JSON：{\"findings\":[{\"label\":\"\",\"detail\":\"\",\"importance\":\"high|medium|low\"}],\"narrative\":\"\",\"facts\":[{\"metricKey\":\"\",\"definition\":\"\",\"value\":\"\",\"unit\":\"\",\"currency\":\"\",\"periodScope\":\"\",\"basis\":\"gaap|non_gaap|management_kpi|derived\",\"sourceLabel\":\"fact_source_reported|management_adjusted|derived_calculation\",\"confidence\":\"high|medium|low\",\"evidenceIds\":[\"\"]}],\"memoryChecks\":[{\"memoryId\":\"\",\"verdict\":\"confirmed|contradicted|not_addressed\",\"note\":\"\",\"evidenceIds\":[\"\"]}]}",
   ].join("\n");
 }
 
@@ -442,6 +460,9 @@ function synthesisSystemPrompt() {
     "brief.currentFacts 与 brief.comparisons 来自 SEC XBRL，是本期数字和同比环比的唯一权威来源；节点的 facts 用于补充分部、KPI 与指引。",
     "keyMetrics 的 metricKey 必须来自 allowedMetricKeys，超出列表的指标会被丢弃。",
     "完整研报的章节逻辑必须来自 nodeAnalyses，不要重新套用固定主题模板。",
+    "brief.memoryItems 与 nodeAnalyses[].memoryChecks 是这家公司过去财报留下的记忆和本期的核对结果。",
+    "report 必须有一段专门交代记忆闭环：上期的判断和管理层承诺哪些本期被证实、哪些被推翻、哪些仍未验证，逐条说明依据。",
+    "只依据 memoryChecks 的 verdict 下结论；没有对应 memoryChecks 的记忆一律按“本期未验证”处理，不要替节点补判断。",
     "数字、同比、环比和证据只能使用结构化输入中已有的值；不得编造或把 qoq 与 yoy 混写。",
     "report 输出 900 至 1,600 字简体中文正文，按投资者阅读逻辑用空行分段，不要使用 Markdown 标题或项目符号。",
     "headline 给出有方向性的结论；bullets 输出 3 至 5 条核心结论；analystView 说明投资含义但不给买卖建议。",

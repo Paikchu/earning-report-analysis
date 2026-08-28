@@ -31,17 +31,28 @@ export type SecPipelineEnv = SecCronEnv & {
   SEC_USER_AGENT: string;
   AI_API_KEY?: string;
   SEC_ANALYSIS_MODEL?: string;
+  /** Optional stronger model for planning, review and synthesis. Unset means one model everywhere. */
+  SEC_REASONING_MODEL?: string;
 };
 
 const PUBLISH_BLOCK_CHUNK_SIZE = 40;
 
+/** Planning, review and synthesis carry the judgement; node extraction is mechanical. */
+const REASONING_STAGE = /^(manager|synthesis)/;
+
+export function modelForStage(env: SecPipelineEnv, stage: string, override?: string): string | undefined {
+  if (override) return override;
+  return REASONING_STAGE.test(stage) ? env.SEC_REASONING_MODEL || undefined : undefined;
+}
+
 export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof fetch = fetch): SecPipelineOperations {
   const modelFor = (execution?: SecModelExecution): SecModelCall => async (stage, system, payload) => {
     try {
-      return await callWorkerSecModel(env, fetcher, stage, system, payload, execution?.model);
+      return await callWorkerSecModel(env, fetcher, stage, system, payload, modelForStage(env, stage, execution?.model));
     } catch (error) {
       if (!(error instanceof SyntaxError) && !String(error).includes("JSON object")) throw error;
-      return callWorkerSecModel(env, fetcher, `${stage}:schema-retry`, `${system}\nYour previous response violated the JSON schema. Return one valid JSON object only.`, payload, execution?.model);
+      const retryStage = `${stage}:schema-retry`;
+      return callWorkerSecModel(env, fetcher, retryStage, `${system}\nYour previous response violated the JSON schema. Return one valid JSON object only.`, payload, modelForStage(env, retryStage, execution?.model));
     }
   };
   return {
@@ -261,7 +272,7 @@ export async function callWorkerSecModel(
     method: "POST",
     headers: { "content-type": "application/json", accept: "text/event-stream", authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: modelOverride || env.SEC_ANALYSIS_MODEL || "deepseek-v4-flash",
+      model: modelOverride || env.SEC_ANALYSIS_MODEL || "glm-5.3-flash",
       messages: [
         { role: "system", content: system },
         { role: "user", content: JSON.stringify(payload) },

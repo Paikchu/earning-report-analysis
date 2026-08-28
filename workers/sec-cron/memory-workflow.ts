@@ -25,10 +25,11 @@ export async function executeSecMemoryWorkflow(
     return JSON.parse(await object.text()) as Record<string, unknown>;
   });
   const validEvidenceIds = collectValidEvidenceIds(source);
+  const priorMemoryIds = collectPriorMemoryIds(source);
   const extraction = await step.do(`memory-extract:${params.jobId}`, async (context) => {
     const execution = modelExecutionForAttempt(context?.attempt ?? 1);
     const value = await callWorkerSecModel(env, fetcher, "memory-extract", memoryExtractionSystemPrompt(), compactMemorySource(source), execution.model);
-    return normalizeMemoryExtraction(value, validEvidenceIds);
+    return normalizeMemoryExtraction(value, validEvidenceIds, priorMemoryIds);
   });
   const committed = await step.do(`memory-commit:${params.jobId}`, () => sitePost<{ status: string; noOp: boolean; itemCount: number }>(env, fetcher, "/api/internal/sec/memory/commit", {
     claim,
@@ -41,25 +42,60 @@ function compactMemorySource(source: Record<string, unknown>) {
   const artifact = record(source.artifact);
   const summary = record(source.summary);
   const brief = record(artifact?.brief);
+  const changes = record(record(artifact?.report)?.changes);
   const review = record(artifact?.managerReview) ?? record(summary?.managerReview);
+  const nodes = Array.isArray(summary?.nodes) ? summary.nodes : [];
   return {
     task: "Extract durable company memory from verified filing analysis inputs.",
     facts: brief?.currentFacts ?? [],
     comparisons: brief?.comparisons ?? [],
-    claims: brief?.currentClaims ?? [],
-    nodeFindings: Array.isArray(summary?.nodes) ? summary.nodes : [],
+    // Guidance and risks are the structured claims this filing actually produced; the brief never
+    // carried a claims field, so this input used to arrive empty on every single run.
+    claims: [
+      ...(Array.isArray(changes?.guidance) ? changes.guidance : []),
+      ...(Array.isArray(changes?.risks) ? changes.risks : []),
+    ],
+    // Projected, not passed through. A node result carries up to 16 located excerpts of 560
+    // characters in `evidence`, and none of them holds an evidence id, so the extractor cannot cite
+    // any of it — `evidenceIds` is the citable list. Whole nodes made this the largest input here
+    // by an order of magnitude, with the bulk of it unusable.
+    nodeAnalyses: nodes.flatMap((node) => {
+      const item = record(node);
+      if (!item) return [];
+      return [{
+        id: item.id,
+        title: item.title,
+        findings: item.findings ?? [],
+        narrative: item.narrative ?? "",
+        facts: item.facts ?? [],
+        evidenceIds: item.evidenceIds ?? [],
+      }];
+    }),
+    memoryChecks: nodes.flatMap((node) => {
+      const checks = record(node)?.memoryChecks;
+      return Array.isArray(checks) ? checks : [];
+    }),
     unresolvedItems: review?.unresolvedQuestions ?? [],
     priorMemory: brief?.memoryItems ?? [],
     rules: [
       "Keep only facts or falsifiable judgments that can affect a future filing assessment.",
       "Every candidate must cite supplied evidence IDs.",
       "A judgment requires horizon, nextTest, and falsifier.",
+      "When a candidate continues an item in priorMemory, copy that item's memoryId verbatim into memoryId. Rewording topicKey without it forks a duplicate memory and abandons the original.",
+      "Leave memoryId empty only for genuinely new memory. Never invent a memoryId that is not in priorMemory.",
+      "memoryChecks are the per-node verdicts on priorMemory: confirmed supports reaffirming, contradicted supports disposition contradicted, not_addressed supports nothing on its own.",
       "Omission is stale, never resolved. Use resolved only for explicit fulfillment and contradicted only for explicit contrary evidence.",
     ],
     outputSchema: {
-      candidates: "[{candidateId,kind:fact|judgment,topicKey,statement,evidenceIds,materialityScore,confidence,horizon,nextTest,falsifier,disposition}]",
+      candidates: "[{candidateId,memoryId,kind:fact|judgment,topicKey,statement,evidenceIds,materialityScore,confidence,horizon,nextTest,falsifier,disposition}]",
     },
   };
+}
+
+function collectPriorMemoryIds(source: Record<string, unknown>): Set<string> {
+  const items = record(record(source.artifact)?.brief)?.memoryItems;
+  if (!Array.isArray(items)) return new Set();
+  return new Set(items.map((item) => String(record(item)?.memoryId ?? "").trim()).filter(Boolean));
 }
 
 function collectValidEvidenceIds(source: Record<string, unknown>): Set<string> {
@@ -72,6 +108,7 @@ function memoryExtractionSystemPrompt() {
     "You are Phase 1 of a company filing memory system.",
     "Perform one strict structured extraction. Do not summarize the report prose and do not invent future expectations.",
     "Facts require evidence. Judgments require evidence, a deadline or horizon, nextTest, and falsifier.",
+    "Continuity is the point of this system: a candidate that updates something in priorMemory must repeat that item's memoryId exactly, even when you reword its topicKey or statement.",
     "Return one JSON object using the exact outputSchema.",
   ].join("\n");
 }
