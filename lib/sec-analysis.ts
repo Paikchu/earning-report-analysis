@@ -152,6 +152,10 @@ export type FilingBlock = {
   numericDensity: number;
   tableCount: number;
   contentHash: string;
+  /** Where the block came from: the filing body itself or an attached exhibit document. */
+  source?: "body" | "exhibit";
+  /** SEC submission TYPE of the originating document, e.g. "8-K" or "EX-99.1". */
+  exhibitType?: string;
 };
 
 export type AnalysisFact = {

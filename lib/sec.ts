@@ -220,6 +220,94 @@ export function cleanSecNodeId(value: unknown): string {
     .slice(0, 48);
 }
 
+/** A single text document inside a SEC full-submission `<accession>.txt` stream. */
+export type SecSubmissionPart = {
+  /** SEC official `<TYPE>` marker, e.g. "8-K", "6-K", "EX-99.1". */
+  type: string;
+  filename: string;
+  text: string;
+};
+
+/** Submission TYPE values worth parsing: the filing body plus real exhibits (XBRL exhibits excluded). */
+const SEC_SUBMISSION_KEEP_TYPES = /^(8-K|6-K|8-K\/A|6-K\/A|EX-(?!101)\S+)$/i;
+/** Noise types that dominate submission size (GRAPHIC is base64 images) and must not enter memory. */
+const SEC_SUBMISSION_DROP_TYPES = /^(GRAPHIC|XML|JSON|ZIP|EX-101\S*)$/i;
+
+/**
+ * Streams `<accession>.txt` (the SEC full-submission envelope) and returns only the text documents
+ * that matter: the filing body and real exhibits like EX-99.1. Streaming is required because the
+ * envelope routinely exceeds 5 MB due to embedded base64 graphics; dropped blocks are never buffered.
+ * The `<TYPE>` marker is authoritative and company-independent — file names are not (NVIDIA's press
+ * release exhibits carry no "ex"/"99" hint at all).
+ */
+export async function streamSecSubmissionParts(
+  cikNumber: number,
+  accessionNumber: string,
+  fetcher: typeof fetch,
+  userAgent: string,
+): Promise<SecSubmissionPart[]> {
+  const accessionPath = accessionNumber.replaceAll("-", "");
+  const url = `https://www.sec.gov/Archives/edgar/data/${cikNumber}/${accessionPath}/${accessionNumber}.txt`;
+  const response = await fetcher(url, {
+    cache: "no-store",
+    headers: { accept: "text/plain,*/*", "user-agent": userAgent },
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!response.ok) throw new Error(`SEC submission HTTP ${response.status}`);
+  if (!response.body) throw new Error("SEC submission response had no body stream");
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const parts: SecSubmissionPart[] = [];
+
+  const handleDocument = (document: string) => {
+    const type = (document.match(/<TYPE>[^\n<]*/) ?? [""])[0]?.replace(/<TYPE>/, "").trim() ?? "";
+    if (!type || !SEC_SUBMISSION_KEEP_TYPES.test(type) || SEC_SUBMISSION_DROP_TYPES.test(type)) return;
+    const filename = (document.match(/<FILENAME>[^\n<]*/) ?? [""])[0]?.replace(/<FILENAME>/, "").trim() ?? "";
+    const bodyStart = document.indexOf("<TEXT>");
+    const body = bodyStart === -1 ? "" : document.slice(bodyStart + 6);
+    const text = body.replace(/<\/TEXT>[\s\S]*$/i, "").trim();
+    if (text) parts.push({ type, filename, text });
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let boundary = buffer.indexOf("</DOCUMENT>");
+    while (boundary !== -1) {
+      const chunk = buffer.slice(0, boundary + "</DOCUMENT>".length);
+      buffer = buffer.slice(boundary + "</DOCUMENT>".length);
+      const opening = chunk.indexOf("<DOCUMENT>");
+      handleDocument(opening === -1 ? chunk : chunk.slice(opening + "<DOCUMENT>".length));
+      boundary = buffer.indexOf("</DOCUMENT>");
+    }
+  }
+  const tail = buffer.trim();
+  if (tail.includes("</DOCUMENT>")) handleDocument(tail);
+  return parts;
+}
+
+/** Boilerplate fragments that identify filing-metadata bullets (signers, addresses, Item numbers). */
+const EVENT_METADATA_PATTERNS = [
+  /signat/i, /general counsel/i, /corporate secretary/i, /treasurer/i, /controller\b/i,
+  /commission file/i, /irs employer/i, /date of report/i, /state of incorporation/i,
+  /exact name of registrant/i, /address of principal/i, /item\s*\d/i, /exhibit\s*\d/i,
+  /签署人?/, /报告日期/, /文件形式/, /注册地/, /委员会登记/, /主要办公地/,
+] as const;
+
+/** True when a bullet carries only filing metadata (form type, report date, signer, address, Item no.). */
+export function isEventMetadataBullet(bullet: SecSummaryBullet): boolean {
+  const sample = `${bullet.label}\n${bullet.detail}`;
+  return EVENT_METADATA_PATTERNS.some((pattern) => pattern.test(sample));
+}
+
+/** True when every bullet is filing metadata — the model saw only the filing envelope, not the content. */
+export function hasOnlyEventMetadataBullets(bullets: SecSummaryBullet[]): boolean {
+  return bullets.length > 0 && bullets.every(isEventMetadataBullet);
+}
+
 export function normalizeSecSummary(
   value: unknown,
   filing: SummaryFilingIdentity,
