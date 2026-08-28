@@ -387,7 +387,16 @@ test("memory extraction receives this filing's claims, node verdicts, and prior 
       },
     },
     summary: {
-      nodes: [{ id: "guidance", memoryChecks: [{ memoryId: "memory:guidance", verdict: "confirmed", note: "Margin recovered.", evidenceIds: ["ev:block-1"] }] }],
+      nodes: [{
+        id: "guidance",
+        title: "指引",
+        findings: [{ label: "指引", detail: "FY27 收入指引上修。", importance: "high" }],
+        narrative: "管理层上修了 FY27 指引。",
+        facts: [{ metricKey: "segment_revenue", value: "60", unit: "USDm", evidenceIds: ["ev:block-1"] }],
+        evidenceIds: ["ev:block-1"],
+        evidence: [{ start: 0, end: 30, score: 90, reasons: ["包含定量数据"], excerpt: "LOCATED-EXCERPT-MARKER" }],
+        memoryChecks: [{ memoryId: "memory:guidance", verdict: "confirmed", note: "Margin recovered.", evidenceIds: ["ev:block-1"] }],
+      }],
     },
   };
   let modelPayload = "";
@@ -427,6 +436,11 @@ test("memory extraction receives this filing's claims, node verdicts, and prior 
   assert.deepEqual((payload.claims as Array<{ topicKey: string }>).map((item) => item.topicKey), ["fy27-guidance", "supply"]);
   assert.deepEqual((payload.memoryChecks as Array<{ memoryId: string }>).map((item) => item.memoryId), ["memory:guidance"]);
   assert.match(JSON.stringify(payload.outputSchema), /memoryId/);
+  // Node analysis reaches the extractor projected: the citable ids stay, the located excerpts go.
+  assert.equal(payload.nodeFindings, undefined);
+  assert.deepEqual((payload.nodeAnalyses as Array<{ evidenceIds: string[] }>)[0].evidenceIds, ["ev:block-1"]);
+  assert.match(modelPayload, /FY27 收入指引上修/);
+  assert.doesNotMatch(modelPayload, /LOCATED-EXCERPT-MARKER/);
   const candidates = (committed as unknown as { extraction: { candidates: Array<{ memoryId?: string }> } }).extraction.candidates;
   assert.equal(candidates[0].memoryId, "memory:guidance");
   assert.equal(candidates[1].memoryId, undefined);

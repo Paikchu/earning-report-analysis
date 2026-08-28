@@ -55,7 +55,22 @@ function compactMemorySource(source: Record<string, unknown>) {
       ...(Array.isArray(changes?.guidance) ? changes.guidance : []),
       ...(Array.isArray(changes?.risks) ? changes.risks : []),
     ],
-    nodeFindings: nodes,
+    // Projected, not passed through. A node result carries up to 16 located excerpts of 560
+    // characters in `evidence`, and none of them holds an evidence id, so the extractor cannot cite
+    // any of it — `evidenceIds` is the citable list. Whole nodes made this the largest input here
+    // by an order of magnitude, with the bulk of it unusable.
+    nodeAnalyses: nodes.flatMap((node) => {
+      const item = record(node);
+      if (!item) return [];
+      return [{
+        id: item.id,
+        title: item.title,
+        findings: item.findings ?? [],
+        narrative: item.narrative ?? "",
+        facts: item.facts ?? [],
+        evidenceIds: item.evidenceIds ?? [],
+      }];
+    }),
     memoryChecks: nodes.flatMap((node) => {
       const checks = record(node)?.memoryChecks;
       return Array.isArray(checks) ? checks : [];
