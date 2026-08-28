@@ -19,6 +19,7 @@ import { normalizeCompanyFacts } from "../../lib/sec-history.ts";
 import { siteHeaders, type SecCronEnv } from "./core.ts";
 import type { SecModelExecution } from "./retry-policy.ts";
 import type { PreparedFilingReference, SecPipelineOperations } from "./workflow-core.ts";
+import { jobAnalysisVersionFor } from "./workflow-core.ts";
 
 type R2ObjectLike = { text(): Promise<string> };
 type R2BucketLike = {
@@ -64,7 +65,7 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
         lookup: {
           ticker: filing.ticker,
           accessionNumber: filing.accessionNumber,
-          analysisVersion: SEC_ANALYSIS_SCHEMA_VERSION,
+          analysisVersion: jobAnalysisVersionFor(filing.form),
         },
       });
       return result.status === null || result.status === "failed";
