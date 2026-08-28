@@ -31,7 +31,32 @@ const asDatabase = (mock: unknown) => mock as DatabaseMock;
 
 const issuer = "TESTCO";
 
-function companyFactsPayload() {
+/** SEC Company Facts keys concepts and units arbitrarily, and only some observations carry a
+ *  frame. Modelling that lets a test add or replace a concept without fighting the fixture. */
+type CompanyFactObservation = {
+  start: string;
+  end: string;
+  val: number;
+  accn: string;
+  fy: number;
+  fp: string;
+  form: string;
+  filed: string;
+  frame?: string;
+};
+
+type CompanyFactsPayload = {
+  cik: number;
+  entityName: string;
+  facts: {
+    "us-gaap": Record<string, {
+      label?: string;
+      units: Record<string, Array<CompanyFactObservation | undefined>>;
+    }>;
+  };
+};
+
+function companyFactsPayload(): CompanyFactsPayload {
   const quarterly = Array.from({ length: 10 }, (_, index) => {
     const year = 2024 + Math.floor(index / 4);
     const quarter = index % 4;

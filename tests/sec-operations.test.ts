@@ -53,7 +53,7 @@ const modelEnv = {
   AI_API_KEY: "worker-model-secret",
   SEC_ANALYSIS_MODEL: "primary-model",
   SEC_FILINGS: { async get() { return null; }, async put() { return {}; } },
-} as SecPipelineEnv;
+} as unknown as SecPipelineEnv;
 
 function sse(...events: string[]): Response {
   return new Response(events.map((event) => `data: ${event}\n\n`).join(""), {
