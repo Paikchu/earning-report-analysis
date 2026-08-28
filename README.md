@@ -21,7 +21,7 @@ npm run test:sec
 - Pipeline Worker：Cron、`SecAnalysisWorkflow`、`SecMemoryWorkflow`、模型调用和 R2。两个 Worker 通过 `SEC_REFRESH_KEY` 调用短内部桥接接口。
 - 两个 Worker 都使用 `nodejs_compat`。Pipeline 的 `AI_API_KEY` 只配置为 Worker Secret，不进入 Web Worker。
 - `npm run web:deploy` 会检查真实 `SEC_WEB_D1_DATABASE_ID` 后部署 Web Worker；Pipeline 使用 `npm run sec-cron:deploy`。不要直接部署带占位 D1 id 的生成配置——手工调用 `wrangler deploy` 前先跑 `npm run web:check`，它会拦下占位 id、缺失的 `nodejs_compat`，以及和 Pipeline 漂移的兼容性日期。
-- 切站和旧 MAX 站只读桥接见 [`docs/cutover.md`](docs/cutover.md)。
+- 完整的部署序列、密钥写入和回滚见 [`docs/deploy.md`](docs/deploy.md)。
 
 ## 数据迁移
 
