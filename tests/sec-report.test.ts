@@ -171,65 +171,17 @@ test("normalizes one completed node without changing its manager-owned identity"
   assert.equal(result.evidence[0].score, 92);
 });
 
-test("drops memory ids the brief never contained and says so in the plan warnings", () => {
+test("warns about invented history series and never lets memory ids into the plan", () => {
   const outline: SecOutlineSection[] = [{ id: "results", title: "Results", level: 2, start: 0, end: 100, characters: 100 }];
   const nodes = [{
     id: "growth", title: "增长", question: "增长由什么驱动？", sectionIds: ["results"],
-    historySeriesIds: ["revenue", "bookings"], memoryIds: ["memory:real", "memory:invented"],
+    historySeriesIds: ["revenue", "bookings"], memoryIds: ["memory:anything"],
   }];
 
-  const plan = normalizeSecNodePlan({ nodes }, outline, new Set(["memory:real"]));
+  const plan = normalizeSecNodePlan({ nodes }, outline);
 
-  assert.deepEqual(plan.nodes[0].memoryIds, ["memory:real"]);
   assert.deepEqual(plan.nodes[0].historySeriesIds, ["revenue"]);
-  assert.ok(plan.warnings?.some((warning) => warning.includes("memory:invented")));
-  assert.ok(plan.warnings?.some((warning) => warning.includes("bookings")));
-});
-
-test("warns when company memory exists but the manager assigned none of it", () => {
-  const outline: SecOutlineSection[] = [{ id: "results", title: "Results", level: 2, start: 0, end: 100, characters: 100 }];
-  const nodes = [{ id: "growth", title: "增长", question: "增长由什么驱动？", sectionIds: ["results"], memoryIds: [] }];
-
-  const assigned = normalizeSecNodePlan({ nodes }, outline, new Set());
-  const ignored = normalizeSecNodePlan({ nodes }, outline, new Set(["memory:real"]));
-  const unchecked = normalizeSecNodePlan({ nodes }, outline);
-
-  assert.equal(assigned.warnings, undefined);
-  assert.ok(ignored.warnings?.some((warning) => warning.includes("no planned node picked any of it up")));
-  assert.equal(unchecked.warnings, undefined);
-});
-
-test("keeps memory verdicts only for assigned memory backed by node evidence", () => {
-  const spec = nodeSpec({
-    id: "guidance", title: "指引", question: "上期指引兑现了吗？", sectionIds: ["results"],
-    memoryIds: ["memory:guidance", "memory:risk"],
-  });
-  const validEvidenceIds = new Set(["ev:block-1"]);
-
-  const result = normalizeSecNodeResult({
-    findings: [{ label: "指引", detail: "本期收入指引上修。", importance: "high" }],
-    narrative: "上期的收入指引本期兑现。",
-    memoryChecks: [
-      { memoryId: "memory:guidance", verdict: "confirmed", note: "收入超过指引区间上限。", evidenceIds: ["block-1"] },
-      { memoryId: "memory:risk", verdict: "not_addressed", note: "本节未涉及。", evidenceIds: [] },
-      { memoryId: "memory:guidance", verdict: "contradicted", note: "重复条目。", evidenceIds: ["ev:block-1"] },
-      { memoryId: "memory:unassigned", verdict: "confirmed", note: "未分配给本节。", evidenceIds: ["ev:block-1"] },
-      { memoryId: "memory:risk", verdict: "contradicted", note: "没有证据的断言。", evidenceIds: ["ev:missing"] },
-    ],
-  }, spec, [], validEvidenceIds);
-
-  assert.deepEqual(result.memoryChecks?.map((check) => [check.memoryId, check.verdict]), [
-    ["memory:guidance", "confirmed"],
-    ["memory:risk", "not_addressed"],
-  ]);
-  assert.deepEqual(result.memoryChecks?.[0].evidenceIds, ["ev:block-1"]);
-});
-
-test("omits memory verdicts entirely when the manager assigned no memory", () => {
-  const result = normalizeSecNodeResult({
-    narrative: "云业务保持增长。",
-    memoryChecks: [{ memoryId: "memory:guidance", verdict: "confirmed", note: "", evidenceIds: ["ev:block-1"] }],
-  }, nodeSpec({ id: "cloud", title: "云", question: "云增长如何？", sectionIds: ["results"] }), [], new Set(["ev:block-1"]));
-
-  assert.equal(result.memoryChecks, undefined);
+  // Company Memory is no longer part of analysis, so a node never carries memory whatever the model says.
+  assert.deepEqual(plan.nodes[0].memoryIds, []);
+  assert.deepEqual(plan.warnings, ["Manager referenced unknown history series: bookings"]);
 });

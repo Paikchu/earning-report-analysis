@@ -373,7 +373,7 @@ test("routes planning, review, and synthesis to the reasoning model and leaves n
   assert.equal(modelForStage(single, "manager"), undefined);
 });
 
-test("memory extraction receives this filing's claims, node verdicts, and prior memory ids", async () => {
+test("memory extraction still receives this filing's claims and prior memory ids", async () => {
   const claim = { jobId: "job-1", ticker: "MSFT", filingId: "annual", periodId: "MSFT:2026-06-30:annual", sourceR2Key: "analysis/MSFT/annual/synthesis.json", ownerToken: "owner-1", leaseUntil: "2026-08-28T00:00:00.000Z" };
   const source = {
     artifact: {
@@ -395,7 +395,6 @@ test("memory extraction receives this filing's claims, node verdicts, and prior 
         facts: [{ metricKey: "segment_revenue", value: "60", unit: "USDm", evidenceIds: ["ev:block-1"] }],
         evidenceIds: ["ev:block-1"],
         evidence: [{ start: 0, end: 30, score: 90, reasons: ["包含定量数据"], excerpt: "LOCATED-EXCERPT-MARKER" }],
-        memoryChecks: [{ memoryId: "memory:guidance", verdict: "confirmed", note: "Margin recovered.", evidenceIds: ["ev:block-1"] }],
       }],
     },
   };
@@ -434,8 +433,9 @@ test("memory extraction receives this filing's claims, node verdicts, and prior 
   const payload = JSON.parse(modelPayload) as Record<string, unknown>;
   assert.equal(result.status, "committed");
   assert.deepEqual((payload.claims as Array<{ topicKey: string }>).map((item) => item.topicKey), ["fy27-guidance", "supply"]);
-  assert.deepEqual((payload.memoryChecks as Array<{ memoryId: string }>).map((item) => item.memoryId), ["memory:guidance"]);
   assert.match(JSON.stringify(payload.outputSchema), /memoryId/);
+  // Analysis no longer sees memory, so the brief is the only route priorMemory still travels.
+  assert.deepEqual((payload.priorMemory as Array<{ memoryId: string }>).map((item) => item.memoryId), ["memory:guidance"]);
   // Node analysis reaches the extractor projected: the citable ids stay, the located excerpts go.
   assert.equal(payload.nodeFindings, undefined);
   assert.deepEqual((payload.nodeAnalyses as Array<{ evidenceIds: string[] }>)[0].evidenceIds, ["ev:block-1"]);

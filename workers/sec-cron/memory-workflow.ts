@@ -71,10 +71,6 @@ function compactMemorySource(source: Record<string, unknown>) {
         evidenceIds: item.evidenceIds ?? [],
       }];
     }),
-    memoryChecks: nodes.flatMap((node) => {
-      const checks = record(node)?.memoryChecks;
-      return Array.isArray(checks) ? checks : [];
-    }),
     unresolvedItems: review?.unresolvedQuestions ?? [],
     priorMemory: brief?.memoryItems ?? [],
     rules: [
@@ -83,7 +79,6 @@ function compactMemorySource(source: Record<string, unknown>) {
       "A judgment requires horizon, nextTest, and falsifier.",
       "When a candidate continues an item in priorMemory, copy that item's memoryId verbatim into memoryId. Rewording topicKey without it forks a duplicate memory and abandons the original.",
       "Leave memoryId empty only for genuinely new memory. Never invent a memoryId that is not in priorMemory.",
-      "memoryChecks are the per-node verdicts on priorMemory: confirmed supports reaffirming, contradicted supports disposition contradicted, not_addressed supports nothing on its own.",
       "Omission is stale, never resolved. Use resolved only for explicit fulfillment and contradicted only for explicit contrary evidence.",
     ],
     outputSchema: {

@@ -199,7 +199,7 @@ test("builds a Manager brief from XBRL facts, history, memory, and deterministic
   assert.deepEqual(brief.missingSeriesIds, []);
 });
 
-test("passes historical series and Company Memory into the Manager plan", async () => {
+test("passes historical series into the Manager plan and holds Company Memory back", async () => {
   const filing = {
     ticker: issuer, cik: "0000000001", cikNumber: 1, companyName: "Test Company", form: "10-Q",
     filingDate: "2026-04-20", reportDate: "2026-03-31", accessionNumber: "test-filing", primaryDocument: "test.htm",
@@ -216,8 +216,10 @@ test("passes historical series and Company Memory into the Manager plan", async 
   }, brief);
 
   assert.match(managerPayload, /sec-analysis-brief\.v2/);
-  assert.match(managerPayload, /memory-1/);
   assert.match(managerPayload, /registryVersion/);
+  // Memory stays on the brief for the extraction stage, but the Manager plans on this filing alone.
+  assert.doesNotMatch(managerPayload, /memory-1|Backlog expanded/);
+  assert.equal(brief.memoryItems[0].memoryId, "memory-1");
 });
 
 test("normalizes Manager review repair tasks and fingerprints unresolved work", () => {

@@ -451,47 +451,52 @@ test("accepts complete synthesis reports outside the former length range", async
   }
 });
 
-test("node and synthesis prompts turn Company Memory into work rather than background reading", async () => {
+test("keeps Company Memory out of every analysis payload while the brief still records it", async () => {
   const prepared = await prepareSecFiling(filing, {
     userAgent: "test@example.com",
     fetcher: async () => new Response("<h1>Revenue</h1><p>Revenue increased 18% and margins recovered.</p>"),
   });
   const memory = {
     memoryId: "memory:margin", ticker: "MSFT", kind: "judgment" as const, topicKey: "margin-recovery",
-    statement: "Margins should recover next quarter.", status: "active" as const, materialityScore: 90,
+    statement: "MEMORY-STATEMENT-MARKER", status: "active" as const, materialityScore: 90,
     confidence: "high" as const, evidenceIds: ["ev:prior"], firstSeenPeriod: "2026Q1", lastConfirmedPeriod: "2026Q1",
     horizon: "2026Q2", nextTest: "Gross margin expands", falsifier: "Gross margin contracts",
   };
   const brief = buildPreparedSecBrief(prepared, {
     ...analysisContext(prepared.periodId, xbrlHistory("120", "100")),
-    companyMemorySummary: "Margin recovery remains due.",
+    companyMemorySummary: "MEMORY-SUMMARY-MARKER",
     memoryItems: [memory],
   });
 
+  // The brief itself keeps memory: it is the R2 record, and the extraction stage reads priorMemory from it.
+  assert.equal(brief.memoryItems.length, 1);
+  assert.match(brief.companyMemorySummary, /MEMORY-SUMMARY-MARKER/);
+
+  let managerSystem = "";
+  const payloads: string[] = [];
+  await planPreparedSecFiling(prepared, async (_stage, system, payload) => {
+    managerSystem = system;
+    payloads.push(JSON.stringify(payload));
+    return { nodes: [{ id: "margin", title: "利润率", question: "利润率恢复了吗？", sectionIds: [prepared.outline[0].id], memoryIds: ["memory:margin"] }] };
+  }, brief);
+
   let nodeSystem = "";
-  let nodePayload: unknown;
   await analyzePreparedSecNode(prepared, nodeSpec({
     id: "margin", title: "利润率", question: "利润率恢复了吗？", sectionIds: [prepared.outline[0].id],
     memoryIds: ["memory:margin"],
   }), async (_stage, system, payload) => {
     nodeSystem = system;
-    nodePayload = payload;
+    payloads.push(JSON.stringify(payload));
     return { narrative: "毛利率本期回升。", findings: [] };
   }, brief);
 
-  assert.match(nodeSystem, /memoryChecks/);
-  assert.match(nodeSystem, /nextTest/);
-  assert.match(nodeSystem, /falsifier/);
-  assert.match(JSON.stringify(nodePayload), /memory:margin/);
-
   let synthesisSystem = "";
-  let synthesisPayload = "";
   await summarizePreparedSecFiling(
     prepared,
     analysisContext(prepared.periodId, xbrlHistory("120", "100")),
     async (_stage, system, payload) => {
       synthesisSystem = system;
-      synthesisPayload = JSON.stringify(payload);
+      payloads.push(JSON.stringify(payload));
       return {
         headline: "利润率回升", bullets: completeBullets(), analystView: "回升能否延续仍需观察。",
         report: completeReport(), keyMetrics: [{ metricKey: "revenue", currentValue: "120", evidenceIds: ["xbrl:revenue:2026-06-30"] }],
@@ -500,29 +505,29 @@ test("node and synthesis prompts turn Company Memory into work rather than backg
     },
     new Date("2026-08-05T00:00:00.000Z"),
     normalizePlan(prepared.outline[0].id),
-    [{
-      id: "revenue-growth", title: "收入增长", status: "complete" as const, findings: [],
-      narrative: "毛利率本期回升。", evidence: [],
-      memoryChecks: [{ memoryId: "memory:margin", verdict: "confirmed" as const, note: "毛利率扩张。", evidenceIds: [`ev:${prepared.blocks[0].blockId}`] }],
-    }],
+    [{ id: "revenue-growth", title: "收入增长", status: "complete" as const, findings: [], narrative: "毛利率本期回升。", evidence: [] }],
     brief,
   );
 
-  assert.match(synthesisSystem, /memoryChecks/);
-  assert.match(synthesisSystem, /记忆闭环/);
-  assert.match(synthesisPayload, /memory:margin/);
+  assert.equal(payloads.length, 3);
+  for (const payload of payloads) {
+    assert.doesNotMatch(payload, /MEMORY-STATEMENT-MARKER|MEMORY-SUMMARY-MARKER|memory:margin/);
+    assert.doesNotMatch(payload, /memoryItems|companyMemorySummary/);
+  }
+  for (const system of [managerSystem, nodeSystem, synthesisSystem]) {
+    assert.doesNotMatch(system, /memory|Memory|记忆/);
+  }
 });
 
-test("publishes manager planning defects and unanswered memory as report warnings", async () => {
+test("publishes manager planning defects as report warnings", async () => {
   const prepared = await prepareSecFiling(filing, {
     userAgent: "test@example.com",
     fetcher: async () => new Response("<h1>Revenue</h1><p>Revenue increased 18%.</p>"),
   });
   const plan = {
     ...normalizePlan(prepared.outline[0].id),
-    warnings: ["Manager referenced memory ids that are not in the brief: memory:invented"],
+    warnings: ["Manager referenced unknown history series: bookings"],
   };
-  plan.nodes[0].memoryIds = ["memory:margin"];
 
   const result = await summarizePreparedSecFiling(
     prepared,
@@ -537,7 +542,5 @@ test("publishes manager planning defects and unanswered memory as report warning
     [{ id: "revenue-growth", title: "收入增长", status: "complete" as const, findings: [], narrative: "收入增长。", evidence: [] }],
   );
 
-  const warnings = result.artifact.report.dataQuality.warnings;
-  assert.ok(warnings.some((warning) => warning.includes("memory:invented")));
-  assert.ok(warnings.some((warning) => warning.includes("no verdict on 1/1 assigned memory items")));
+  assert.ok(result.artifact.report.dataQuality.warnings.some((warning) => warning.includes("bookings")));
 });
