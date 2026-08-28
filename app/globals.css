@@ -1561,7 +1561,7 @@ td { font-size: 14px; }
   min-height: 68px;
   padding: 13px 4px;
   display: grid;
-  grid-template-columns: 58px 108px minmax(0, 1fr) 20px;
+  grid-template-columns: 66px 108px minmax(0, 1fr) 20px;
   align-items: center;
   gap: 14px;
   color: var(--ink);
@@ -1579,6 +1579,8 @@ td { font-size: 14px; }
   background: var(--ink);
   font: 650 12px/1 var(--sans);
   letter-spacing: .04em;
+  white-space: nowrap;
+  text-align: center;
 }
 .sec-form-badge[data-form="10-K"] { background: #17283b; }
 .sec-form-badge[data-form="10-K/A"] { background: #4f647a; }
@@ -1626,7 +1628,7 @@ td { font-size: 14px; }
 .sec-disclosure i:last-child { transform: translate(-50%, -50%) rotate(90deg); }
 .sec-filing-card.is-open .sec-disclosure i:last-child { transform: translate(-50%, -50%) rotate(90deg) scaleX(0); }
 .sec-filing-panel { overflow: hidden; }
-.sec-filing-body { padding: 3px 4px 20px 180px; }
+.sec-filing-body { padding: 3px 4px 20px 188px; }
 .sec-filing-body > a { min-height: 44px; display: inline-flex; align-items: center; color: var(--ink-muted); font-size: 12px; text-decoration: none; }
 .sec-filing-body > a:hover { color: var(--ink); }
 .sec-summary { display: grid; gap: 14px; }
@@ -2172,7 +2174,7 @@ td { font-size: 14px; }
   .ownership-metrics { grid-template-columns: 1fr; gap: 0; }
   .ownership-metric { padding: 11px 0 11px 12px; border-bottom: 1px solid var(--paper-deep); }
   .ownership-metric:last-child { border-bottom: 0; }
-  .sec-filing-card > button { grid-template-columns: 50px minmax(0, 1fr) 18px; gap: 10px; }
+  .sec-filing-card > button { grid-template-columns: 60px minmax(0, 1fr) 18px; gap: 10px; }
   .sec-filing-date { display: none; }
   .sec-filing-body { padding-left: 4px; }
   .detail-section-heading { align-items: flex-start; flex-direction: column; gap: 9px; }
