@@ -10,6 +10,7 @@ export SEC_PIPELINE_ORIGIN="https://earning-report-analysis-sec-pipeline.<subdom
 export SEC_TRACKED_TICKERS="MSFT,NVDA"
 npm run build
 npm run web:prepare
+npm run web:check
 npx wrangler d1 migrations apply "$SEC_WEB_D1_DATABASE_NAME" --remote --config dist/server/wrangler.json
 npx wrangler deploy --config dist/server/wrangler.json --keep-vars
 ```

@@ -1,6 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const configPath = process.env.SEC_WEB_WRANGLER_CONFIG ?? "dist/server/wrangler.json";
+import { PLACEHOLDER_D1_DATABASE_ID, WEB_WORKER_CONFIG_PATH } from "../build/web-worker-config.ts";
+
+const configPath = process.env.SEC_WEB_WRANGLER_CONFIG ?? WEB_WORKER_CONFIG_PATH;
 const databaseId = required("SEC_WEB_D1_DATABASE_ID");
 const config = JSON.parse(await readFile(configPath, "utf8")) as {
   name?: string;
@@ -27,7 +29,7 @@ console.log(JSON.stringify({ configPath, worker: config.name, d1Binding: "DB", d
 
 function required(name: string): string {
   const value = process.env[name]?.trim() ?? "";
-  if (!value || value === "00000000-0000-4000-8000-000000000000" || !/^[0-9a-f-]{20,}$/i.test(value)) {
+  if (!value || value === PLACEHOLDER_D1_DATABASE_ID || !/^[0-9a-f-]{20,}$/i.test(value)) {
     throw new Error(`${name} must be the real Cloudflare D1 database id`);
   }
   return value;

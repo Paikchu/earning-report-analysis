@@ -2,9 +2,7 @@ import vinext from "vinext";
 import { defineConfig } from "vite";
 import cloudflareBindings from "./cloudflare.bindings.json";
 import { cloudflareArtifacts } from "./build/cloudflare-artifacts";
-
-const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
-  "00000000-0000-4000-8000-000000000000";
+import { PLACEHOLDER_D1_DATABASE_ID } from "./build/web-worker-config.ts";
 
 const { d1, r2 } = cloudflareBindings;
 
@@ -13,13 +11,16 @@ const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 
 const localBindingConfig = {
   main: "./worker/index.ts",
+  // Both Workers run the same `lib/`, so this must match the Pipeline Worker in
+  // `workers/sec-cron/wrangler.jsonc`. `npm run web:check` fails when they drift.
+  compatibility_date: "2026-08-26",
   compatibility_flags: ["nodejs_compat"],
   d1_databases: d1
     ? [
         {
           binding: d1,
           database_name: "site-creator-d1",
-          database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
+          database_id: PLACEHOLDER_D1_DATABASE_ID,
           migrations_dir: "../migrations",
         },
       ]
