@@ -1580,6 +1580,26 @@ td { font-size: 14px; }
   font: 650 12px/1 var(--sans);
   letter-spacing: .04em;
 }
+.sec-form-badge[data-form="10-K"] { background: #17283b; }
+.sec-form-badge[data-form="10-K/A"] { background: #4f647a; }
+.sec-form-badge[data-form="10-Q"] { background: #2f5a6e; }
+.sec-form-badge[data-form="10-Q/A"] { background: #5a7484; }
+.sec-form-badge[data-form="20-F"] { background: #3b3f6b; }
+.sec-form-badge[data-form="20-F/A"] { background: #5a5b7a; }
+.sec-form-badge[data-form="8-K"] { background: #a35214; }
+.sec-form-badge[data-form="S-1"],
+.sec-form-badge[data-form="S-1/A"],
+.sec-form-badge[data-form="S-3"],
+.sec-form-badge[data-form="S-3/A"],
+.sec-form-badge[data-form="S-4"],
+.sec-form-badge[data-form="S-4/A"],
+.sec-form-badge[data-form="S-8"],
+.sec-form-badge[data-form="S-11"] { background: #5a3f6b; }
+.sec-form-badge[data-form="DEF 14A"] { background: #7a5a26; }
+.sec-form-badge[data-form="4"] { background: #596572; }
+.sec-form-badge[data-form="11-K"] { background: #4a4a6e; }
+.sec-form-badge[data-form="13F-HR"],
+.sec-form-badge[data-form="13F"] { background: #4a6e6b; }
 .sec-filing-date,
 .sec-filing-description { min-width: 0; display: grid; gap: 5px; }
 .sec-filing-date strong,
