@@ -23,27 +23,6 @@ npm run test:sec
 - `npm run web:deploy` 会检查真实 `SEC_WEB_D1_DATABASE_ID` 后部署 Web Worker；Pipeline 使用 `npm run sec-cron:deploy`。不要直接部署带占位 D1 id 的生成配置——手工调用 `wrangler deploy` 前先跑 `npm run web:check`，它会拦下占位 id、缺失的 `nodejs_compat`，以及和 Pipeline 漂移的兼容性日期。
 - 完整的部署序列、密钥写入和回滚见 [`docs/deploy.md`](docs/deploy.md)。
 
-## 数据迁移
-
-原站一次性部署并保护 `/api/internal/sec/migration/export`，然后运行：
-
-```bash
-SEC_EXPORT_ORIGIN=https://old-site.example \
-SEC_MIGRATION_KEY=... \
-npx tsx scripts/export-sec-migration.ts
-```
-
-脚本输出每张 SEC 表的 NDJSON、主键定义、行数和 SHA-256 清单。R2 用 S3 API 或 rclone 复制后，将源/目标对象 manifest 交给 `scripts/verify-r2-manifest.ts`，核对 key、size、sha256。
-
-目标 D1 的 SQL 可按表分块生成，再逐个用 Wrangler 执行：
-
-```bash
-SEC_EXPORT_DIR=./migration/sec npm run migration:d1:prepare
-npx wrangler d1 execute <new-d1-name> --remote --file ./migration/sec/d1-import/sec_filings-00000.sql
-```
-
-执行顺序按 `d1-import/manifest.json`，每个文件成功后才继续下一个；不要对旧 Sites D1 执行写入。
-
 ## API
 
 - `GET /api/v1/search?q=MSFT`

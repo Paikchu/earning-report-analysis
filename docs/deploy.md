@@ -33,8 +33,6 @@ printf %s "$SEC_ADMIN_TOKEN" | npx wrangler secret put SEC_ADMIN_TOKEN --config 
 printf %s "$SEC_REFRESH_KEY" | npx wrangler secret put SEC_REFRESH_KEY --config dist/server/wrangler.json
 ```
 
-`SEC_MIGRATION_KEY` 只保护 `/api/internal/sec/migration/export`——旧站导出接口，迁移完成后没有调用方。删掉那条路由时这个密钥也可以一并撤掉。
-
 ## Pipeline Worker
 
 先部署关闭 Cron 的 staging（独立 Worker、Workflow 和 R2）：

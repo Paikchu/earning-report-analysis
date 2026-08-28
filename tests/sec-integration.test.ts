@@ -72,13 +72,11 @@ test("keeps only short authenticated internal bridge routes", async () => {
     "../app/api/internal/sec/context/route.ts",
     "../app/api/internal/sec/publish/route.ts",
     "../app/api/internal/sec/jobs/route.ts",
-    "../app/api/internal/sec/migration/export/route.ts",
   ];
   const sources = await Promise.all(routes.map((path) => readFile(new URL(path, import.meta.url), "utf8")));
   for (const source of sources) assert.match(source, /hasInternalSecAccess/);
   assert.match(sources[2], /saveAnalysis/);
   assert.match(sources[2], /body\.summary\.accessionNumber === eventAccession/);
-  assert.match(sources[4], /x-sec-migration-key/);
   assert.doesNotMatch(sources.join("\n"), /SEC_BOOTSTRAP|model-key|oai-sites-authorization/);
 });
 
