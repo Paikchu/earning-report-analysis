@@ -27,6 +27,9 @@ test("exposes the standalone stock and report routes", async () => {
     readFile(new URL("../app/site-header.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(stockPage, /SecFilingsSection/);
+  assert.match(stockPage, /FundamentalCharts/);
+  assert.match(stockPage, /stock-analysis-grid/);
+  assert.match(stockPage, /parseFundamentalPageState/);
   assert.match(stockPage, /findSecurity/);
   assert.match(reportPage, /getPublicFiling/);
   assert.match(reportPage, /notFound\(\)/);

@@ -109,3 +109,20 @@ test("metric selector exposes real checkboxes and disables unavailable or over-l
   assert.match(html, /disabled=""/);
   assert.match(html, /已达到叠加上限/);
 });
+
+test("metric selector prevents adding a third incompatible axis", () => {
+  const html = renderToStaticMarkup(
+    <MetricSelector
+      availableSeries={[
+        makeChartSeries("total_revenue"),
+        makeChartSeries("gross_margin"),
+        makeChartSeries("diluted_eps"),
+      ]}
+      selectedMetricKeys={["total_revenue", "gross_margin"]}
+      onChange={() => undefined}
+    />,
+  );
+
+  assert.match(html, /data-compatible="false"/);
+  assert.match(html, /单位冲突/);
+});

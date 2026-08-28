@@ -338,6 +338,26 @@ export function linePath(points: readonly Pick<FundamentalChartLinePoint, "x" | 
   return points.map((point, index) => `${index === 0 ? "M" : "L"}${round(point.x)},${round(point.y)}`).join(" ");
 }
 
+export function selectFundamentalPeriodTickIndexes(
+  periodCount: number,
+  plotWidth: number,
+): number[] {
+  if (periodCount <= 0) return [];
+  const maximumTickCount = Math.max(2, Math.floor(plotWidth / 56));
+  if (periodCount <= maximumTickCount) {
+    return Array.from({ length: periodCount }, (_, index) => index);
+  }
+
+  const stride = Math.ceil(periodCount / maximumTickCount);
+  const indexes = Array.from({ length: periodCount }, (_, index) => index)
+    .filter((index) => index % stride === 0);
+  const lastIndex = periodCount - 1;
+  const previousIndex = indexes.at(-1) ?? 0;
+  if (lastIndex - previousIndex < stride) indexes[indexes.length - 1] = lastIndex;
+  else indexes.push(lastIndex);
+  return [...new Set(indexes)];
+}
+
 export function getFundamentalSeriesVisual(index: number): FundamentalSeriesVisual {
   return SERIES_VISUALS[index % SERIES_VISUALS.length]!;
 }
@@ -351,6 +371,14 @@ export function toggleFundamentalMetricSelection(
   if (!checked) return current.filter((key) => key !== metricKey);
   if (current.includes(metricKey) || current.length >= max) return [...current];
   return [...current, metricKey];
+}
+
+export function fundamentalSeriesAxisKey(
+  series: Pick<PublicFundamentalSeries, "unitFamily" | "unit" | "currency">,
+): string {
+  if (series.unitFamily === "percent") return "percent";
+  if (series.unitFamily === "currency") return `currency:${series.currency || series.unit}`;
+  return `${series.unitFamily}:${series.currency || series.unit}`;
 }
 
 function prepareSeries(

@@ -8,6 +8,7 @@ import {
   buildFundamentalChartTooltip,
   getFundamentalSeriesVisual,
   linePath,
+  selectFundamentalPeriodTickIndexes,
   toggleFundamentalMetricSelection,
 } from "../lib/fundamental-chart.ts";
 import {
@@ -153,6 +154,13 @@ test("recomputes plot geometry for a mobile-width container", () => {
   assert.equal(mobile.layout.height, 340);
   assert.ok(mobile.layout.periodStep < desktop.layout.periodStep);
   assert.ok(mobile.layout.plotWidth > 240);
+});
+
+test("keeps every period label when space permits and thins dense mobile labels deterministically", () => {
+  assert.deepEqual(selectFundamentalPeriodTickIndexes(5, 280), [0, 1, 2, 3, 4]);
+  assert.deepEqual(selectFundamentalPeriodTickIndexes(8, 280), [0, 2, 4, 7]);
+  assert.deepEqual(selectFundamentalPeriodTickIndexes(12, 280), [0, 3, 6, 11]);
+  assert.deepEqual(selectFundamentalPeriodTickIndexes(0, 280), []);
 });
 
 test("tooltip payload exposes every selected value and honest missing data", () => {

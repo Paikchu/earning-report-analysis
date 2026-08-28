@@ -26,8 +26,10 @@ import {
   formatFundamentalAxisTick,
   formatFundamentalChartValue,
   formatFundamentalPeriod,
+  fundamentalSeriesAxisKey,
   getFundamentalSeriesVisual,
   linePath,
+  selectFundamentalPeriodTickIndexes,
   toggleFundamentalMetricSelection,
   type FundamentalChartAxis,
   type FundamentalChartModel,
@@ -49,6 +51,7 @@ export type MetricSelectorProps = {
   selectedMetricKeys: readonly FundamentalMetricKey[];
   onChange(next: FundamentalMetricKey[]): void;
   maxSelection?: number;
+  minSelection?: number;
   legend?: string;
   id?: string;
 };
@@ -172,6 +175,7 @@ export function MetricSelector({
   selectedMetricKeys,
   onChange,
   maxSelection = FUNDAMENTAL_CHART_MAX_SERIES,
+  minSelection = 0,
   legend = "选择叠加指标",
   id,
 }: MetricSelectorProps) {
@@ -179,9 +183,14 @@ export function MetricSelector({
   const selectorId = id ?? generatedId.replace(/[^a-zA-Z0-9_-]/g, "");
   const helpId = `${selectorId}-help`;
   const maxReached = selectedMetricKeys.length >= maxSelection;
+  const selectedAxisKeys = new Set(
+    availableSeries
+      .filter((series) => selectedMetricKeys.includes(series.metricKey))
+      .map(fundamentalSeriesAxisKey),
+  );
 
   return (
-    <fieldset className="fundamental-metric-selector" aria-describedby={helpId} data-chart-role="metric-selector">
+    <fieldset id={selectorId} className="fundamental-metric-selector" aria-describedby={helpId} data-chart-role="metric-selector">
       <legend>{legend}</legend>
       <p id={helpId} className="fundamental-metric-selector__help">
         已选 {selectedMetricKeys.length}/{maxSelection}；同图最多使用两种单位。
@@ -189,12 +198,18 @@ export function MetricSelector({
       <div className="fundamental-metric-selector__options">
         {availableSeries.map((series) => {
           const checked = selectedMetricKeys.includes(series.metricKey);
-          const disabled = !series.available || (!checked && maxReached);
+          const axisKey = fundamentalSeriesAxisKey(series);
+          const incompatible = !checked && !selectedAxisKeys.has(axisKey) && selectedAxisKeys.size >= 2;
+          const disabled = (!series.available && !checked)
+            || (!checked && maxReached)
+            || incompatible
+            || (checked && selectedMetricKeys.length <= minSelection);
           return (
             <label
               className="fundamental-metric-selector__option"
               data-selected={checked ? "true" : "false"}
               data-available={series.available ? "true" : "false"}
+              data-compatible={incompatible ? "false" : "true"}
               key={series.metricKey}
             >
               <input
@@ -209,7 +224,7 @@ export function MetricSelector({
                 ))}
               />
               <span>{series.shortLabel}</span>
-              {!series.available ? <small>暂无</small> : null}
+              {!series.available ? <small>暂无</small> : incompatible ? <small>单位冲突</small> : null}
             </label>
           );
         })}
@@ -542,10 +557,13 @@ function XAxis({
   model: FundamentalChartModel;
   layout: ReturnType<typeof buildFundamentalChartGeometry>["layout"];
 }) {
+  const visibleTickIndexes = new Set(
+    selectFundamentalPeriodTickIndexes(model.periods.length, layout.plotWidth),
+  );
   return (
     <g className="fundamental-chart__axis fundamental-chart__axis--x" aria-hidden="true">
       <line x1={layout.plotLeft} x2={layout.plotRight} y1={layout.plotBottom} y2={layout.plotBottom} />
-      {model.periods.map((period, index) => (
+      {model.periods.map((period, index) => visibleTickIndexes.has(index) ? (
         <text
           key={period.periodEnd}
           x={layout.periodCenters[index]}
@@ -554,7 +572,7 @@ function XAxis({
         >
           {formatPeriodTick(period.periodEnd)}
         </text>
-      ))}
+      ) : null)}
     </g>
   );
 }

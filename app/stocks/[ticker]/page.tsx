@@ -3,17 +3,47 @@ import { SiteHeader } from "@/app/site-header";
 import { findSecurity } from "@/lib/site-data";
 import { normalizeTrackedTicker } from "@/lib/sec-config";
 import { SecFilingsSection } from "@/app/positions/[ticker]/SecFilingsSection";
+import { FundamentalCharts } from "./FundamentalCharts";
+import {
+  parseFundamentalPageState,
+  stockPageSearchParamsToUrlSearchParams,
+  type StockPageSearchParams,
+} from "@/lib/fundamental-page-state";
 
 export const dynamic = "force-dynamic";
 
-export default async function StockPage({ params }: { params: Promise<{ ticker: string }> }) {
+export default async function StockPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ ticker: string }>;
+  searchParams: Promise<StockPageSearchParams>;
+}) {
   const ticker = normalizeTrackedTicker((await params).ticker);
   if (!ticker) notFound();
+  const security = findSecurity(ticker);
+  const initialState = parseFundamentalPageState(
+    stockPageSearchParamsToUrlSearchParams(await searchParams),
+  );
   return (
-    <div className="sec-app-shell">
-      <SiteHeader initialQuery={findSecurity(ticker)?.symbol ?? ticker} />
-      <main className="sec-only-stock-page">
-        <SecFilingsSection ticker={ticker} />
+    <div className="sec-app-shell stock-analysis-shell">
+      <SiteHeader initialQuery={security?.symbol ?? ticker} />
+      <main className="stock-analysis-page">
+        <header className="stock-analysis-header">
+          <span>{ticker}</span>
+          <h1>{security?.name ?? ticker}</h1>
+          <p>季度基本面与公司原始披露，在同一时间线上交叉阅读。</p>
+        </header>
+        <div className="stock-analysis-grid">
+          <FundamentalCharts
+            ticker={ticker}
+            companyName={security?.name ?? ticker}
+            initialState={initialState}
+          />
+          <div className="stock-analysis-filings">
+            <SecFilingsSection ticker={ticker} />
+          </div>
+        </div>
       </main>
     </div>
   );
