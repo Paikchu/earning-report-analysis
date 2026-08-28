@@ -146,14 +146,14 @@ exhibitType?: string;   // "EX-99.1"
 检测到 bullets 全部命中样板词（签署人 / `General Counsel` / `Austin, Texas` / `Item 2.02` / `Commission File`）时标记低质量，
 配合现有重试机制触发重生成。
 
-### P2 — 体验增强
+### P2 — 体验增强（已实施）
 
-**7. Schema 与前端**
-
-- `SecFilingSummary` 增 `eventCategory`（`earnings_update` / `guidance` / `m&a` / `executive` / `legal` / `other`）
-- 8-K 也启用 `summary.report` 字段承载附件摘要
-- `SEC_SUMMARY_VERSION: 5` → `6`，并同步 D1 迁移
-- `SecFilingsSection.tsx` 按 eventCategory 差异化展示
+- `SecFilingSummary` 增 `eventCategory`（`earnings_update` / `guidance` / `m&a` / `executive` / `legal` / `other`），由模型在 outputSchema 里给出，`normalizeSecSummary` 校验白名单，缺失或非法时事件摘要判定不完整并重试
+- 8-K 也启用 `summary.report` 字段承载附件核心摘要（prompt 要求 300–600 字连贯输出）
+- `SEC_SUMMARY_VERSION: 5` → `6`。**D1 无需迁移**：`sec_filing_summaries.payload` 是 JSON blob，新字段随 payload 存储，版本号随 payload 一起写入
+- 存量 8-K 重生成：事件类作业的 `analysisVersion` 追加 `+summary-v6`（`jobAnalysisVersionFor`），版本升级后作业查询未命中，自动走一遍新管线
+- `isSummaryRetryDue` 对事件摘要增加版本比对，旧摘要（无版本号）标记为需再生
+- `SecFilingsSection.tsx` 按 eventCategory 差异化展示：类别徽章 + report 段落（业绩更新/指引标"业绩要点"，其余标"事件详情"）
 
 ---
 

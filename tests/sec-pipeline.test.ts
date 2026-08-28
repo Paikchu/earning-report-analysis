@@ -93,13 +93,34 @@ test("keeps 8-K and 6-K on the compact event-summary contract", async () => {
       headline: "收入增长事件已披露",
       bullets: completeBullets(),
       analystView: "事件改善了本期增长可见度。",
+      eventCategory: "earnings_update",
+      report: "附件披露收入增长 18% 至 1.2 亿美元，主要驱动为云业务放量。",
     };
   }, new Date("2026-08-10T00:00:00.000Z"));
 
   assert.equal(summary.form, "8-K");
-  assert.equal(summary.report, undefined);
-  assert.equal(summary.version, undefined);
+  assert.equal(summary.version, SEC_SUMMARY_VERSION);
+  assert.equal(summary.eventCategory, "earnings_update");
+  assert.match(summary.report ?? "", /18%/);
   assert.match(JSON.stringify(payload), /Revenue increased 18%/);
+  assert.match(JSON.stringify(payload), /eventCategory/);
+});
+
+test("rejects event summaries that omit the event category", async () => {
+  const event = { ...filing, form: "8-K", accessionNumber: "event", items: "2.02", description: "Results of Operations" };
+  const prepared = await prepareSecFiling(event, {
+    userAgent: "test@example.com",
+    fetcher: async () => new Response("<h1>Item 2.02 Results of Operations</h1><p>Revenue increased 18% to $120 million.</p>"),
+  });
+
+  await assert.rejects(
+    summarizePreparedSecEvent(prepared, async () => ({
+      headline: "收入增长事件已披露",
+      bullets: completeBullets(),
+      analystView: "事件改善了本期增长可见度。",
+    })),
+    /incomplete analysis/,
+  );
 });
 
 test("discovers SEC filings without invoking an analysis model", async () => {

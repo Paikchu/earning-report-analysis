@@ -347,9 +347,16 @@ export async function summarizePreparedSecEvent(
       source: block.exhibitType ?? "filing body",
       text: block.body.slice(0, 2_400),
     })),
+    outputSchema: {
+      headline: "string",
+      bullets: "[{label, detail, importance}]",
+      analystView: "string",
+      eventCategory: "earnings_update|guidance|m&a|executive|legal|other",
+      report: "string",
+    },
   });
-  const summary = normalizeSecSummary({ ...value, source: "deepseek" }, prepared.filing, now);
-  if (!summary.headline || !summary.bullets.length || !summary.analystView) {
+  const summary = normalizeSecSummary({ ...value, source: "deepseek", version: SEC_SUMMARY_VERSION }, prepared.filing, now);
+  if (!summary.headline || !summary.bullets.length || !summary.analystView || !summary.eventCategory) {
     throw new Error("Event summary returned incomplete analysis");
   }
   if (hasOnlyEventMetadataBullets(summary.bullets)) {
@@ -521,11 +528,13 @@ function eventSummarySystemPrompt() {
     "输入的 sections 来自 filing 主体与附件（EX-99.x 等），source 字段标注了出处。附件才是事件的实际披露内容；主体只有监管元信息。",
     "headline 和 bullets 必须基于附件披露的实质内容：业绩数字、指引、并购条款、人事变动、法律进展等。",
     "严禁把以下元信息写进 headline 或 bullets：签署人、办公地址、Commission File Number、IRS Employer ID、Item 编号、文件形式、报告日期。",
+    "eventCategory 必须从以下选项中选择最贴切的一项：earnings_update（业绩与财务结果）、guidance（业绩指引）、m&a（并购、资产处置、合资）、executive（高管与董事变动）、legal（诉讼、监管、和解）、other。",
+    "report 用 300 至 600 字简体中文连贯输出附件的核心披露内容：关键数字及其口径与比较期间、主要驱动因素、已披露的影响与后续安排；按投资者阅读逻辑分段，不使用 Markdown。",
     "数字必须带口径和比较期间（同比/环比/绝对值），只使用原文已有的数值，不编造、不推算。",
     "附件中没有具体数字时，如实描述事件性质和已披露的定性信息，不要复述表单结构或监管样板。",
     "说明事件本身、发生原因，以及对盈利、现金流或资产负债表的具体影响；没有证据的维度直接省略。",
     "headline 是一句有方向性的结论；bullets 输出 3 至 5 条具体事实；analystView 说明投资含义但不给买卖建议。",
-    "输出简体中文 JSON：{\"headline\":\"\",\"bullets\":[{\"label\":\"\",\"detail\":\"\",\"importance\":\"high|medium|low\"}],\"analystView\":\"\"}",
+    "以 JSON 对象输出 headline、bullets、analystView、eventCategory 和 report，字段严格遵循 outputSchema。",
   ].join("\n");
 }
 

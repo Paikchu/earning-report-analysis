@@ -1,6 +1,6 @@
 import type { AnalysisFact, ManagerReview, PublishedSecReport, SecNodeSpecV2 } from "./sec-analysis.ts";
 
-export const SEC_SUMMARY_VERSION = 5;
+export const SEC_SUMMARY_VERSION = 6;
 
 const MAX_HEADING_CHARACTERS = 120;
 const ITEM_HEADING_LEVEL = 2;
@@ -20,6 +20,16 @@ export const BUSINESS_FILING_FORMS = new Set([
 ]);
 
 export type SecSummaryImportance = "high" | "medium" | "low";
+
+/** What kind of event an 8-K/6-K discloses, used for differentiated presentation. */
+export type SecEventCategory = "earnings_update" | "guidance" | "m&a" | "executive" | "legal" | "other";
+
+export const SEC_EVENT_CATEGORIES: readonly SecEventCategory[] = ["earnings_update", "guidance", "m&a", "executive", "legal", "other"];
+
+export function normalizeSecEventCategory(value: unknown): SecEventCategory | undefined {
+  const candidate = String(value ?? "").trim().toLowerCase();
+  return (SEC_EVENT_CATEGORIES as readonly string[]).includes(candidate) ? candidate as SecEventCategory : undefined;
+}
 
 export type SecSummaryBullet = {
   label: string;
@@ -90,6 +100,8 @@ export type SecFilingSummary = {
   headline: string;
   bullets: SecSummaryBullet[];
   analystView: string;
+  /** Event filings only: what kind of 8-K/6-K this is. */
+  eventCategory?: SecEventCategory;
   report?: string;
   version?: number;
   nodes?: SecNodeResult[];
@@ -328,6 +340,7 @@ export function normalizeSecSummary(
   }).slice(0, 5);
   const headline = clean(input.headline, 180);
   const analystView = clean(input.analystView, 260);
+  const eventCategory = normalizeSecEventCategory(input.eventCategory);
   const report = String(input.report ?? "")
     .replace(/\r\n?/g, "\n")
     .replace(/[ \t\f\v]+/g, " ")
@@ -344,6 +357,7 @@ export function normalizeSecSummary(
     headline: useful(headline) ? headline : "",
     bullets,
     analystView: useful(analystView) ? analystView : "",
+    ...(eventCategory ? { eventCategory } : {}),
     ...(useful(report) ? { report } : {}),
     ...(Number.isInteger(input.version) ? { version: Number(input.version) } : {}),
     source: input.source === "error" ? "error" : "deepseek",
@@ -355,6 +369,10 @@ export function normalizeSecSummary(
 export function isSummaryRetryDue(summary: SecFilingSummary, nowMs = Date.now()): boolean {
   const fullReportForm = /^(10-K|10-Q|20-F)(\/A)?$/.test(summary.form);
   if (fullReportForm && summary.source !== "error" && (summary.version !== SEC_SUMMARY_VERSION || !summary.report)) return true;
+  // Event summaries carry exhibit-grounded content from the current pipeline version; older ones
+  // only contain filing-envelope metadata, so a version bump schedules one regeneration.
+  const eventForm = /^(8-K|6-K)(\/A)?$/.test(summary.form);
+  if (eventForm && summary.source !== "error" && summary.version !== SEC_SUMMARY_VERSION) return true;
   if (summary.headline || summary.bullets.length || summary.analystView) return false;
   if (summary.source !== "error") return true;
   if (summary.error === "DeepSeek HTTP 400") return true;

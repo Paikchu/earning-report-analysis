@@ -1661,6 +1661,26 @@ td { font-size: 14px; }
   font: 600 14px/1.55 var(--serif);
 }
 .sec-analyst-view span { color: var(--ink-muted); font: 650 12px/1 var(--sans); letter-spacing: .06em; }
+.sec-event-category {
+  width: fit-content;
+  padding: 5px 10px;
+  border: 1px solid var(--paper-deep);
+  border-radius: 999px;
+  color: var(--ink-soft);
+  font: 650 12px/1 var(--sans);
+  letter-spacing: .05em;
+}
+.sec-event-category[data-category="earnings_update"],
+.sec-event-category[data-category="guidance"] { color: var(--ink); border-color: color-mix(in srgb, var(--ink-soft) 42%, transparent); }
+.sec-event-report {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+  color: var(--ink-soft);
+  font: 400 14px/1.7 var(--sans);
+  white-space: pre-line;
+}
+.sec-event-report span { color: var(--ink-muted); font: 650 12px/1 var(--sans); letter-spacing: .06em; }
 .sec-ai-note { padding-bottom: 3px; color: var(--ink-muted); font-size: 12px; }
 .sec-summary-pending,
 .sec-summary-error { margin: 0 0 14px; font-size: 14px; }
