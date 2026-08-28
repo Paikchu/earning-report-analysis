@@ -7,7 +7,7 @@
   "vars": {
     "WEB_APP_ORIGIN": "https://earning-report-analysis-sec-web.max-zhangyuchen.workers.dev",
     "SEC_USER_AGENT": "earning-report-analysis/1.0 max.zhangyuchen@gmail.com",
-    "SEC_ANALYSIS_MODEL": "deepseek-v4-flash"
+    "SEC_ANALYSIS_MODEL": "glm-5.3-flash"
   },
   "workflows": [
     {
@@ -39,7 +39,7 @@
       "vars": {
         "WEB_APP_ORIGIN": "https://earning-report-analysis-sec-web-staging.max-zhangyuchen.workers.dev",
         "SEC_USER_AGENT": "earning-report-analysis/1.0 max.zhangyuchen@gmail.com",
-        "SEC_ANALYSIS_MODEL": "deepseek-v4-flash"
+        "SEC_ANALYSIS_MODEL": "glm-5.3-flash"
       },
       "workflows": [
         {

@@ -261,7 +261,7 @@ export async function callWorkerSecModel(
     method: "POST",
     headers: { "content-type": "application/json", accept: "text/event-stream", authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: modelOverride || env.SEC_ANALYSIS_MODEL || "deepseek-v4-flash",
+      model: modelOverride || env.SEC_ANALYSIS_MODEL || "glm-5.3-flash",
       messages: [
         { role: "system", content: system },
         { role: "user", content: JSON.stringify(payload) },

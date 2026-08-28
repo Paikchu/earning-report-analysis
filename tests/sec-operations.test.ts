@@ -139,7 +139,7 @@ test("calls B.ai from the workflow worker when its shared AI secret is configure
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
     AI_API_KEY: "worker-model-secret",
-    SEC_ANALYSIS_MODEL: "deepseek-v4-flash",
+    SEC_ANALYSIS_MODEL: "glm-5.3-flash",
     SEC_FILINGS: {
       async get(key: string) {
         const value = objects.get(key);

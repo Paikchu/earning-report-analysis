@@ -4,7 +4,7 @@ interface __BaseEnv_Env {
 	SEC_FILINGS: R2Bucket;
 	WEB_APP_ORIGIN: "https://earning-report-analysis-sec-web-staging.max-zhangyuchen.workers.dev" | "https://earning-report-analysis-sec-web.max-zhangyuchen.workers.dev";
 	SEC_USER_AGENT: "earning-report-analysis/1.0 max.zhangyuchen@gmail.com";
-	SEC_ANALYSIS_MODEL: "deepseek-v4-flash";
+	SEC_ANALYSIS_MODEL: "glm-5.3-flash";
 	SEC_ANALYSIS_WORKFLOW: Workflow<Parameters<import("./index").SecAnalysisWorkflow['run']>[0]['payload']>;
 	SEC_MEMORY_WORKFLOW: Workflow<Parameters<import("./index").SecMemoryWorkflow['run']>[0]['payload']>;
 }
@@ -16,7 +16,7 @@ declare namespace Cloudflare {
 		SEC_FILINGS: R2Bucket;
 		WEB_APP_ORIGIN: "https://earning-report-analysis-sec-web-staging.max-zhangyuchen.workers.dev";
 		SEC_USER_AGENT: "earning-report-analysis/1.0 max.zhangyuchen@gmail.com";
-		SEC_ANALYSIS_MODEL: "deepseek-v4-flash";
+		SEC_ANALYSIS_MODEL: "glm-5.3-flash";
 		SEC_ANALYSIS_WORKFLOW: Workflow<Parameters<import("./index").SecAnalysisWorkflow['run']>[0]['payload']>;
 		SEC_MEMORY_WORKFLOW: Workflow<Parameters<import("./index").SecMemoryWorkflow['run']>[0]['payload']>;
 	}
