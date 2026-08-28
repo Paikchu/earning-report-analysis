@@ -4,7 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { SEC_SUMMARY_VERSION } from "@/lib/sec";
+import { SEC_SUMMARY_VERSION, type SecEventCategory } from "@/lib/sec";
 import type { PublicSecFiling } from "@/lib/sec-public-api";
 
 const expandEase = [0.22, 1, 0.36, 1] as const;
@@ -141,8 +141,34 @@ function FilingSummary({ filing, isLatestPeriodic }: { filing: PublicSecFiling; 
   const summary = filing.summary;
   if (!summary) return <p className="sec-summary-pending">AI 解读正在后台生成。</p>;
   if (!summary.headline && !summary.bullets.length && !summary.analystView) return <p className="sec-summary-error">AI 解读暂时不可用。</p>;
-  return <div className="sec-summary">{summary.headline && <p className="sec-summary-headline">{summary.headline}</p>}{summary.bullets.length > 0 && <ul>{summary.bullets.map((bullet, index) => <li data-importance={bullet.importance} key={`${bullet.label}-${index}`}><i aria-hidden="true" /><span><strong>{bullet.label}</strong>{bullet.detail}</span></li>)}</ul>}{summary.analystView && <p className="sec-analyst-view"><span>投资含义</span>{summary.analystView}</p>}<small className="sec-ai-note">AI 基于 filing 原文生成 · {formatDateTime(summary.generatedAt)}</small></div>;
+  const categoryLabel = summary.eventCategory ? EVENT_CATEGORY_LABELS[summary.eventCategory] : null;
+  const reportLabel = summary.eventCategory === "earnings_update" || summary.eventCategory === "guidance" ? "业绩要点" : "事件详情";
+  return (
+    <div className="sec-summary">
+      {categoryLabel && <span className="sec-event-category" data-category={summary.eventCategory}>{categoryLabel}</span>}
+      {summary.headline && <p className="sec-summary-headline">{summary.headline}</p>}
+      {summary.bullets.length > 0 && (
+        <ul>
+          {summary.bullets.map((bullet, index) => (
+            <li data-importance={bullet.importance} key={`${bullet.label}-${index}`}><i aria-hidden="true" /><span><strong>{bullet.label}</strong>{bullet.detail}</span></li>
+          ))}
+        </ul>
+      )}
+      {summary.report && <p className="sec-event-report"><span>{reportLabel}</span>{summary.report}</p>}
+      {summary.analystView && <p className="sec-analyst-view"><span>投资含义</span>{summary.analystView}</p>}
+      <small className="sec-ai-note">AI 基于 filing 原文生成 · {formatDateTime(summary.generatedAt)}</small>
+    </div>
+  );
 }
+
+const EVENT_CATEGORY_LABELS: Record<SecEventCategory, string> = {
+  "earnings_update": "业绩更新",
+  "guidance": "业绩指引",
+  "m&a": "并购重组",
+  "executive": "管理层变动",
+  "legal": "法律事项",
+  "other": "其他事项",
+};
 
 function StructuredAnalysis({ filing }: { filing: PublicSecFiling }) {
   const report = filing.analysis!;

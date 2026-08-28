@@ -24,10 +24,12 @@ import {
 } from "./sec-report.ts";
 import {
   cleanSecTicker,
+  hasOnlyEventMetadataBullets,
   htmlToSecDocument,
   normalizeSecSummary,
   parseSecSubmissions,
   SEC_SUMMARY_VERSION,
+  streamSecSubmissionParts,
   type SecCompany,
   type SecDocument,
   type SecFiling,
@@ -107,6 +109,13 @@ export function selectWorkflowFilings(filings: SecFiling[]): SecFiling[] {
 }
 
 export async function prepareSecFiling(filing: SecFiling, runtime: SecPreparationRuntime): Promise<PreparedSecFiling> {
+  if (/^(8-K|6-K)(\/A)?$/.test(filing.form)) {
+    try {
+      return await prepareEventFilingWithExhibits(filing, runtime);
+    } catch {
+      // Exhibit discovery is best-effort; fall back to the single-document path below.
+    }
+  }
   const response = await (runtime.fetcher ?? fetch)(filing.documentUrl, {
     cache: "no-store",
     headers: { accept: "text/html,application/xhtml+xml,text/plain,*/*", "user-agent": runtime.userAgent },
@@ -117,6 +126,57 @@ export async function prepareSecFiling(filing: SecFiling, runtime: SecPreparatio
   if (!document.text) throw new Error("SEC filing document did not contain readable text");
   const blocks = buildFilingBlocks(document.text, filing.accessionNumber);
   if (!blocks.length) throw new Error("SEC filing did not produce analysis blocks");
+  const { periodId, periodScope } = buildPeriodIdentity(filing.ticker, filing.form, filing.reportDate);
+  return {
+    filing,
+    periodId,
+    periodScope,
+    outline: buildSecOutline(document),
+    blockIds: blocks.map((block) => `ev:${block.blockId}`),
+    blocks,
+    document,
+  };
+}
+
+/**
+ * 8-K/6-K bodies contain only regulatory metadata (form header, addresses, signers); the actual
+ * disclosure lives in exhibits like EX-99.1. Streams the full-submission envelope, parses the body
+ * and each exhibit into tagged blocks, and offsets spans so everything stays consistent with one
+ * combined document text. Falls back to the single-document path when the envelope is unavailable.
+ */
+async function prepareEventFilingWithExhibits(filing: SecFiling, runtime: SecPreparationRuntime): Promise<PreparedSecFiling> {
+  const parts = await streamSecSubmissionParts(filing.cikNumber, filing.accessionNumber, runtime.fetcher ?? fetch, runtime.userAgent);
+  if (!parts.length) throw new Error("SEC submission stream contained no text documents");
+  // Body first, exhibits in stream order — keeps existing "document order" semantics.
+  const ordered = [...parts].sort((left, right) => {
+    const leftBody = /^(8-K|6-K)(\/A)?$/i.test(left.type) ? 0 : 1;
+    const rightBody = /^(8-K|6-K)(\/A)?$/i.test(right.type) ? 0 : 1;
+    return leftBody - rightBody;
+  });
+  const documents: SecDocument[] = [];
+  const partBlocks: Array<{ blocks: FilingBlock[]; base: number; type: string; isBody: boolean }> = [];
+  let base = 0;
+  for (const part of ordered) {
+    const document = htmlToSecDocument(part.text);
+    if (!document.text) continue;
+    documents.push(document);
+    partBlocks.push({ blocks: buildFilingBlocks(document.text, filing.accessionNumber), base, type: part.type, isBody: /^(8-K|6-K)(\/A)?$/i.test(part.type) });
+    base += document.text.length + 2; // 2 = "\n\n" separator in the combined text
+  }
+  if (!documents.length) throw new Error("SEC submission stream contained no readable text");
+  const combinedText = documents.map((document) => document.text).join("\n\n");
+  const blocks = partBlocks.flatMap(({ blocks: partBlocksForPart, base: partBase, type, isBody }) =>
+    partBlocksForPart.map((block) => ({
+      ...block,
+      start: block.start + partBase,
+      end: block.end + partBase,
+      ...(isBody ? { source: "body" as const } : { source: "exhibit" as const, exhibitType: type }),
+    })));
+  const document: SecDocument = {
+    text: combinedText,
+    headings: partBlocks.flatMap(({ base: partBase }, index) =>
+      documents[index].headings.map((heading) => ({ ...heading, start: heading.start + partBase }))),
+  };
   const { periodId, periodScope } = buildPeriodIdentity(filing.ticker, filing.form, filing.reportDate);
   return {
     filing,
@@ -265,6 +325,31 @@ export async function reviewPreparedSecAnalysis(
   return normalizeManagerReview(value, new Set(plan.nodes.map((node) => node.id)), new Set(prepared.outline.map((section) => section.id)));
 }
 
+/**
+ * Picks the most informative blocks for an event (8-K/6-K) summary.
+ * The filing body is mostly regulatory boilerplate, so: drop boilerplate blocks, prefer exhibit
+ * blocks (where the actual disclosure lives), and rank each group by numeric density with
+ * table-like blocks boosted. Falls back to the original order when filtering leaves too little.
+ */
+export function selectEventBlocks(blocks: FilingBlock[], limit = 12): FilingBlock[] {
+  const usable = blocks.filter((block) => !isEventBoilerplateBlock(block));
+  if (usable.length < 3) return blocks.slice(0, limit);
+  const exhibits = usable.filter((block) => block.source === "exhibit");
+  const body = usable.filter((block) => block.source !== "exhibit");
+  const score = (block: FilingBlock) => block.numericDensity + (block.elementType === "table_like" ? 50 : 0);
+  const rank = (list: FilingBlock[]) => [...list].sort((left, right) => score(right) - score(left));
+  return [...rank(exhibits), ...rank(body)].slice(0, limit);
+}
+
+const EVENT_BOILERPLATE_PATTERN = /(?:united states securities and exchange commission|commission file number|irs employer|state of incorporation|exact name of registrant|address of principal|date of report|power of attorney|\/s\/|telephone)/i;
+
+function isEventBoilerplateBlock(block: FilingBlock): boolean {
+  const sample = `${block.heading}\n${block.body}`.slice(0, 600);
+  if (EVENT_BOILERPLATE_PATTERN.test(sample)) return true;
+  // Very short blocks with no numbers are almost always envelope noise (addresses, checkboxes).
+  return block.body.length <= 160 && block.numericDensity < 20;
+}
+
 export async function summarizePreparedSecEvent(
   prepared: PreparedSecFiling,
   model: SecModelCall,
@@ -278,14 +363,25 @@ export async function summarizePreparedSecEvent(
     reportDate: prepared.filing.reportDate,
     accessionNumber: prepared.filing.accessionNumber,
     items: prepared.filing.items,
-    sections: prepared.blocks.slice(0, 12).map((block) => ({
+    sections: selectEventBlocks(prepared.blocks, 12).map((block) => ({
       heading: block.heading,
+      source: block.exhibitType ?? "filing body",
       text: block.body.slice(0, 2_400),
     })),
+    outputSchema: {
+      headline: "string",
+      bullets: "[{label, detail, importance}]",
+      analystView: "string",
+      eventCategory: "earnings_update|guidance|m&a|executive|legal|other",
+      report: "string",
+    },
   });
-  const summary = normalizeSecSummary({ ...value, source: "deepseek" }, prepared.filing, now);
-  if (!summary.headline || !summary.bullets.length || !summary.analystView) {
+  const summary = normalizeSecSummary({ ...value, source: "deepseek", version: SEC_SUMMARY_VERSION }, prepared.filing, now);
+  if (!summary.headline || !summary.bullets.length || !summary.analystView || !summary.eventCategory) {
     throw new Error("Event summary returned incomplete analysis");
+  }
+  if (hasOnlyEventMetadataBullets(summary.bullets)) {
+    throw new Error("Event summary contained only filing metadata");
   }
   return summary;
 }
@@ -451,10 +547,16 @@ function nodeSystemPrompt() {
 function eventSummarySystemPrompt() {
   return [
     "你是负责美股基本面研究的资深金融分析师，只处理 8-K 或 6-K 事件简析。",
-    "只根据给定 SEC filing 内容输出简体中文，不使用外部信息，不编造数字。",
+    "输入的 sections 来自 filing 主体与附件（EX-99.x 等），source 字段标注了出处。附件才是事件的实际披露内容；主体只有监管元信息。",
+    "headline 和 bullets 必须基于附件披露的实质内容：业绩数字、指引、并购条款、人事变动、法律进展等。",
+    "严禁把以下元信息写进 headline 或 bullets：签署人、办公地址、Commission File Number、IRS Employer ID、Item 编号、文件形式、报告日期。",
+    "eventCategory 必须从以下选项中选择最贴切的一项：earnings_update（业绩与财务结果）、guidance（业绩指引）、m&a（并购、资产处置、合资）、executive（高管与董事变动）、legal（诉讼、监管、和解）、other。",
+    "report 用 300 至 600 字简体中文连贯输出附件的核心披露内容：关键数字及其口径与比较期间、主要驱动因素、已披露的影响与后续安排；按投资者阅读逻辑分段，不使用 Markdown。",
+    "数字必须带口径和比较期间（同比/环比/绝对值），只使用原文已有的数值，不编造、不推算。",
+    "附件中没有具体数字时，如实描述事件性质和已披露的定性信息，不要复述表单结构或监管样板。",
     "说明事件本身、发生原因，以及对盈利、现金流或资产负债表的具体影响；没有证据的维度直接省略。",
     "headline 是一句有方向性的结论；bullets 输出 3 至 5 条具体事实；analystView 说明投资含义但不给买卖建议。",
-    "输出 JSON：{\"headline\":\"\",\"bullets\":[{\"label\":\"\",\"detail\":\"\",\"importance\":\"high|medium|low\"}],\"analystView\":\"\"}",
+    "以 JSON 对象输出 headline、bullets、analystView、eventCategory 和 report，字段严格遵循 outputSchema。",
   ].join("\n");
 }
 

@@ -15,9 +15,21 @@ import type {
   SecNodeResult,
   SecNodeSpec,
 } from "../../lib/sec.ts";
+import { SEC_SUMMARY_VERSION } from "../../lib/sec.ts";
 import type { SecAnalysisArtifact, SecAnalysisContext } from "../../lib/sec-types.ts";
 import type { SecWorkflowParams } from "./core.ts";
 import { modelExecutionForAttempt, type SecModelExecution } from "./retry-policy.ts";
+
+/**
+ * Job lookup version. Event filings additionally key on the summary version: bumping
+ * SEC_SUMMARY_VERSION invalidates stored event summaries so they regenerate through the
+ * current exhibit pipeline, while periodic filings keep the analysis-schema key.
+ */
+export function jobAnalysisVersionFor(form: string): string {
+  return /^(8-K|6-K)(\/A)?$/.test(form)
+    ? `${SEC_ANALYSIS_SCHEMA_VERSION}+summary-v${SEC_SUMMARY_VERSION}`
+    : SEC_ANALYSIS_SCHEMA_VERSION;
+}
 
 export type WorkflowStepContextLike = {
   attempt: number;
@@ -140,12 +152,12 @@ export async function executeSecAnalysisWorkflow(
     : selectLatestWorkflowFilings(discovery.filings);
   for (const filing of filings) {
     const accession = filing.accessionNumber;
-    const jobId = `${filing.ticker}:${accession}:${SEC_ANALYSIS_SCHEMA_VERSION}:${workflowInstanceId}`;
+    const jobId = `${filing.ticker}:${accession}:${jobAnalysisVersionFor(filing.form)}:${workflowInstanceId}`;
     const baseJob = {
       jobId,
       ticker: filing.ticker,
       accessionNumber: accession,
-      analysisVersion: SEC_ANALYSIS_SCHEMA_VERSION,
+      analysisVersion: jobAnalysisVersionFor(filing.form),
       attempt: 1,
       requestedBy: params.requestedBy,
       workflowInstanceId,

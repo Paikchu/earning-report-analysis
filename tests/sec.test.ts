@@ -113,14 +113,26 @@ test("retries legacy short summaries until the current full report version exist
   assert.equal(isSummaryRetryDue(current, Date.parse("2027-08-01T01:00:00.000Z")), false);
 });
 
-test("keeps useful event summaries on the compact contract", () => {
-  const event = {
+test("regenerates stale event summaries after a summary version bump", () => {
+  const legacy = {
     ticker: "MSFT", form: "8-K", filingDate: "2026-08-10", accessionNumber: "event",
     headline: "事件影响已披露", bullets: [{ label: "事件", detail: "收入影响已量化。", importance: "high" as const }],
     analystView: "短期预期已经变化。", source: "deepseek" as const, generatedAt: "2026-08-10T00:00:00.000Z",
   };
+  const current = { ...legacy, version: SEC_SUMMARY_VERSION, eventCategory: "earnings_update" as const };
 
-  assert.equal(isSummaryRetryDue(event, Date.parse("2027-08-10T00:00:00.000Z")), false);
+  // Legacy summaries carry no exhibit-grounded version stamp, so they regenerate once.
+  assert.equal(isSummaryRetryDue(legacy, Date.parse("2026-08-10T01:00:00.000Z")), true);
+  assert.equal(isSummaryRetryDue(current, Date.parse("2027-08-10T00:00:00.000Z")), false);
+});
+
+test("keeps only known event categories and drops unknown ones", () => {
+  const identity = { ticker: "MSFT", form: "8-K", filingDate: "2026-08-10", accessionNumber: "event" };
+  const withCategory = normalizeSecSummary({ headline: "业绩更新", bullets: [{ label: "收入", detail: "收入增长。", importance: "high" }], analystView: "增长可见度提升。", eventCategory: "m&a", version: SEC_SUMMARY_VERSION }, identity);
+  const withUnknown = normalizeSecSummary({ headline: "业绩更新", bullets: [{ label: "收入", detail: "收入增长。", importance: "high" }], analystView: "增长可见度提升。", eventCategory: "dividend_special", version: SEC_SUMMARY_VERSION }, identity);
+
+  assert.equal(withCategory.eventCategory, "m&a");
+  assert.equal(withUnknown.eventCategory, undefined);
 });
 
 test("retries model configuration errors immediately after the provider model is corrected", () => {
