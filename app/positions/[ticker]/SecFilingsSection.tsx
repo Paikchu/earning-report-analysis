@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { SEC_SUMMARY_VERSION } from "@/lib/sec";
 import type { PublicSecFiling } from "@/lib/sec-public-api";
@@ -15,9 +15,10 @@ export function SecFilingsSection({ ticker }: { ticker: string }) {
   const [filings, setFilings] = useState<PublicSecFiling[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [checkedAt, setCheckedAt] = useState<string | null>(null);
-  const [openAccession, setOpenAccession] = useState<string | null>(null);
+  const [openAccessions, setOpenAccessions] = useState<Set<string>>(() => new Set());
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [loadingMore, setLoadingMore] = useState(false);
+  const filingsRef = useRef<PublicSecFiling[]>([]);
 
   const load = useCallback(async (cursor: string | null, append: boolean) => {
     if (append) setLoadingMore(true);
@@ -27,10 +28,12 @@ export function SecFilingsSection({ ticker }: { ticker: string }) {
       const response = await fetch(`/api/v1/companies/${encodeURIComponent(ticker)}/filings${query}`, { cache: "no-store" });
       if (!response.ok) throw new Error("SEC 数据读取失败。");
       const page = await response.json() as Page;
-      setFilings((current) => append ? [...current, ...page.filings] : page.filings);
+      const merged = append ? [...filingsRef.current, ...page.filings] : page.filings;
+      filingsRef.current = merged;
+      setFilings(merged);
       setNextCursor(page.nextCursor);
       setCheckedAt(page.checkedAt);
-      if (!append) setOpenAccession(page.filings[0]?.accessionNumber ?? null);
+      if (!append) setOpenAccessions(new Set(defaultOpenAccessions(merged)));
       setStatus("ready");
     } catch {
       setStatus("error");
@@ -45,11 +48,22 @@ export function SecFilingsSection({ ticker }: { ticker: string }) {
   }, [load]);
 
   useEffect(() => {
-    if (filings.length === 0) return;
-    const restoreDefaultSummary = () => setOpenAccession(filings[0]?.accessionNumber ?? null);
+    const restoreDefaultSummary = () => {
+      if (filingsRef.current.length === 0) return;
+      setOpenAccessions(new Set(defaultOpenAccessions(filingsRef.current)));
+    };
     window.addEventListener("pageshow", restoreDefaultSummary);
     return () => window.removeEventListener("pageshow", restoreDefaultSummary);
-  }, [filings]);
+  }, []);
+
+  const toggleAccession = useCallback((accession: string) => {
+    setOpenAccessions((current) => {
+      const next = new Set(current);
+      if (next.has(accession)) next.delete(accession);
+      else next.add(accession);
+      return next;
+    });
+  }, []);
 
   return (
     <section className="sec-filings-section" id="sec-filings" aria-labelledby="sec-filings-title">
@@ -67,9 +81,9 @@ export function SecFilingsSection({ ticker }: { ticker: string }) {
               <SecFilingCard
                 filing={filing}
                 isLatestPeriodic={isPeriodicFiling(filing.form) && !filings.slice(0, index).some((candidate) => isPeriodicFiling(candidate.form))}
-                isOpen={openAccession === filing.accessionNumber}
+                isOpen={openAccessions.has(filing.accessionNumber)}
                 key={filing.accessionNumber}
-                onToggle={() => setOpenAccession((current) => current === filing.accessionNumber ? null : filing.accessionNumber)}
+                onToggle={() => toggleAccession(filing.accessionNumber)}
               />
             ))}
           </div>
@@ -87,7 +101,7 @@ function SecFilingCard({ filing, isLatestPeriodic, isOpen, onToggle }: { filing:
   return (
     <article className={isOpen ? "sec-filing-card is-open" : "sec-filing-card"}>
       <button aria-controls={panelId} aria-expanded={isOpen} onClick={onToggle} type="button">
-        <span className="sec-form-badge">{filing.form}</span>
+        <span className="sec-form-badge" data-form={filing.form}>{filing.form}</span>
         <span className="sec-filing-date"><strong>{formatDate(filing.filingDate)}</strong><small>申报日</small></span>
         <span className="sec-filing-description"><strong>{filing.description || formDescription(filing.form)}</strong><small>{filing.reportDate ? `报告期 ${formatDate(filing.reportDate)}` : "SEC filing"}</small></span>
         <span className="sec-disclosure" aria-hidden="true"><i /><i /></span>
@@ -146,5 +160,13 @@ function StructuredAnalysis({ filing }: { filing: PublicSecFiling }) {
 
 function isPeriodicFiling(form: string): boolean { return /^(10-K|10-Q|20-F)(\/A)?$/.test(form); }
 function formDescription(form: string): string { return form.startsWith("10-K") || form.startsWith("20-F") ? "年度报告" : form.startsWith("10-Q") ? "季度报告" : "重大事项报告"; }
+function defaultOpenAccessions(filings: PublicSecFiling[]): string[] {
+  const currentYear = new Date().getFullYear();
+  const currentYearAccessions = filings
+    .filter((filing) => filing.filingDate.startsWith(`${currentYear}`))
+    .map((filing) => filing.accessionNumber);
+  if (currentYearAccessions.length > 0) return currentYearAccessions;
+  return filings[0] ? [filings[0].accessionNumber] : [];
+}
 function formatDate(value: string): string { const date = new Date(`${value}T00:00:00Z`); return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" }).format(date) : value; }
 function formatDateTime(value: string): string { const date = new Date(value); return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Shanghai" }).format(date) : value; }
