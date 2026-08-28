@@ -1,0 +1,599 @@
+import type {
+  FundamentalChartMark,
+  FundamentalMetricKey,
+  FundamentalTransform,
+  FundamentalUnitFamily,
+} from "./fundamental-metrics.ts";
+import type {
+  PublicFundamentalPeriod,
+  PublicFundamentalSeries,
+} from "./fundamentals-api.ts";
+
+export const FUNDAMENTAL_CHART_SPEC_VERSION = "fundamental-chart.v1";
+export const FUNDAMENTAL_CHART_MAX_SERIES = 4;
+export const FUNDAMENTAL_CHART_MAX_AXES = 2;
+export const FUNDAMENTAL_CHART_WIDTH = 760;
+export const FUNDAMENTAL_CHART_HEIGHT = 360;
+
+export type FundamentalChartAxisSide = "left" | "right";
+
+export type FundamentalChartSeriesSpec = {
+  metricKey: FundamentalMetricKey;
+  transform?: FundamentalTransform;
+  mark?: FundamentalChartMark;
+  axis?: FundamentalChartAxisSide;
+};
+
+export type FundamentalChartSpec = {
+  version: typeof FUNDAMENTAL_CHART_SPEC_VERSION;
+  title: string;
+  description?: string;
+  series: readonly FundamentalChartSeriesSpec[];
+};
+
+export type FundamentalChartPoint = {
+  periodEnd: string;
+  value: number | null;
+  sourceValueDecimal: string | null;
+};
+
+export type PreparedFundamentalSeries = {
+  id: string;
+  metricKey: FundamentalMetricKey;
+  label: string;
+  shortLabel: string;
+  transform: FundamentalTransform;
+  mark: FundamentalChartMark;
+  axis: FundamentalChartAxisSide;
+  axisKey: string;
+  unitFamily: FundamentalUnitFamily;
+  unit: string;
+  currency: string;
+  points: FundamentalChartPoint[];
+};
+
+export type FundamentalChartAxis = {
+  side: FundamentalChartAxisSide;
+  key: string;
+  unitFamily: FundamentalUnitFamily;
+  unit: string;
+  currency: string;
+  domain: readonly [number, number];
+  ticks: number[];
+  includeZero: boolean;
+};
+
+export type FundamentalChartModel = {
+  periods: PublicFundamentalPeriod[];
+  series: PreparedFundamentalSeries[];
+  axes: FundamentalChartAxis[];
+};
+
+export type FundamentalChartLayout = {
+  width: number;
+  height: number;
+  plotLeft: number;
+  plotRight: number;
+  plotTop: number;
+  plotBottom: number;
+  plotWidth: number;
+  plotHeight: number;
+  periodStep: number;
+  periodCenters: number[];
+};
+
+export type FundamentalChartBar = {
+  seriesId: string;
+  seriesIndex: number;
+  periodIndex: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  value: number;
+  zeroY: number;
+};
+
+export type FundamentalChartLinePoint = {
+  seriesId: string;
+  seriesIndex: number;
+  periodIndex: number;
+  x: number;
+  y: number;
+  value: number;
+};
+
+export type FundamentalChartLine = {
+  seriesId: string;
+  seriesIndex: number;
+  segments: FundamentalChartLinePoint[][];
+};
+
+export type FundamentalChartGeometry = {
+  layout: FundamentalChartLayout;
+  bars: FundamentalChartBar[];
+  lines: FundamentalChartLine[];
+};
+
+export type FundamentalChartTooltipRow = {
+  seriesId: string;
+  label: string;
+  value: number | null;
+  formattedValue: string;
+};
+
+export type FundamentalChartTooltip = {
+  periodEnd: string;
+  periodLabel: string;
+  rows: FundamentalChartTooltipRow[];
+  accessibleLabel: string;
+};
+
+export type FundamentalSeriesVisual = {
+  color: string;
+  dashArray: string | undefined;
+  pointShape: "circle" | "square" | "diamond" | "triangle";
+  barPattern: "solid" | "diagonal" | "dots" | "cross";
+};
+
+const SERIES_VISUALS: readonly FundamentalSeriesVisual[] = [
+  { color: "#9f3528", dashArray: undefined, pointShape: "circle", barPattern: "solid" },
+  { color: "#1e5b70", dashArray: "8 5", pointShape: "square", barPattern: "diagonal" },
+  { color: "#5a4e8c", dashArray: "2 4", pointShape: "diamond", barPattern: "dots" },
+  { color: "#3f6449", dashArray: "12 4 2 4", pointShape: "triangle", barPattern: "cross" },
+] as const;
+
+export class FundamentalChartSpecError extends Error {
+  readonly code:
+    | "EMPTY_SERIES"
+    | "TOO_MANY_SERIES"
+    | "UNKNOWN_METRIC"
+    | "DUPLICATE_SERIES"
+    | "UNAVAILABLE_TRANSFORM"
+    | "TOO_MANY_AXES"
+    | "AXIS_CONFLICT";
+
+  constructor(code: FundamentalChartSpecError["code"], message: string) {
+    super(message);
+    this.name = "FundamentalChartSpecError";
+    this.code = code;
+  }
+}
+
+export function buildFundamentalChartModel(
+  periods: readonly PublicFundamentalPeriod[],
+  availableSeries: readonly PublicFundamentalSeries[],
+  specs: readonly FundamentalChartSeriesSpec[],
+): FundamentalChartModel {
+  if (specs.length === 0) {
+    throw new FundamentalChartSpecError("EMPTY_SERIES", "至少选择一个指标。");
+  }
+  if (specs.length > FUNDAMENTAL_CHART_MAX_SERIES) {
+    throw new FundamentalChartSpecError(
+      "TOO_MANY_SERIES",
+      `同一图表最多展示 ${FUNDAMENTAL_CHART_MAX_SERIES} 个指标。`,
+    );
+  }
+
+  const availableByKey = new Map(availableSeries.map((series) => [series.metricKey, series]));
+  const seenIds = new Set<string>();
+  const preparedWithoutAxes = specs.map((spec) => {
+    const source = availableByKey.get(spec.metricKey);
+    if (!source) {
+      throw new FundamentalChartSpecError("UNKNOWN_METRIC", `未知指标：${spec.metricKey}`);
+    }
+    const transform = spec.transform ?? "value";
+    if (!source.allowedTransforms.includes(transform)) {
+      throw new FundamentalChartSpecError(
+        "UNAVAILABLE_TRANSFORM",
+        `${source.label} 不支持 ${transform} 变换。`,
+      );
+    }
+    const id = `${spec.metricKey}:${transform}`;
+    if (seenIds.has(id)) {
+      throw new FundamentalChartSpecError("DUPLICATE_SERIES", `重复图表序列：${id}`);
+    }
+    seenIds.add(id);
+    return prepareSeries(source, periods, transform, spec.mark ?? source.defaultMark);
+  });
+
+  const axisKeys = [...new Set(preparedWithoutAxes.map((series) => series.axisKey))];
+  if (axisKeys.length > FUNDAMENTAL_CHART_MAX_AXES) {
+    throw new FundamentalChartSpecError(
+      "TOO_MANY_AXES",
+      "所选指标包含超过两种不可共用的单位，请拆分为多张图表。",
+    );
+  }
+
+  const sideByAxisKey = assignAxisSides(axisKeys, specs, preparedWithoutAxes);
+  const series = preparedWithoutAxes.map((item) => ({
+    ...item,
+    axis: sideByAxisKey.get(item.axisKey) ?? "left",
+  }));
+  const axes = axisKeys.map((axisKey) => buildAxis(axisKey, sideByAxisKey.get(axisKey) ?? "left", series));
+
+  return { periods: [...periods], series, axes };
+}
+
+export function buildFundamentalChartGeometry(
+  model: FundamentalChartModel,
+  width = FUNDAMENTAL_CHART_WIDTH,
+  height = FUNDAMENTAL_CHART_HEIGHT,
+): FundamentalChartGeometry {
+  const hasRightAxis = model.axes.some((axis) => axis.side === "right");
+  const layout = buildChartLayout(model.periods.length, hasRightAxis, width, height);
+  const barSeries = model.series.filter((series) => series.mark === "bar");
+  const barIndexById = new Map(barSeries.map((series, index) => [series.id, index]));
+  const groupWidth = Math.min(layout.periodStep * 0.66, 72);
+  const barGap = barSeries.length > 1 ? 3 : 0;
+  const barWidth = barSeries.length === 0
+    ? 0
+    : Math.max(3, (groupWidth - barGap * (barSeries.length - 1)) / barSeries.length);
+  const bars: FundamentalChartBar[] = [];
+  const lines: FundamentalChartLine[] = [];
+
+  model.series.forEach((series, seriesIndex) => {
+    const axis = model.axes.find((candidate) => candidate.key === series.axisKey);
+    if (!axis) return;
+    if (series.mark === "bar") {
+      const barSeriesIndex = barIndexById.get(series.id) ?? 0;
+      series.points.forEach((point, periodIndex) => {
+        if (point.value === null) return;
+        const zeroY = scaleY(0, axis.domain, layout);
+        const valueY = scaleY(point.value, axis.domain, layout);
+        bars.push({
+          seriesId: series.id,
+          seriesIndex,
+          periodIndex,
+          x: layout.periodCenters[periodIndex]! - groupWidth / 2 + barSeriesIndex * (barWidth + barGap),
+          y: Math.min(zeroY, valueY),
+          width: barWidth,
+          height: Math.max(1, Math.abs(valueY - zeroY)),
+          value: point.value,
+          zeroY,
+        });
+      });
+      return;
+    }
+
+    const segments: FundamentalChartLinePoint[][] = [];
+    let currentSegment: FundamentalChartLinePoint[] = [];
+    series.points.forEach((point, periodIndex) => {
+      if (point.value === null) {
+        if (currentSegment.length > 0) segments.push(currentSegment);
+        currentSegment = [];
+        return;
+      }
+      currentSegment.push({
+        seriesId: series.id,
+        seriesIndex,
+        periodIndex,
+        x: layout.periodCenters[periodIndex]!,
+        y: scaleY(point.value, axis.domain, layout),
+        value: point.value,
+      });
+    });
+    if (currentSegment.length > 0) segments.push(currentSegment);
+    lines.push({ seriesId: series.id, seriesIndex, segments });
+  });
+
+  return { layout, bars, lines };
+}
+
+export function buildFundamentalChartTooltip(
+  model: FundamentalChartModel,
+  periodIndex: number,
+): FundamentalChartTooltip {
+  const period = model.periods[periodIndex];
+  if (!period) throw new RangeError("Period index is outside the chart model.");
+  const rows = model.series.map((series) => {
+    const value = series.points[periodIndex]?.value ?? null;
+    return {
+      seriesId: series.id,
+      label: series.label,
+      value,
+      formattedValue: formatFundamentalChartValue(value, series),
+    };
+  });
+  const periodLabel = formatFundamentalPeriod(period.periodEnd);
+  return {
+    periodEnd: period.periodEnd,
+    periodLabel,
+    rows,
+    accessibleLabel: `${periodLabel}，${rows.map((row) => `${row.label} ${row.formattedValue}`).join("，")}`,
+  };
+}
+
+export function formatFundamentalChartValue(
+  value: number | null,
+  seriesOrAxis: Pick<PreparedFundamentalSeries | FundamentalChartAxis, "unitFamily" | "unit" | "currency">,
+): string {
+  if (value === null || !Number.isFinite(value)) return "暂无数据";
+  if (seriesOrAxis.unit === "percentage_point") {
+    return `${formatDecimal(value, 1)} 个百分点`;
+  }
+  if (seriesOrAxis.unitFamily === "percent") return `${formatDecimal(value, 1)}%`;
+  if (seriesOrAxis.unitFamily === "per_share") {
+    return `${seriesOrAxis.currency || seriesOrAxis.unit} ${formatDecimal(value, 2)}`.trim();
+  }
+  const compact = new Intl.NumberFormat("zh-CN", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+  if (seriesOrAxis.unitFamily === "shares") return `${compact} 股`;
+  return `${compact} ${seriesOrAxis.currency || seriesOrAxis.unit}`.trim();
+}
+
+export function formatFundamentalAxisTick(value: number, axis: FundamentalChartAxis): string {
+  return formatFundamentalChartValue(value, axis).replace(" 个百分点", "pp");
+}
+
+export function formatFundamentalPeriod(periodEnd: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(periodEnd);
+  if (!match) return periodEnd;
+  return `${match[1]}年${Number(match[2])}月`;
+}
+
+export function linePath(points: readonly Pick<FundamentalChartLinePoint, "x" | "y">[]): string {
+  return points.map((point, index) => `${index === 0 ? "M" : "L"}${round(point.x)},${round(point.y)}`).join(" ");
+}
+
+export function getFundamentalSeriesVisual(index: number): FundamentalSeriesVisual {
+  return SERIES_VISUALS[index % SERIES_VISUALS.length]!;
+}
+
+export function toggleFundamentalMetricSelection(
+  current: readonly FundamentalMetricKey[],
+  metricKey: FundamentalMetricKey,
+  checked: boolean,
+  max = FUNDAMENTAL_CHART_MAX_SERIES,
+): FundamentalMetricKey[] {
+  if (!checked) return current.filter((key) => key !== metricKey);
+  if (current.includes(metricKey) || current.length >= max) return [...current];
+  return [...current, metricKey];
+}
+
+function prepareSeries(
+  source: PublicFundamentalSeries,
+  periods: readonly PublicFundamentalPeriod[],
+  transform: FundamentalTransform,
+  mark: FundamentalChartMark,
+): Omit<PreparedFundamentalSeries, "axis"> {
+  const valuesByPeriod = new Map(source.points.map((point) => [point.periodEnd, point]));
+  const sourcePoints = periods.map((period) => {
+    const sourcePoint = valuesByPeriod.get(period.periodEnd);
+    const parsedValue = parseChartNumber(sourcePoint?.valueDecimal ?? null);
+    return {
+      periodEnd: period.periodEnd,
+      value: parsedValue === null || source.displaySign === "as_reported" ? parsedValue : Math.abs(parsedValue),
+      sourceValueDecimal: sourcePoint?.valueDecimal ?? null,
+    };
+  });
+  const points = transformPoints(sourcePoints, transform);
+  const transformedUnit = unitForTransform(source, transform);
+  return {
+    id: `${source.metricKey}:${transform}`,
+    metricKey: source.metricKey,
+    label: labelForTransform(source.label, transform),
+    shortLabel: labelForTransform(source.shortLabel, transform),
+    transform,
+    mark,
+    axisKey: axisKeyForSeries(source, transform),
+    unitFamily: transformedUnit.unitFamily,
+    unit: transformedUnit.unit,
+    currency: transformedUnit.currency,
+    points,
+  };
+}
+
+function transformPoints(
+  points: readonly FundamentalChartPoint[],
+  transform: FundamentalTransform,
+): FundamentalChartPoint[] {
+  if (transform === "value") return points.map((point) => ({ ...point }));
+  const offset = transform === "yoy_growth" || transform === "yoy_change" ? 4 : 1;
+  return points.map((point, index) => {
+    const comparison = points[index - offset];
+    let value: number | null = null;
+    if (point.value !== null && comparison?.value !== null && comparison?.value !== undefined) {
+      if (transform === "qoq_growth" || transform === "yoy_growth") {
+        value = comparison.value === 0
+          ? null
+          : normalizeComputedValue(((point.value / comparison.value) - 1) * 100);
+      } else {
+        value = normalizeComputedValue(point.value - comparison.value);
+      }
+    }
+    return { periodEnd: point.periodEnd, value, sourceValueDecimal: point.sourceValueDecimal };
+  });
+}
+
+function unitForTransform(
+  source: PublicFundamentalSeries,
+  transform: FundamentalTransform,
+): Pick<PreparedFundamentalSeries, "unitFamily" | "unit" | "currency"> {
+  if (transform === "qoq_growth" || transform === "yoy_growth") {
+    return { unitFamily: "percent", unit: "percent", currency: "" };
+  }
+  if (transform === "qoq_change" || transform === "yoy_change") {
+    return { unitFamily: "percent", unit: "percentage_point", currency: "" };
+  }
+  return { unitFamily: source.unitFamily, unit: source.unit, currency: source.currency };
+}
+
+function axisKeyForSeries(source: PublicFundamentalSeries, transform: FundamentalTransform): string {
+  if (transform !== "value") return "percent";
+  if (source.unitFamily === "percent") return "percent";
+  if (source.unitFamily === "currency") return `currency:${source.currency || source.unit}`;
+  return `${source.unitFamily}:${source.currency || source.unit}`;
+}
+
+function assignAxisSides(
+  axisKeys: readonly string[],
+  specs: readonly FundamentalChartSeriesSpec[],
+  series: readonly Omit<PreparedFundamentalSeries, "axis">[],
+): Map<string, FundamentalChartAxisSide> {
+  const requestedByKey = new Map<string, FundamentalChartAxisSide>();
+  specs.forEach((spec, index) => {
+    if (!spec.axis) return;
+    const key = series[index]!.axisKey;
+    const requested = requestedByKey.get(key);
+    if (requested && requested !== spec.axis) {
+      throw new FundamentalChartSpecError("AXIS_CONFLICT", `同单位序列 ${key} 不能分配到不同坐标轴。`);
+    }
+    requestedByKey.set(key, spec.axis);
+  });
+
+  const result = new Map<string, FundamentalChartAxisSide>();
+  const usedSides = new Set<FundamentalChartAxisSide>();
+  axisKeys.forEach((key) => {
+    const requested = requestedByKey.get(key);
+    if (!requested) return;
+    if (usedSides.has(requested)) {
+      const otherKey = [...result.entries()].find(([, side]) => side === requested)?.[0];
+      if (otherKey !== key) {
+        throw new FundamentalChartSpecError("AXIS_CONFLICT", "不同单位不能共用同一条指定坐标轴。");
+      }
+    }
+    result.set(key, requested);
+    usedSides.add(requested);
+  });
+  axisKeys.forEach((key) => {
+    if (result.has(key)) return;
+    const side: FundamentalChartAxisSide = usedSides.has("left") ? "right" : "left";
+    result.set(key, side);
+    usedSides.add(side);
+  });
+  return result;
+}
+
+function buildAxis(
+  key: string,
+  side: FundamentalChartAxisSide,
+  series: readonly PreparedFundamentalSeries[],
+): FundamentalChartAxis {
+  const members = series.filter((candidate) => candidate.axisKey === key);
+  const values = members.flatMap((candidate) => candidate.points.flatMap((point) =>
+    point.value === null ? [] : [point.value]));
+  const includeZero = members.some((candidate) => candidate.mark === "bar")
+    || members.some((candidate) => candidate.unitFamily === "percent");
+  const domain = niceDomain(values, includeZero);
+  const first = members[0]!;
+  return {
+    side,
+    key,
+    unitFamily: first.unitFamily,
+    unit: members.some((member) => member.unit !== first.unit) ? "percent" : first.unit,
+    currency: first.currency,
+    domain,
+    ticks: ticksForDomain(domain, 5),
+    includeZero,
+  };
+}
+
+function buildChartLayout(
+  periodCount: number,
+  hasRightAxis: boolean,
+  width: number,
+  height: number,
+): FundamentalChartLayout {
+  const compact = width < 540;
+  const plotLeft = compact ? 54 : 72;
+  const plotRight = width - (hasRightAxis ? (compact ? 54 : 76) : (compact ? 18 : 32));
+  const plotTop = 24;
+  const plotBottom = height - (compact ? 44 : 56);
+  const plotWidth = plotRight - plotLeft;
+  const plotHeight = plotBottom - plotTop;
+  const periodStep = periodCount > 0 ? plotWidth / periodCount : plotWidth;
+  return {
+    width,
+    height,
+    plotLeft,
+    plotRight,
+    plotTop,
+    plotBottom,
+    plotWidth,
+    plotHeight,
+    periodStep,
+    periodCenters: Array.from({ length: periodCount }, (_, index) => plotLeft + periodStep * (index + 0.5)),
+  };
+}
+
+function scaleY(value: number, domain: readonly [number, number], layout: FundamentalChartLayout): number {
+  const ratio = (value - domain[0]) / (domain[1] - domain[0]);
+  return layout.plotBottom - ratio * layout.plotHeight;
+}
+
+function niceDomain(values: readonly number[], includeZero: boolean): readonly [number, number] {
+  if (values.length === 0) return [0, 1];
+  let min = Math.min(...values);
+  let max = Math.max(...values);
+  if (includeZero) {
+    min = Math.min(0, min);
+    max = Math.max(0, max);
+  }
+  if (min === max) {
+    const padding = Math.abs(min) * 0.1 || 1;
+    min -= includeZero && min >= 0 ? 0 : padding;
+    max += includeZero && max <= 0 ? 0 : padding;
+  }
+  const step = niceStep((max - min) / 4);
+  const niceMin = Math.floor(min / step) * step;
+  const niceMax = Math.ceil(max / step) * step;
+  return [normalizeZero(niceMin), normalizeZero(niceMax === niceMin ? niceMin + step : niceMax)];
+}
+
+function ticksForDomain(domain: readonly [number, number], targetCount: number): number[] {
+  const step = niceStep((domain[1] - domain[0]) / Math.max(1, targetCount - 1));
+  const ticks: number[] = [];
+  const start = Math.ceil(domain[0] / step) * step;
+  for (let value = start; value <= domain[1] + step * 0.001; value += step) {
+    ticks.push(normalizeZero(Number(value.toPrecision(12))));
+    if (ticks.length > 12) break;
+  }
+  return ticks;
+}
+
+function niceStep(roughStep: number): number {
+  if (!Number.isFinite(roughStep) || roughStep <= 0) return 1;
+  const magnitude = 10 ** Math.floor(Math.log10(roughStep));
+  const normalized = roughStep / magnitude;
+  const factor = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return factor * magnitude;
+}
+
+function parseChartNumber(value: string | null): number | null {
+  if (value === null || value.trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function labelForTransform(label: string, transform: FundamentalTransform): string {
+  const suffix: Record<FundamentalTransform, string> = {
+    value: "",
+    qoq_growth: " · 环比增速",
+    yoy_growth: " · 同比增速",
+    qoq_change: " · 环比变化",
+    yoy_change: " · 同比变化",
+  };
+  return `${label}${suffix[transform]}`;
+}
+
+function formatDecimal(value: number, maximumFractionDigits: number): string {
+  return new Intl.NumberFormat("zh-CN", {
+    maximumFractionDigits,
+    minimumFractionDigits: 0,
+  }).format(value);
+}
+
+function round(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function normalizeZero(value: number): number {
+  return Object.is(value, -0) ? 0 : value;
+}
+
+function normalizeComputedValue(value: number): number {
+  return normalizeZero(Number(value.toPrecision(12)));
+}

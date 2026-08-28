@@ -1,0 +1,729 @@
+"use client";
+
+import {
+  useId,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
+
+import type { FundamentalMetricKey } from "@/lib/fundamental-metrics";
+import type {
+  PublicFundamentalsResponse,
+  PublicFundamentalSeries,
+} from "@/lib/fundamentals-api";
+import {
+  FUNDAMENTAL_CHART_HEIGHT,
+  FUNDAMENTAL_CHART_MAX_SERIES,
+  FUNDAMENTAL_CHART_WIDTH,
+  buildFundamentalChartGeometry,
+  buildFundamentalChartModel,
+  buildFundamentalChartTooltip,
+  formatFundamentalAxisTick,
+  formatFundamentalChartValue,
+  formatFundamentalPeriod,
+  getFundamentalSeriesVisual,
+  linePath,
+  toggleFundamentalMetricSelection,
+  type FundamentalChartAxis,
+  type FundamentalChartModel,
+  type FundamentalChartSeriesSpec,
+  type FundamentalSeriesVisual,
+} from "@/lib/fundamental-chart";
+
+export type FundamentalChartRendererProps = {
+  title: string;
+  description?: string;
+  data: PublicFundamentalsResponse;
+  series: readonly FundamentalChartSeriesSpec[];
+  showDataTable?: boolean;
+  className?: string;
+};
+
+export type MetricSelectorProps = {
+  availableSeries: readonly PublicFundamentalSeries[];
+  selectedMetricKeys: readonly FundamentalMetricKey[];
+  onChange(next: FundamentalMetricKey[]): void;
+  maxSelection?: number;
+  legend?: string;
+  id?: string;
+};
+
+export function FundamentalChartRenderer({
+  title,
+  description,
+  data,
+  series,
+  showDataTable = true,
+  className,
+}: FundamentalChartRendererProps) {
+  const titleId = useId();
+  const descriptionId = useId();
+  const rawPatternId = useId();
+  const patternId = rawPatternId.replace(/[^a-zA-Z0-9_-]/g, "");
+  const [activePeriodIndex, setActivePeriodIndex] = useState<number | null>(null);
+  const modelResult = useMemo(() => {
+    if (data.status !== "ready") return { model: null, error: null };
+    try {
+      return {
+        model: buildFundamentalChartModel(data.periods, data.series, series),
+        error: null,
+      };
+    } catch (error) {
+      return {
+        model: null,
+        error: error instanceof Error ? error.message : "图表配置无法解析。",
+      };
+    }
+  }, [data, series]);
+  const model = modelResult.model;
+
+  if (data.status === "pending") {
+    return (
+      <ChartFrame className={className} title={title} description={description}>
+        <ChartMessage
+          title="财报趋势正在准备"
+          detail="首次请求已进入刷新队列。数据可用后，组件会使用同一份配置绘制图表。"
+        />
+        <ChartSource data={data} />
+      </ChartFrame>
+    );
+  }
+
+  if (!model) {
+    return (
+      <ChartFrame className={className} title={title} description={description}>
+        <ChartMessage title="这组指标暂时不能叠加" detail={modelResult.error ?? "请调整指标组合。"} />
+        <ChartSource data={data} />
+      </ChartFrame>
+    );
+  }
+
+  const hasValues = model.series.some((item) => item.points.some((point) => point.value !== null));
+  if (!hasValues) {
+    return (
+      <ChartFrame className={className} title={title} description={description}>
+        <ChartMessage title="暂无可绘制数据" detail="所选指标在这些报告期内均为空。可更换指标或扩大报告期范围。" />
+        {showDataTable ? <FundamentalChartDataTable model={model} /> : null}
+        <ChartSource data={data} />
+      </ChartFrame>
+    );
+  }
+
+  return (
+    <figure className={["fundamental-chart", className].filter(Boolean).join(" ")} data-chart-role="fundamental-chart">
+      <figcaption className="fundamental-chart__heading">
+        <div>
+          <h3 id={titleId}>{title}</h3>
+          {description ? <p id={descriptionId}>{description}</p> : null}
+        </div>
+        <ChartStatus data={data} />
+      </figcaption>
+
+      <ChartLegend model={model} />
+      <FundamentalSvgChart
+        model={model}
+        titleId={titleId}
+        descriptionId={description ? descriptionId : undefined}
+        patternId={patternId}
+        activePeriodIndex={activePeriodIndex}
+        onActivePeriodChange={setActivePeriodIndex}
+      />
+
+      <p className="sr-only" aria-live="polite" data-chart-role="live-region">
+        {activePeriodIndex === null
+          ? "可使用 Tab 键依次查看每个报告期的数据。"
+          : buildFundamentalChartTooltip(model, activePeriodIndex).accessibleLabel}
+      </p>
+      {showDataTable ? <FundamentalChartDataTable model={model} /> : null}
+      <ChartSource data={data} />
+    </figure>
+  );
+}
+
+export function FundamentalBarChart(props: FundamentalChartRendererProps) {
+  return (
+    <FundamentalChartRenderer
+      {...props}
+      series={props.series.map((series) => ({ ...series, mark: "bar" }))}
+    />
+  );
+}
+
+export function FundamentalLineChart(props: FundamentalChartRendererProps) {
+  return (
+    <FundamentalChartRenderer
+      {...props}
+      series={props.series.map((series) => ({ ...series, mark: "line" }))}
+    />
+  );
+}
+
+export function FundamentalComboChart(props: FundamentalChartRendererProps) {
+  return <FundamentalChartRenderer {...props} />;
+}
+
+export function MetricSelector({
+  availableSeries,
+  selectedMetricKeys,
+  onChange,
+  maxSelection = FUNDAMENTAL_CHART_MAX_SERIES,
+  legend = "选择叠加指标",
+  id,
+}: MetricSelectorProps) {
+  const generatedId = useId();
+  const selectorId = id ?? generatedId.replace(/[^a-zA-Z0-9_-]/g, "");
+  const helpId = `${selectorId}-help`;
+  const maxReached = selectedMetricKeys.length >= maxSelection;
+
+  return (
+    <fieldset className="fundamental-metric-selector" aria-describedby={helpId} data-chart-role="metric-selector">
+      <legend>{legend}</legend>
+      <p id={helpId} className="fundamental-metric-selector__help">
+        已选 {selectedMetricKeys.length}/{maxSelection}；同图最多使用两种单位。
+      </p>
+      <div className="fundamental-metric-selector__options">
+        {availableSeries.map((series) => {
+          const checked = selectedMetricKeys.includes(series.metricKey);
+          const disabled = !series.available || (!checked && maxReached);
+          return (
+            <label
+              className="fundamental-metric-selector__option"
+              data-selected={checked ? "true" : "false"}
+              data-available={series.available ? "true" : "false"}
+              key={series.metricKey}
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                disabled={disabled}
+                onChange={(event) => onChange(toggleFundamentalMetricSelection(
+                  selectedMetricKeys,
+                  series.metricKey,
+                  event.currentTarget.checked,
+                  maxSelection,
+                ))}
+              />
+              <span>{series.shortLabel}</span>
+              {!series.available ? <small>暂无</small> : null}
+            </label>
+          );
+        })}
+      </div>
+      {maxReached ? <p className="fundamental-metric-selector__limit">已达到叠加上限；取消一项后可继续选择。</p> : null}
+    </fieldset>
+  );
+}
+
+function ChartFrame({
+  title,
+  description,
+  className,
+  children,
+}: {
+  title: string;
+  description?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className={["fundamental-chart", className].filter(Boolean).join(" ")} data-chart-role="fundamental-chart">
+      <header className="fundamental-chart__heading">
+        <div>
+          <h3>{title}</h3>
+          {description ? <p>{description}</p> : null}
+        </div>
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function ChartMessage({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="fundamental-chart__message" role="status" data-chart-role="message">
+      <strong>{title}</strong>
+      <p>{detail}</p>
+    </div>
+  );
+}
+
+function ChartStatus({ data }: { data: PublicFundamentalsResponse }) {
+  if (!data.stale && !data.partial) return null;
+  return (
+    <div className="fundamental-chart__status" aria-label="数据状态">
+      {data.stale ? <span data-status="stale">数据待更新</span> : null}
+      {data.partial ? <span data-status="partial">部分数据</span> : null}
+    </div>
+  );
+}
+
+function ChartLegend({ model }: { model: FundamentalChartModel }) {
+  return (
+    <ul className="fundamental-chart__legend" aria-label="图例" data-chart-role="legend">
+      {model.series.map((series, index) => {
+        const visual = getFundamentalSeriesVisual(index);
+        return (
+          <li key={series.id}>
+            <svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true">
+              {series.mark === "bar" ? (
+                <BarLegendSwatch visual={visual} />
+              ) : (
+                <>
+                  <line x1="1" x2="25" y1="8" y2="8" stroke={visual.color} strokeWidth="2.2" strokeDasharray={visual.dashArray} />
+                  <PointShape shape={visual.pointShape} x={13} y={8} color={visual.color} size={3.2} />
+                </>
+              )}
+            </svg>
+            <span>{series.label}</span>
+            <small>{series.axis === "left" ? "左轴" : "右轴"}</small>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function FundamentalSvgChart({
+  model,
+  titleId,
+  descriptionId,
+  patternId,
+  activePeriodIndex,
+  onActivePeriodChange,
+}: {
+  model: FundamentalChartModel;
+  titleId: string;
+  descriptionId?: string;
+  patternId: string;
+  activePeriodIndex: number | null;
+  onActivePeriodChange(index: number | null): void;
+}) {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [chartWidth, setChartWidth] = useState(FUNDAMENTAL_CHART_WIDTH);
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || typeof ResizeObserver === "undefined") return;
+    const updateWidth = (width: number) => setChartWidth(Math.max(280, Math.min(1_200, Math.round(width))));
+    updateWidth(viewport.getBoundingClientRect().width);
+    const observer = new ResizeObserver(([entry]) => updateWidth(entry?.contentRect.width ?? FUNDAMENTAL_CHART_WIDTH));
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, []);
+  const chartHeight = chartWidth < 540 ? 340 : FUNDAMENTAL_CHART_HEIGHT;
+  const geometry = buildFundamentalChartGeometry(model, chartWidth, chartHeight);
+  const { layout } = geometry;
+  const leftAxis = model.axes.find((axis) => axis.side === "left");
+  const rightAxis = model.axes.find((axis) => axis.side === "right");
+  const activeTooltip = activePeriodIndex === null
+    ? null
+    : buildFundamentalChartTooltip(model, activePeriodIndex);
+  const activeX = activePeriodIndex === null ? null : layout.periodCenters[activePeriodIndex] ?? null;
+
+  const handlePeriodKeyDown = (event: KeyboardEvent<SVGRectElement>, index: number) => {
+    if (event.key === "Escape") {
+      onActivePeriodChange(null);
+      event.currentTarget.blur();
+      return;
+    }
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const delta = event.key === "ArrowLeft" ? -1 : 1;
+    const nextIndex = Math.max(0, Math.min(model.periods.length - 1, index + delta));
+    onActivePeriodChange(nextIndex);
+    document.getElementById(periodTargetId(patternId, nextIndex))?.focus();
+  };
+
+  const handlePointerLeave = (event: PointerEvent<SVGSVGElement>) => {
+    if (event.pointerType !== "touch" && !(event.currentTarget.contains(document.activeElement))) {
+      onActivePeriodChange(null);
+    }
+  };
+
+  return (
+    <div ref={viewportRef} className="fundamental-chart__viewport" data-chart-role="plot">
+      <svg
+        viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+        role="img"
+        aria-labelledby={[titleId, descriptionId].filter(Boolean).join(" ")}
+        preserveAspectRatio="xMidYMid meet"
+        onPointerLeave={handlePointerLeave}
+      >
+        <ChartPatterns patternId={patternId} />
+        {leftAxis ? <AxisGrid axis={leftAxis} layout={layout} /> : null}
+        {rightAxis?.includeZero ? <AxisZeroReference axis={rightAxis} layout={layout} /> : null}
+        {leftAxis ? <YAxis axis={leftAxis} layout={layout} /> : null}
+        {rightAxis ? <YAxis axis={rightAxis} layout={layout} /> : null}
+
+        {geometry.bars.map((bar) => {
+          const visual = getFundamentalSeriesVisual(bar.seriesIndex);
+          const series = model.series[bar.seriesIndex]!;
+          return (
+            <rect
+              key={`${bar.seriesId}:${bar.periodIndex}`}
+              className="fundamental-chart__bar"
+              x={bar.x}
+              y={bar.y}
+              width={bar.width}
+              height={bar.height}
+              rx="1.5"
+              fill={barFill(visual, patternId, bar.seriesIndex)}
+              stroke={visual.color}
+              data-series-id={series.id}
+              data-period-index={bar.periodIndex}
+            />
+          );
+        })}
+
+        {geometry.lines.map((line) => {
+          const series = model.series[line.seriesIndex]!;
+          const visual = getFundamentalSeriesVisual(line.seriesIndex);
+          return (
+            <g key={line.seriesId} data-series-id={series.id}>
+              {line.segments.map((segment, segmentIndex) => (
+                <path
+                  key={segmentIndex}
+                  className="fundamental-chart__line"
+                  d={linePath(segment)}
+                  fill="none"
+                  stroke={visual.color}
+                  strokeWidth="2.5"
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  strokeDasharray={visual.dashArray}
+                />
+              ))}
+              {line.segments.flatMap((segment) => segment).map((point) => (
+                <PointShape
+                  key={point.periodIndex}
+                  shape={visual.pointShape}
+                  x={point.x}
+                  y={point.y}
+                  color={visual.color}
+                  size={4}
+                />
+              ))}
+            </g>
+          );
+        })}
+
+        {activeX !== null ? (
+          <line
+            className="fundamental-chart__active-guide"
+            x1={activeX}
+            x2={activeX}
+            y1={layout.plotTop}
+            y2={layout.plotBottom}
+          />
+        ) : null}
+
+        <XAxis model={model} layout={layout} />
+
+        <g data-chart-role="period-targets">
+          {model.periods.map((period, index) => {
+            const tooltip = buildFundamentalChartTooltip(model, index);
+            const targetWidth = Math.max(44, layout.periodStep);
+            return (
+              <rect
+                id={periodTargetId(patternId, index)}
+                key={period.periodEnd}
+                className="fundamental-chart__hit-target"
+                x={layout.periodCenters[index]! - targetWidth / 2}
+                y={layout.plotTop}
+                width={targetWidth}
+                height={layout.plotHeight}
+                fill="transparent"
+                tabIndex={0}
+                role="button"
+                aria-label={tooltip.accessibleLabel}
+                aria-pressed={activePeriodIndex === index}
+                data-period-end={period.periodEnd}
+                onFocus={() => onActivePeriodChange(index)}
+                onBlur={(event) => {
+                  if (!event.currentTarget.ownerSVGElement?.contains(event.relatedTarget as Node | null)) {
+                    onActivePeriodChange(null);
+                  }
+                }}
+                onPointerEnter={() => onActivePeriodChange(index)}
+                onClick={() => onActivePeriodChange(index)}
+                onKeyDown={(event) => handlePeriodKeyDown(event, index)}
+              />
+            );
+          })}
+        </g>
+
+        {activeTooltip && activeX !== null ? (
+          <ChartTooltip tooltip={activeTooltip} x={activeX} model={model} layout={layout} />
+        ) : null}
+      </svg>
+    </div>
+  );
+}
+
+function AxisGrid({
+  axis,
+  layout,
+}: {
+  axis: FundamentalChartAxis;
+  layout: ReturnType<typeof buildFundamentalChartGeometry>["layout"];
+}) {
+  return (
+    <g aria-hidden="true">
+      {axis.ticks.map((tick) => {
+        const y = yForValue(tick, axis, layout);
+        return (
+          <line
+            key={tick}
+            className={tick === 0 ? "fundamental-chart__zero-line" : "fundamental-chart__grid-line"}
+            x1={layout.plotLeft}
+            x2={layout.plotRight}
+            y1={y}
+            y2={y}
+          />
+        );
+      })}
+    </g>
+  );
+}
+
+function AxisZeroReference({
+  axis,
+  layout,
+}: {
+  axis: FundamentalChartAxis;
+  layout: ReturnType<typeof buildFundamentalChartGeometry>["layout"];
+}) {
+  const y = yForValue(0, axis, layout);
+  return (
+    <line
+      className="fundamental-chart__zero-line"
+      x1={layout.plotLeft}
+      x2={layout.plotRight}
+      y1={y}
+      y2={y}
+      data-zero-axis={axis.side}
+      aria-hidden="true"
+    />
+  );
+}
+
+function YAxis({
+  axis,
+  layout,
+}: {
+  axis: FundamentalChartAxis;
+  layout: ReturnType<typeof buildFundamentalChartGeometry>["layout"];
+}) {
+  const x = axis.side === "left" ? layout.plotLeft - 10 : layout.plotRight + 10;
+  return (
+    <g className="fundamental-chart__axis" data-axis-id={axis.key} data-axis-side={axis.side}>
+      {axis.ticks.map((tick) => (
+        <text
+          key={tick}
+          x={x}
+          y={yForValue(tick, axis, layout) + 4}
+          textAnchor={axis.side === "left" ? "end" : "start"}
+        >
+          {formatFundamentalAxisTick(tick, axis)}
+        </text>
+      ))}
+    </g>
+  );
+}
+
+function XAxis({
+  model,
+  layout,
+}: {
+  model: FundamentalChartModel;
+  layout: ReturnType<typeof buildFundamentalChartGeometry>["layout"];
+}) {
+  return (
+    <g className="fundamental-chart__axis fundamental-chart__axis--x" aria-hidden="true">
+      <line x1={layout.plotLeft} x2={layout.plotRight} y1={layout.plotBottom} y2={layout.plotBottom} />
+      {model.periods.map((period, index) => (
+        <text
+          key={period.periodEnd}
+          x={layout.periodCenters[index]}
+          y={layout.plotBottom + 28}
+          textAnchor="middle"
+        >
+          {formatPeriodTick(period.periodEnd)}
+        </text>
+      ))}
+    </g>
+  );
+}
+
+function ChartTooltip({
+  tooltip,
+  x,
+  model,
+  layout,
+}: {
+  tooltip: ReturnType<typeof buildFundamentalChartTooltip>;
+  x: number;
+  model: FundamentalChartModel;
+  layout: ReturnType<typeof buildFundamentalChartGeometry>["layout"];
+}) {
+  const width = 222;
+  const rowHeight = 22;
+  const height = 38 + tooltip.rows.length * rowHeight;
+  const tooltipX = Math.max(layout.plotLeft + 4, Math.min(layout.plotRight - width - 4, x + 14));
+  const tooltipY = layout.plotTop + 8;
+  return (
+    <g className="fundamental-chart__tooltip" transform={`translate(${tooltipX} ${tooltipY})`} aria-hidden="true">
+      <rect width={width} height={height} rx="3" />
+      <text className="fundamental-chart__tooltip-period" x="12" y="22">{tooltip.periodLabel}</text>
+      {tooltip.rows.map((row, index) => {
+        const visual = getFundamentalSeriesVisual(index);
+        const series = model.series[index]!;
+        return (
+          <g key={row.seriesId} transform={`translate(0 ${38 + index * rowHeight})`}>
+            <PointShape shape={visual.pointShape} x={15} y={0} color={visual.color} size={3.5} />
+            <text x="27" y="4">{truncate(series.shortLabel, 12)}</text>
+            <text x={width - 12} y="4" textAnchor="end">{row.formattedValue}</text>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+function FundamentalChartDataTable({ model }: { model: FundamentalChartModel }) {
+  return (
+    <details className="fundamental-chart__table" data-chart-role="data-table">
+      <summary>查看数据表</summary>
+      <div className="fundamental-chart__table-scroll" tabIndex={0}>
+        <table>
+          <caption className="sr-only">图表中的季度基本面数据</caption>
+          <thead>
+            <tr>
+              <th scope="col">指标</th>
+              {model.periods.map((period) => <th scope="col" key={period.periodEnd}>{formatFundamentalPeriod(period.periodEnd)}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {model.series.map((series) => (
+              <tr key={series.id}>
+                <th scope="row">{series.label}</th>
+                {series.points.map((point) => (
+                  <td key={point.periodEnd}>{formatFundamentalChartValue(point.value, series)}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  );
+}
+
+function ChartSource({ data }: { data: PublicFundamentalsResponse }) {
+  return (
+    <footer className="fundamental-chart__source">
+      <span>来源：Yahoo Finance</span>
+      {data.fetchedAt ? <span>更新：{formatFetchedAt(data.fetchedAt)}</span> : <span>等待首次同步</span>}
+      {data.issueCount > 0 ? <span>数据提示：{data.issueCount}</span> : null}
+    </footer>
+  );
+}
+
+function ChartPatterns({ patternId }: { patternId: string }) {
+  return (
+    <defs>
+      {(["diagonal", "dots", "cross"] as const).map((pattern, visualIndex) => {
+        const index = visualIndex + 1;
+        const color = getFundamentalSeriesVisual(index).color;
+        return (
+          <pattern key={pattern} id={`${patternId}-${pattern}`} width="8" height="8" patternUnits="userSpaceOnUse">
+            <rect width="8" height="8" fill={color} opacity="0.9" />
+            {pattern === "diagonal" ? <path d="M-2 2 L2 -2 M0 8 L8 0 M6 10 L10 6" stroke="#f3ecdf" strokeWidth="1.4" opacity="0.72" /> : null}
+            {pattern === "dots" ? <circle cx="4" cy="4" r="1.4" fill="#f3ecdf" opacity="0.78" /> : null}
+            {pattern === "cross" ? <path d="M4 0 V8 M0 4 H8" stroke="#f3ecdf" strokeWidth="1" opacity="0.7" /> : null}
+          </pattern>
+        );
+      })}
+    </defs>
+  );
+}
+
+function PointShape({
+  shape,
+  x,
+  y,
+  color,
+  size,
+}: {
+  shape: FundamentalSeriesVisual["pointShape"];
+  x: number;
+  y: number;
+  color: string;
+  size: number;
+}) {
+  if (shape === "square") {
+    return <rect x={x - size} y={y - size} width={size * 2} height={size * 2} fill="#f3ecdf" stroke={color} strokeWidth="2" />;
+  }
+  if (shape === "diamond") {
+    return <path d={`M${x},${y - size - 0.5} L${x + size + 0.5},${y} L${x},${y + size + 0.5} L${x - size - 0.5},${y} Z`} fill="#f3ecdf" stroke={color} strokeWidth="2" />;
+  }
+  if (shape === "triangle") {
+    return <path d={`M${x},${y - size - 1} L${x + size + 1},${y + size} L${x - size - 1},${y + size} Z`} fill="#f3ecdf" stroke={color} strokeWidth="2" />;
+  }
+  return <circle cx={x} cy={y} r={size} fill="#f3ecdf" stroke={color} strokeWidth="2" />;
+}
+
+function BarLegendSwatch({ visual }: { visual: FundamentalSeriesVisual }) {
+  return (
+    <g>
+      <rect x="5" y="2" width="16" height="12" rx="1" fill={visual.color} stroke={visual.color} />
+      {visual.barPattern === "diagonal" ? (
+        <path d="M5 12 L15 2 M11 14 L21 4" stroke="#f3ecdf" strokeWidth="1.2" />
+      ) : null}
+      {visual.barPattern === "dots" ? (
+        <>
+          <circle cx="10" cy="6" r="1.2" fill="#f3ecdf" />
+          <circle cx="17" cy="10" r="1.2" fill="#f3ecdf" />
+        </>
+      ) : null}
+      {visual.barPattern === "cross" ? (
+        <path d="M13 2 V14 M5 8 H21" stroke="#f3ecdf" strokeWidth="1" />
+      ) : null}
+    </g>
+  );
+}
+
+function barFill(visual: FundamentalSeriesVisual, patternId: string, index: number): string {
+  if (visual.barPattern === "solid") return visual.color;
+  return `url(#${patternId}-${getFundamentalSeriesVisual(index).barPattern})`;
+}
+
+function yForValue(
+  value: number,
+  axis: FundamentalChartAxis,
+  layout: ReturnType<typeof buildFundamentalChartGeometry>["layout"],
+): number {
+  const ratio = (value - axis.domain[0]) / (axis.domain[1] - axis.domain[0]);
+  return layout.plotBottom - ratio * layout.plotHeight;
+}
+
+function periodTargetId(patternId: string, index: number): string {
+  return `${patternId}-period-${index}`;
+}
+
+function formatPeriodTick(periodEnd: string): string {
+  const match = /^(\d{4})-(\d{2})/.exec(periodEnd);
+  return match ? `${match[1]}.${Number(match[2])}` : periodEnd;
+}
+
+function formatFetchedAt(value: string): string {
+  return `${value.replace("T", " ").slice(0, 16)} UTC`;
+}
+
+function truncate(value: string, maxLength: number): string {
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
+}
