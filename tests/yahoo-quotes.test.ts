@@ -89,8 +89,9 @@ test("calculates 14-day Wilder RSI from daily closes", () => {
 
 test("omits Yahoo results without a usable previous close", () => {
   const payload = structuredClone(yahooPayload);
-  payload.spark.result[0].response[0].meta.chartPreviousClose = 0;
-  payload.spark.result[0].response[0].meta.previousClose = 0;
+  const meta = payload.spark.result[0].response[0].meta as { chartPreviousClose: number; previousClose?: number };
+  meta.chartPreviousClose = 0;
+  meta.previousClose = 0;
   payload.spark.result[0].response[0].indicators.quote[0].close = [208.76];
 
   const quotes = parseYahooSparkQuotes(payload, ["MSFT", "NVDA", "MISSING"]);

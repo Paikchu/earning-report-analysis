@@ -55,7 +55,7 @@ test("accepts authenticated manual jobs without running analysis in the request"
 
   assert.equal(response.status, 202);
   assert.deepEqual(started, ["MSFT"]);
-  assert.equal((await response.json()).status, "queued");
+  assert.equal((await response.json() as { status: string }).status, "queued");
   assert.equal((await handleSecAnalysisRequest(new Request("https://worker.example/jobs/MSFT", { method: "POST" }), env)).status, 401);
 });
 

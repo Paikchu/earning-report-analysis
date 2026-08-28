@@ -5,6 +5,11 @@ import { executeSecAnalysisWorkflow, type SecPipelineOperations, type WorkflowSt
 import { SEC_ANALYSIS_SCHEMA_VERSION, type SecHistorySnapshot } from "../lib/sec-analysis.ts";
 import type { SecFiling, SecFilingSummary, SecNodeSpec } from "../lib/sec.ts";
 
+/** The Manager always fills these; a test only spells out the parts it exercises. */
+function nodeSpec(spec: Pick<SecNodeSpec, "id" | "title" | "question" | "sectionIds"> & Partial<SecNodeSpec>): SecNodeSpec {
+  return { historySeriesIds: [], memoryIds: [], acceptanceCriteria: [], materiality: "high", ...spec };
+}
+
 const filing: SecFiling = {
   ticker: "TESTCO",
   cik: "0000000001",
@@ -71,8 +76,8 @@ function operations(overrides: Partial<SecPipelineOperations> = {}): SecPipeline
     async plan() {
       return {
         nodes: [
-          { id: "revenue-growth", title: "收入增长", question: "收入增长由什么驱动？", sectionIds: ["revenue"], keywords: ["revenue"] },
-          { id: "cash-flow", title: "现金流", question: "现金流发生了什么变化？", sectionIds: ["cash-flow"], keywords: ["cash flow"] },
+          nodeSpec({ id: "revenue-growth", title: "收入增长", question: "收入增长由什么驱动？", sectionIds: ["revenue"], keywords: ["revenue"] }),
+          nodeSpec({ id: "cash-flow", title: "现金流", question: "现金流发生了什么变化？", sectionIds: ["cash-flow"], keywords: ["cash flow"] }),
         ],
         outlineSections: 8,
       };
@@ -146,7 +151,7 @@ test("runs filing analysis as durable stages and fans analysis nodes out indepen
   const jobStages: string[] = [];
   const jobIds: string[] = [];
   let published = 0;
-  let publishedSummary: SecFilingSummary | null = null;
+  const publishedSummaries: SecFilingSummary[] = [];
   const ops = operations({
     async analyzeNode(spec: SecNodeSpec) {
       nodeIds.push(spec.id);
@@ -154,7 +159,7 @@ test("runs filing analysis as durable stages and fans analysis nodes out indepen
     },
     async publish(_artifact, summary) {
       published += 1;
-      publishedSummary = summary;
+      if (summary) publishedSummaries.push(summary);
     },
     async updateJob(job) {
       jobStages.push(job.currentStage);
@@ -181,8 +186,9 @@ test("runs filing analysis as durable stages and fans analysis nodes out indepen
   assert.deepEqual(jobStages, ["prepare", "published"]);
   assert.ok(jobIds.every((jobId) => jobId.endsWith(":workflow-1")));
   assert.equal(jobStages.length, 2, "job state is written once at start and once at completion");
-  assert.deepEqual(publishedSummary?.nodes?.map((node) => node.id), ["revenue-growth", "cash-flow"]);
-  assert.equal(publishedSummary?.managerReview?.status, "complete");
+  assert.equal(publishedSummaries.length, 1);
+  assert.deepEqual(publishedSummaries[0].nodes?.map((node) => node.id), ["revenue-growth", "cash-flow"]);
+  assert.equal(publishedSummaries[0].managerReview?.status, "complete");
 });
 
 test("publishes full reports directly after synthesis without claim checks", async () => {
@@ -348,7 +354,7 @@ test("passes the hy3 fallback model to a retried analysis step", async () => {
   const base = operations();
   let retriedModel = "";
   const step: WorkflowStepLike = {
-    async do<T>(name, callback): Promise<T> {
+    async do<T>(name: string, callback: (context?: { attempt: number }) => Promise<T>): Promise<T> {
       return callback({ attempt: name.endsWith(":cash-flow") ? 2 : 1 });
     },
   };

@@ -15,7 +15,12 @@ import {
 } from "../lib/sec-pipeline.ts";
 import type { SecAnalysisContext } from "../lib/sec-types.ts";
 import type { SecHistorySnapshot } from "../lib/sec-analysis.ts";
-import { SEC_SUMMARY_VERSION, type SecFiling } from "../lib/sec.ts";
+import { SEC_SUMMARY_VERSION, type SecFiling, type SecNodeSpec } from "../lib/sec.ts";
+
+/** The Manager always fills these; a test only spells out the parts it exercises. */
+function nodeSpec(spec: Pick<SecNodeSpec, "id" | "title" | "question" | "sectionIds"> & Partial<SecNodeSpec>): SecNodeSpec {
+  return { historySeriesIds: [], memoryIds: [], acceptanceCriteria: [], materiality: "high", ...spec };
+}
 
 function xbrlHistory(current: string, prior?: string): SecHistorySnapshot {
   const observation = (endDate: string, value: string) => ({
@@ -160,13 +165,13 @@ test("isolates a failed dynamic node while preserving completed node analysis", 
     fetcher: async () => new Response("<h1>Revenue</h1><p>Revenue increased 18% to $120 million, driven by cloud demand.</p>"),
   });
   const sectionId = prepared.outline[0].id;
-  const complete = await analyzePreparedSecNode(prepared, {
+  const complete = await analyzePreparedSecNode(prepared, nodeSpec({
     id: "revenue-growth",
     title: "收入增长",
     question: "收入增长由什么驱动？",
     sectionIds: [sectionId],
     keywords: ["revenue", "cloud demand"],
-  }, async (stage, _system, payload) => {
+  }), async (stage, _system, payload) => {
     assert.equal(stage, "node:revenue-growth");
     assert.match(JSON.stringify(payload), /Revenue increased 18%/);
     return {
@@ -174,7 +179,7 @@ test("isolates a failed dynamic node while preserving completed node analysis", 
       narrative: "云需求推动本期收入增长。",
     };
   });
-  const spec = { id: "risk-review", title: "风险变化", question: "风险发生了什么变化？", sectionIds: [sectionId], keywords: ["risk"] };
+  const spec = nodeSpec({ id: "risk-review", title: "风险变化", question: "风险发生了什么变化？", sectionIds: [sectionId], keywords: ["risk"] });
 
   // A provider failure must surface so the Workflow step can retry on the fallback model.
   await assert.rejects(
@@ -195,7 +200,7 @@ test("node facts must cite a block the node actually read", async () => {
     userAgent: "test@example.com",
     fetcher: async () => new Response("<h1>Item 8. Financial Statements</h1><p>Segment revenue was 60 USDm this quarter.</p>"),
   });
-  const spec = { id: "segments", title: "分部", question: "分部收入如何？", sectionIds: [prepared.outline[0].id], keywords: ["segment"] };
+  const spec = nodeSpec({ id: "segments", title: "分部", question: "分部收入如何？", sectionIds: [prepared.outline[0].id], keywords: ["segment"] });
   let offered: Array<{ evidenceId: string }> = [];
 
   const node = await analyzePreparedSecNode(prepared, spec, async (_stage, _system, payload) => {
@@ -310,13 +315,13 @@ test("drops unverifiable keyMetrics instead of failing the whole report", async 
 
 function normalizePlan(sectionId: string) {
   return {
-    nodes: [{
+    nodes: [nodeSpec({
       id: "revenue-growth",
       title: "收入增长",
       question: "收入增长由什么驱动？",
       sectionIds: [sectionId],
       keywords: ["revenue"],
-    }],
+    })],
     outlineSections: 1,
   };
 }

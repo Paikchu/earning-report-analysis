@@ -24,7 +24,7 @@ test("requires the exact internal refresh key", async () => {
 });
 
 test("deduplicates stock underlyings and excludes ETFs from the watchlist", () => {
-  const securityTypes = new Map([
+  const securityTypes = new Map<string, "stock" | "etf">([
     ["MSFT", "stock"],
     ["NOK", "stock"],
     ["BOXX", "etf"],
@@ -39,21 +39,22 @@ test("deduplicates stock underlyings and excludes ETFs from the watchlist", () =
 });
 
 test("queues analysis through the independent worker and returns immediately", async () => {
-  let captured: Request | null = null;
+  const captured: Request[] = [];
   const response = await requestSecAnalysis({
     ticker: "MSFT",
     pipelineOrigin: "https://sec-worker.example/",
     refreshKey: "secret",
     fetcher: async (input, init) => {
-      captured = new Request(input, init);
+      captured.push(new Request(input, init));
       return Response.json({ status: "queued", jobId: "manual-MSFT-1" }, { status: 202 });
     },
   });
 
   assert.equal(response.status, 202);
-  assert.equal(captured?.url, "https://sec-worker.example/jobs/MSFT");
-  assert.equal(captured?.method, "POST");
-  assert.equal(captured?.headers.get("x-sec-refresh-key"), "secret");
+  assert.equal(captured.length, 1);
+  assert.equal(captured[0].url, "https://sec-worker.example/jobs/MSFT");
+  assert.equal(captured[0].method, "POST");
+  assert.equal(captured[0].headers.get("x-sec-refresh-key"), "secret");
 });
 
 test("protects filing feeds and returns a specific ETF state", async () => {
@@ -77,6 +78,6 @@ test("protects filing feeds and returns a specific ETF state", async () => {
   });
 
   assert.equal(unauthorized.status, 401);
-  assert.equal((await etf.json()).status, "not_applicable");
-  assert.equal((await pending.json()).status, "pending");
+  assert.equal((await etf.json() as { status: string }).status, "not_applicable");
+  assert.equal((await pending.json() as { status: string }).status, "pending");
 });

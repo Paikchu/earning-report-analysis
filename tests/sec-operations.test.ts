@@ -35,7 +35,7 @@ test("sends an explicit fallback model override to B.ai", async () => {
     AI_API_KEY: "worker-model-secret",
     SEC_ANALYSIS_MODEL: "primary-model",
     SEC_FILINGS: { async get() { return null; }, async put() { return {}; } },
-  } as SecPipelineEnv;
+  } as unknown as SecPipelineEnv;
   const fetcher: typeof fetch = async (_input, init) => {
     requestedModel = (JSON.parse(String(init?.body)) as { model: string }).model;
     return Response.json({ choices: [{ message: { content: "{}" } }] });
@@ -52,7 +52,7 @@ test("scheduled analysis does not overlap an already running filing job", async 
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
     SEC_FILINGS: { async get() { return null; }, async put() { return {}; } },
-  } as SecPipelineEnv;
+  } as unknown as SecPipelineEnv;
   const operations = createSecPipelineOperations(env, async () => Response.json({ status: "running" }));
 
   assert.equal(await operations.shouldAnalyze(filing, "scheduled"), false);
@@ -228,7 +228,7 @@ test("publishes cited evidence in bounded D1 bridge calls", async () => {
       },
       async put() { return {}; },
     },
-  } as SecPipelineEnv;
+  } as unknown as SecPipelineEnv;
   const artifact = {
     filing,
     periodId: prepared.periodId,
@@ -263,13 +263,13 @@ test("publishes cited evidence in bounded D1 bridge calls", async () => {
 });
 
 test("publishes event summaries without creating a structured filing artifact", async () => {
-  let requestBody: Record<string, unknown> | null = null;
+  const requestBodies: Array<Record<string, unknown>> = [];
   const env = {
     WEB_APP_ORIGIN: "https://site.test",
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
     SEC_FILINGS: { async get() { return null; }, async put() { return {}; } },
-  } as SecPipelineEnv;
+  } as unknown as SecPipelineEnv;
   const summary = {
     ticker: "MSFT", form: "8-K", filingDate: "2026-08-10", accessionNumber: "event",
     headline: "事件简析", bullets: [{ label: "事件", detail: "影响已披露。", importance: "high" as const }],
@@ -277,10 +277,11 @@ test("publishes event summaries without creating a structured filing artifact", 
   };
 
   await createSecPipelineOperations(env, async (_input, init) => {
-    requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
     return Response.json({ status: "published" });
   }).publishEvent(summary);
 
-  assert.deepEqual(requestBody?.filing, { ticker: "MSFT", form: "8-K", filingDate: "2026-08-10", accessionNumber: "event" });
-  assert.equal("artifact" in (requestBody ?? {}), false);
+  assert.equal(requestBodies.length, 1);
+  assert.deepEqual(requestBodies[0].filing, { ticker: "MSFT", form: "8-K", filingDate: "2026-08-10", accessionNumber: "event" });
+  assert.equal("artifact" in requestBodies[0], false);
 });

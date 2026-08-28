@@ -410,7 +410,7 @@ export function buildFilingBlocks(text: string, accessionNumber: string): Filing
       current = { body: line.text, start: line.start, end: line.end };
       continue;
     }
-    const candidate = `${current.body}\n${line.text}`;
+    const candidate: string = `${current.body}\n${line.text}`;
     if (candidate.length > 2_400 || isStructuralHeading(line.text)) {
       chunks.push(current);
       current = { body: line.text, start: line.start, end: line.end };

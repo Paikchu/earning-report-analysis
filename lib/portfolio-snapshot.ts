@@ -200,7 +200,7 @@ export function buildPortfolioSnapshot(previous: PortfolioSnapshotV1, input: Sna
   }
 
   const currentTradeSync = input.tradeSync.status === "current";
-  const trades = currentTradeSync
+  const trades = input.tradeSync.status === "current"
     ? mergeTrades(previous.trades, input.tradeSync.trades, 2026)
     : previous.trades;
   const lastSuccessfulTradeAt = currentTradeSync

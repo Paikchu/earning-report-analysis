@@ -8,6 +8,12 @@ import {
   normalizeSecNodeResult,
   type SecOutlineSection,
 } from "../lib/sec-report.ts";
+import type { SecNodeSpec } from "../lib/sec.ts";
+
+/** The Manager always fills these; a test only spells out the parts it exercises. */
+function nodeSpec(spec: Pick<SecNodeSpec, "id" | "title" | "question" | "sectionIds"> & Partial<SecNodeSpec>): SecNodeSpec {
+  return { historySeriesIds: [], memoryIds: [], acceptanceCriteria: [], materiality: "high", ...spec };
+}
 
 test("drops duplicated table-of-contents headings and keeps the later real section", () => {
   const tocTitle = "Item 7. Management's Discussion and Analysis";
@@ -91,13 +97,13 @@ test("compresses oversized node sections while preserving quantitative driver ev
   const text = `${filler}\n${decisive}\n${filler}`;
   const outline: SecOutlineSection[] = [{ id: "results", title: "Results of Operations", level: 2, start: 0, end: text.length, characters: text.length }];
 
-  const input = buildSecNodeInput({
+  const input = buildSecNodeInput(nodeSpec({
     id: "cloud-growth",
     title: "云业务增长",
     question: "云业务增长由什么驱动？",
     sectionIds: ["results"],
     keywords: ["cloud revenue", "azure", "demand"],
-  }, outline, text);
+  }), outline, text);
 
   assert.ok(input.characters <= 12_000);
   assert.equal(input.sections[0].compressed, true);
@@ -110,13 +116,13 @@ test("records located evidence for a node even when its bound section is not com
   const text = "Revenue increased 18% to $120 million, driven by cloud demand.";
   const outline: SecOutlineSection[] = [{ id: "results", title: "Results of Operations", level: 2, start: 0, end: text.length, characters: text.length }];
 
-  const input = buildSecNodeInput({
+  const input = buildSecNodeInput(nodeSpec({
     id: "growth",
     title: "增长",
     question: "收入由什么驱动？",
     sectionIds: ["results"],
     keywords: ["revenue", "cloud demand"],
-  }, outline, text);
+  }), outline, text);
 
   assert.equal(input.sections[0].compressed, false);
   assert.equal(input.evidence.length, 1);
@@ -134,13 +140,13 @@ test("keeps one node below the 12,000-character guardrail across many sections",
     return section;
   });
 
-  const input = buildSecNodeInput({
+  const input = buildSecNodeInput(nodeSpec({
     id: "many-sections",
     title: "跨章节分析",
     question: "多个章节共同说明了什么？",
     sectionIds: outline.map((section) => section.id),
     keywords: ["revenue", "demand"],
-  }, outline, text);
+  }), outline, text);
 
   assert.equal(input.sections.length, 18);
   assert.ok(input.characters <= 12_000);
@@ -150,12 +156,12 @@ test("normalizes one completed node without changing its manager-owned identity"
   const result = normalizeSecNodeResult({
     findings: [{ label: "收入", detail: "云收入同比增长 22%。", importance: "high" }],
     narrative: "云业务保持增长。\n\n需求仍是主要驱动。",
-  }, {
+  }, nodeSpec({
     id: "cloud-growth",
     title: "云业务增长",
     question: "云业务增长由什么驱动？",
     sectionIds: ["results"],
-  }, [{ start: 10, end: 40, score: 92, reasons: ["包含定量数据"], excerpt: "Cloud revenue increased 22%." }]);
+  }), [{ start: 10, end: 40, score: 92, reasons: ["包含定量数据"], excerpt: "Cloud revenue increased 22%." }]);
 
   assert.equal(result.id, "cloud-growth");
   assert.equal(result.title, "云业务增长");

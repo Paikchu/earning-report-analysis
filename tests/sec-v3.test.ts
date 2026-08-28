@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import test from "node:test";
 
 import {
@@ -19,9 +19,15 @@ import {
   type MemoryConsolidationState,
 } from "../lib/sec-memory.ts";
 import { runManagerRepairLoop, type WorkflowStepLike } from "../workers/sec-cron/workflow-core.ts";
-import type { SecNodePlan, SecNodeResult } from "../lib/sec.ts";
+import type { SecFilingSummary, SecNodePlan, SecNodeResult } from "../lib/sec.ts";
+import type { SecAnalysisArtifact } from "../lib/sec-types.ts";
 import { planPreparedSecFiling, prepareSecFiling } from "../lib/sec-pipeline.ts";
 import { D1SecRepository } from "../lib/sec-d1.ts";
+
+/** The sqlite-backed double hands its own richer statements to `batch`, so it is deliberately
+ *  narrower than the repository's database parameter. */
+type DatabaseMock = ConstructorParameters<typeof D1SecRepository>[0];
+const asDatabase = (mock: unknown) => mock as DatabaseMock;
 
 const issuer = "TESTCO";
 
@@ -340,13 +346,13 @@ test("commits the final report, summary, and pending Memory job in one D1 batch"
     description: "Quarterly report", items: "", documentUrl: "https://sec.test/test.htm", indexUrl: "https://sec.test/index.htm",
   };
   const artifact = {
-    filing, periodId: `${issuer}:2026-03-31:quarter`, periodScope: "quarter", blocks: [], moduleAnalyses: [], snapshots: [], comparisons: [], memoryCandidates: [],
-    router: { selections: [], source: "fallback", status: "partial", missingModules: [] }, artifactKeys: { synthesis: "analysis/test/synthesis.json" },
+    filing, periodId: `${issuer}:2026-03-31:quarter`, periodScope: "quarter", blocks: [], comparisons: [],
+    artifactKeys: { synthesis: "analysis/test/synthesis.json" },
     report: { ticker: issuer, periodId: `${issuer}:2026-03-31:quarter`, reportVersion: "v3", headline: "Test", keyMetrics: [], changes: { qoq: [], yoy: [], guidance: [], risks: [] }, dataQuality: { coverage: 1, verificationStatus: "partial", warnings: [], analysisStatus: "partial" } },
-  };
-  const summary = { ticker: issuer, form: "10-Q", filingDate: filing.filingDate, accessionNumber: filing.accessionNumber, headline: "Test", bullets: [], analystView: "Test", report: "Test", source: "deepseek", generatedAt: "2026-04-21T00:00:00.000Z" };
+  } satisfies SecAnalysisArtifact;
+  const summary = { ticker: issuer, form: "10-Q", filingDate: filing.filingDate, accessionNumber: filing.accessionNumber, headline: "Test", bullets: [], analystView: "Test", report: "Test", source: "deepseek", generatedAt: "2026-04-21T00:00:00.000Z" } satisfies SecFilingSummary;
 
-  const jobId = await new D1SecRepository(database).commitFinalPublication(artifact as never, summary as never);
+  const jobId = await new D1SecRepository(asDatabase(database)).commitFinalPublication(artifact, summary);
 
   assert.equal(batches.length, 1);
   assert.equal(batches[0].length, 3);
@@ -416,12 +422,13 @@ function createMemoryD1() {
   type Bound = { sql: string; values: unknown[]; run(): Promise<unknown>; first<T>(): Promise<T | null>; all<T>(): Promise<{ results: T[] }> };
   const prepare = (sql: string) => ({
     bind(...values: unknown[]): Bound {
+      const bound = values as SQLInputValue[];
       return {
         sql,
         values,
-        async run() { return sqlite.prepare(sql).run(...values); },
-        async first<T>() { return (sqlite.prepare(sql).get(...values) as T | undefined) ?? null; },
-        async all<T>() { return { results: sqlite.prepare(sql).all(...values) as T[] }; },
+        async run() { return sqlite.prepare(sql).run(...bound); },
+        async first<T>() { return (sqlite.prepare(sql).get(...bound) as T | undefined) ?? null; },
+        async all<T>() { return { results: sqlite.prepare(sql).all(...bound) as T[] }; },
       };
     },
   });

@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { D1SecRepository, type SecAnalysisJobUpdate } from "../lib/sec-d1.ts";
+
+/** Each test mocks only the statement methods its own call path touches, so the doubles are
+ *  deliberately narrower than the repository's database parameter. */
+type DatabaseMock = ConstructorParameters<typeof D1SecRepository>[0];
+const asDatabase = (mock: unknown) => mock as DatabaseMock;
 import type { SecFilingSummary } from "../lib/sec.ts";
 import type { SecAnalysisArtifact } from "../lib/sec-types.ts";
 
@@ -25,7 +30,7 @@ test("reads and upserts SEC cache records through prepared D1 statements", async
       };
     },
   };
-  const repository = new D1SecRepository(database);
+  const repository = new D1SecRepository(asDatabase(database));
 
   const cached = await repository.getCache<{ ticker: string }>("sec:filings:MSFT");
   await repository.setCache("sec:filings:MSFT", { ticker: "MSFT" }, "2026-07-25T00:00:00.000Z");
@@ -66,7 +71,7 @@ test("persists and restores one summary per ticker and accession", async () => {
       };
     },
   };
-  const repository = new D1SecRepository(database);
+  const repository = new D1SecRepository(asDatabase(database));
 
   await repository.setSummary(summary);
   assert.equal((await repository.getSummary("MSFT", summary.accessionNumber))?.headline, "云业务推动增长");
@@ -101,7 +106,7 @@ test("upserts independent SEC workflow job state", async () => {
     updatedAt: "2026-08-05T00:00:00.000Z",
   };
 
-  await new D1SecRepository(database).upsertAnalysisJob(update);
+  await new D1SecRepository(asDatabase(database)).upsertAnalysisJob(update);
 
   assert.match(calls[0].sql, /INSERT INTO sec_analysis_jobs/);
   assert.match(calls[0].sql, /ON CONFLICT\(job_id\)/);
@@ -125,7 +130,7 @@ test("reads the latest status for an analysis version", async () => {
     },
   };
 
-  const status = await new D1SecRepository(database).getAnalysisJobStatus("MSFT", "acc-1", "sec-analysis.v2");
+  const status = await new D1SecRepository(asDatabase(database)).getAnalysisJobStatus("MSFT", "acc-1", "sec-analysis.v2");
 
   assert.equal(status, "complete");
   assert.match(selectedSql, /FROM sec_analysis_jobs/);
@@ -158,11 +163,7 @@ test("does not publish an analysis artifact that failed verification", async () 
     periodId: "MSFT:2026-06-30:annual",
     periodScope: "annual",
     blocks: [],
-    moduleAnalyses: [],
-    snapshots: [],
     comparisons: [],
-    memoryCandidates: [],
-    router: { selections: [], source: "fallback", status: "failed", missingModules: [] },
     report: {
       ticker: "MSFT", periodId: "MSFT:2026-06-30:annual", reportVersion: "v1", headline: "failed", keyMetrics: [],
       changes: { qoq: [], yoy: [], guidance: [], risks: [] },
@@ -170,7 +171,7 @@ test("does not publish an analysis artifact that failed verification", async () 
     },
   } satisfies SecAnalysisArtifact;
 
-  await new D1SecRepository(database).saveAnalysis(artifact);
+  await new D1SecRepository(asDatabase(database)).saveAnalysis(artifact);
 
   assert.equal(sql.some((statement) => /INSERT INTO sec_published_reports/.test(statement)), false);
 });
@@ -200,10 +201,10 @@ test("replaces a reparsed filing block by its filing ordinal", async () => {
     description: "Annual report", items: "", documentUrl: "https://sec.test/msft.htm", indexUrl: "https://sec.test/index.htm",
   };
 
-  await new D1SecRepository(database).saveFilingBlocks(filing, [{
+  await new D1SecRepository(asDatabase(database)).saveFilingBlocks(filing, [{
     blockId: "acc-1:block:0001:new-hash", ordinal: 0, heading: "Item 8", headingPath: "Item 8 / block 1",
     elementType: "text", preview: "Revenue", body: "Revenue was 331839.", tokenCount: 5,
-    numericDensity: 10, tableCount: 0, contentHash: "new-hash",
+    numericDensity: 10, tableCount: 0, contentHash: "new-hash", start: 0, end: 19,
   }]);
 
   assert.match(blockStatement, /ON CONFLICT\(filing_id, ordinal\)/);
@@ -254,7 +255,7 @@ test("stores same-series XBRL observations under distinct reporting-period dimen
     xbrlConcept: "us-gaap:Revenues",
   });
 
-  await new D1SecRepository(database).saveHistory(filing, {
+  await new D1SecRepository(asDatabase(database)).saveHistory(filing, {
     registryVersion: "sec-canonical-series.v1",
     series: [{
       seriesId: "revenue",
@@ -284,7 +285,7 @@ test("never reads a previously stored failed report as the published report", as
     },
   };
 
-  await new D1SecRepository(database).getPublishedReport("MSFT", "MSFT:2026-06-30:annual");
+  await new D1SecRepository(asDatabase(database)).getPublishedReport("MSFT", "MSFT:2026-06-30:annual");
 
   assert.match(selectedSql, /verification_status IN \('verified', 'partial'\)/);
 });
