@@ -79,6 +79,28 @@ export function SecReportNavigator({ initialSections }: { initialSections: Repor
     if (itemBottom > rail.scrollTop + rail.clientHeight) rail.scrollTo({ top: itemBottom - rail.clientHeight, behavior: reduceMotion ? "auto" : "smooth" });
   }, [activeId, reduceMotion]);
 
+  const [progress, setProgress] = useState(0);
+  useEffect(() => {
+    let ticking = false;
+    const update = () => {
+      const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+      setProgress(scrollable > 0 ? Math.min(1, window.scrollY / scrollable) : 0);
+      ticking = false;
+    };
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
+
   useEffect(() => {
     if (!menuOpen) return;
     const closeOnOutsidePress = (event: PointerEvent) => {
@@ -98,6 +120,7 @@ export function SecReportNavigator({ initialSections }: { initialSections: Repor
   }, [menuOpen]);
 
   const activeSection = sections.find((section) => section.id === activeId) ?? sections[0];
+  const activeIndex = sections.findIndex((section) => section.id === activeId);
   const previewSection = useMemo(() => sections.find((section) => section.id === previewId) ?? null, [previewId, sections]);
   if (!sections.length) return null;
 
@@ -112,6 +135,13 @@ export function SecReportNavigator({ initialSections }: { initialSections: Repor
 
   return (
     <>
+      <div aria-hidden="true" data-report-progress-track="true" className="fixed inset-x-0 top-0 z-50 h-[2px]">
+        <div
+          data-report-progress-fill="true"
+          style={{ width: `${Math.round(progress * 1000) / 10}%` }}
+          className="h-full bg-[var(--color-loss)]"
+        />
+      </div>
       <nav
         ref={mobileRef}
         aria-label="报告目录"
@@ -186,6 +216,13 @@ export function SecReportNavigator({ initialSections }: { initialSections: Repor
             const active = section.id === activeId;
             const previewed = section.id === previewId;
             const nested = section.depth === 1;
+            const segmentState = index < activeIndex ? "passed" : index === activeIndex ? "active" : "upcoming";
+            const barState = previewed ? "expanded" : segmentState;
+            const barScale = previewed || segmentState === "active" ? 1 : segmentState === "passed" ? 0.6 : 0.35;
+            const barOpacity = previewed ? 0.9 : segmentState === "active" ? 1 : segmentState === "passed" ? 0.65 : 0.4;
+            const barColor = previewed || segmentState === "active"
+              ? "bg-[var(--color-loss)]"
+              : segmentState === "passed" ? "bg-[var(--ink-soft)]" : "bg-[var(--ink-muted)]";
             return (
               <li
                 key={section.id}
@@ -207,11 +244,11 @@ export function SecReportNavigator({ initialSections }: { initialSections: Repor
                 >
                   <motion.span
                     aria-hidden="true"
-                    data-report-bar-state={previewed ? "expanded" : "resting"}
+                    data-report-bar-state={barState}
                     initial={false}
-                    animate={{ scaleX: previewed ? 1 : 0.72, opacity: previewed ? 0.9 : active ? 0.84 : 0.52 }}
+                    animate={{ scaleX: barScale, opacity: barOpacity }}
                     transition={{ duration: reduceMotion ? 0 : 0.22, ease: easeOutExpo }}
-                    className={`h-[2px] origin-left ${nested ? "w-10" : "w-12"} ${active || previewed ? "bg-[var(--color-loss)]" : "bg-[var(--ink-muted)]"}`}
+                    className={`h-[2px] origin-left ${nested ? "w-10" : "w-12"} ${barColor}`}
                   />
                   <span className="sr-only">{displayIndex(section, index)} {section.title}</span>
                 </a>

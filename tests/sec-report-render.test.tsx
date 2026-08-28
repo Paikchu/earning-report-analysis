@@ -45,6 +45,8 @@ test("renders the complete report, dynamic evidence, and analysis completeness",
   assert.match(html, /未完成节点：margin-bridge/);
   assert.match(html, /Revenue increased 18%/);
   assert.match(html, /<details/);
+  assert.equal((html.match(/<details(?=[^>]*\bopen="")(?=[^>]*class="sec-report-node\b)[^>]*>/g) ?? []).length, 2);
+  assert.equal((html.match(/<details(?=[^>]*\bopen="")(?=[^>]*class="sec-report-evidence\b)[^>]*>/g) ?? []).length, 0);
   assert.match(html, /aria-label="报告目录"/);
   assert.match(html, /href="#sec-report-conclusions"/);
   assert.match(html, /href="#sec-report-node-1"/);
@@ -60,11 +62,15 @@ test("renders the complete report, dynamic evidence, and analysis completeness",
   assert.match(html, /max-h-\[64dvh\] w-16/);
   assert.equal((html.match(/data-report-nav-depth="section"/g) ?? []).length, 5);
   assert.equal((html.match(/data-report-nav-depth="subsection"/g) ?? []).length, 2);
-  assert.equal((html.match(/data-report-bar-state="resting"/g) ?? []).length, 7);
+  assert.equal((html.match(/data-report-bar-state="active"/g) ?? []).length, 1);
+  assert.equal((html.match(/data-report-bar-state="upcoming"/g) ?? []).length, 6);
   assert.equal((html.match(/relative m-0 w-16 p-0 h-5/g) ?? []).length, 5);
   assert.equal((html.match(/relative m-0 w-16 p-0 h-4/g) ?? []).length, 2);
-  assert.equal((html.match(/transform:scaleX\(0\.72\)/g) ?? []).length, 7);
   assert.doesNotMatch(html, /scale-x-\[/);
+  assert.equal((html.match(/data-report-bar-state="active"[^>]*style="opacity:1;transform:none"/g) ?? []).length, 1);
+  assert.equal((html.match(/transform:scaleX\(0\.35\)/g) ?? []).length, 6);
   assert.equal((html.match(/h-\[2px\] origin-left w-12/g) ?? []).length, 5);
   assert.equal((html.match(/h-\[2px\] origin-left w-10/g) ?? []).length, 2);
+  assert.match(html, /data-report-progress-track="true"/);
+  assert.match(html, /data-report-progress-fill="true"/);
 });
