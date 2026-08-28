@@ -59,6 +59,7 @@ export function SecReportDocument({ companyName, filing }: { companyName: string
           {(summary?.nodes ?? []).map((node, index) => (
             <details
               id={nodeLinks[index].id}
+              open
               tabIndex={-1}
               data-report-nav-item
               data-report-index={nodeLinks[index].index}
