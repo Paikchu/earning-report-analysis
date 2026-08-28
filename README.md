@@ -15,6 +15,8 @@ npm run test:sec
 
 `SEC_TRACKED_TICKERS` 只放需要自动生成或回填的股票代码，例如 `MSFT,NVDA`。解析会 trim、转大写、校验、去重；任意非法值会让整次 Pipeline 任务失败，空值不生成任何公司。
 
+生产环境里这个变量**只配置在 Web Worker 上**，Pipeline 通过 `/api/internal/sec/watchlist` 读取，改白名单只需要部署 Web Worker。
+
 ## Cloudflare
 
 - Web Worker：Vinext SSR、`/api/v1` 公开读取接口、管理接口和 D1。

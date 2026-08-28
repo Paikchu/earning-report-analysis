@@ -19,17 +19,37 @@ export type SecMemoryWorkflowParams = {
 export type SecCronEnv = {
   WEB_APP_ORIGIN: string;
   SEC_REFRESH_KEY: string;
-  SEC_TRACKED_TICKERS: string;
   SEC_ANALYSIS_WORKFLOW: SecWorkflowBinding;
   SEC_MEMORY_WORKFLOW?: SecWorkflowBinding<SecMemoryWorkflowParams>;
 };
+
+/**
+ * The whitelist lives on the Web Worker, which is also the side that rejects an untracked ticker on
+ * every bridge and admin route. Keeping a second copy here meant a silent drift: this Worker would
+ * start analysis the other side then refused, and the jobs just failed on repeat.
+ *
+ * There is deliberately no fall back to a local copy. The only time it would fire is when the Web
+ * Worker is unreachable — and every filing needs that same Worker for context, publication and job
+ * state, so a run started from a stale list could not finish anyway.
+ */
+export async function fetchTrackedTickers(env: SecCronEnv, fetcher: typeof fetch = fetch): Promise<string[]> {
+  if (!env.WEB_APP_ORIGIN || !env.SEC_REFRESH_KEY) throw new Error("SEC watchlist environment is incomplete");
+  const response = await fetcher(`${env.WEB_APP_ORIGIN.replace(/\/+$/, "")}/api/internal/sec/watchlist`, {
+    headers: siteHeaders(env),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error(`SEC watchlist HTTP ${response.status}`);
+  const body = await response.json() as { tickers?: unknown };
+  // Re-validated rather than trusted: the parse is what guarantees the shape the rest of this file
+  // relies on, whatever the bridge returned.
+  return parseTrackedTickers(Array.isArray(body.tickers) ? body.tickers.join(",") : "");
+}
 
 export async function runSecRefresh(env: SecCronEnv, fetcher: typeof fetch = fetch, now = Date.now()) {
   if (!env.SEC_REFRESH_KEY || !env.SEC_ANALYSIS_WORKFLOW) {
     throw new Error("SEC cron environment is incomplete");
   }
-  void fetcher;
-  const tickers = parseTrackedTickers(env.SEC_TRACKED_TICKERS);
+  const tickers = await fetchTrackedTickers(env, fetcher);
   const started: string[] = [];
   const failed: string[] = [];
   for (const ticker of [...new Set(tickers)]) {
@@ -63,7 +83,7 @@ export async function runSecMemorySweep(env: SecCronEnv, fetcher: typeof fetch =
   return { started: [body.claim.jobId] };
 }
 
-export async function handleSecAnalysisRequest(request: Request, env: SecCronEnv, now = Date.now()): Promise<Response> {
+export async function handleSecAnalysisRequest(request: Request, env: SecCronEnv, now = Date.now(), fetcher: typeof fetch = fetch): Promise<Response> {
   if (request.method !== "POST") return new Response("Not found", { status: 404 });
   if (!env.SEC_REFRESH_KEY || request.headers.get("x-sec-refresh-key") !== env.SEC_REFRESH_KEY) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -80,9 +100,9 @@ export async function handleSecAnalysisRequest(request: Request, env: SecCronEnv
   if (!ticker) return Response.json({ error: "Invalid ticker" }, { status: 400 });
   let trackedTickers: string[];
   try {
-    trackedTickers = parseTrackedTickers(env.SEC_TRACKED_TICKERS);
+    trackedTickers = await fetchTrackedTickers(env, fetcher);
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Invalid SEC_TRACKED_TICKERS" }, { status: 500 });
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to read the SEC watchlist" }, { status: 503 });
   }
   if (!isTrackedTicker(ticker, trackedTickers)) return Response.json({ error: "Ticker is not tracked" }, { status: 403 });
   try {
