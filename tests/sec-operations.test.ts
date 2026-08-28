@@ -46,6 +46,78 @@ test("sends an explicit fallback model override to B.ai", async () => {
   assert.equal(requestedModel, "hy3");
 });
 
+const modelEnv = {
+  WEB_APP_ORIGIN: "https://site.test",
+  SEC_REFRESH_KEY: "refresh-key",
+  SEC_USER_AGENT: "test@example.com",
+  AI_API_KEY: "worker-model-secret",
+  SEC_ANALYSIS_MODEL: "primary-model",
+  SEC_FILINGS: { async get() { return null; }, async put() { return {}; } },
+} as SecPipelineEnv;
+
+function sse(...events: string[]): Response {
+  return new Response(events.map((event) => `data: ${event}\n\n`).join(""), {
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
+function delta(content: string, finishReason: string | null = null) {
+  return JSON.stringify({ choices: [{ delta: { content }, finish_reason: finishReason }] });
+}
+
+test("streams the completion so the provider proxy cannot time the request out", async () => {
+  let requestBody: Record<string, unknown> = {};
+  let acceptHeader = "";
+  const fetcher: typeof fetch = async (_input, init) => {
+    requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    acceptHeader = String((init?.headers as Record<string, string>)?.accept ?? "");
+    return sse(delta('{"head'), delta('line":"ok"}', "stop"), "[DONE]");
+  };
+
+  const result = await callWorkerSecModel(modelEnv, fetcher, "node:test", "Return JSON", {});
+
+  assert.equal(requestBody.stream, true, "stream must be requested");
+  assert.deepEqual(requestBody.response_format, { type: "json_object" });
+  assert.equal(acceptHeader, "text/event-stream");
+  assert.deepEqual(result, { headline: "ok" });
+});
+
+test("still reads gateways that ignore the stream flag", async () => {
+  const fetcher: typeof fetch = async () => Response.json({ choices: [{ message: { content: '{"headline":"ok"}' } }] });
+
+  assert.deepEqual(await callWorkerSecModel(modelEnv, fetcher, "node:test", "Return JSON", {}), { headline: "ok" });
+});
+
+test("rejects a truncated stream instead of parsing a plausible fragment", async () => {
+  // Without [DONE] or a finish_reason the body is incomplete; parseModelJson would happily read
+  // the inner object and return the wrong answer.
+  const fetcher: typeof fetch = async () => sse(delta('{"headline":"ok","keyMetrics":[{"metricKey":"revenue"}'));
+
+  await assert.rejects(
+    callWorkerSecModel(modelEnv, fetcher, "node:test", "Return JSON", {}),
+    (error: Error) => {
+      assert.match(error.message, /stream ended before completion/);
+      // Must not look like a schema violation, or the retry would resend with the wrong prompt
+      // instead of letting the Workflow step retry on the fallback model.
+      assert.equal(error instanceof SyntaxError, false);
+      assert.equal(error.message.includes("JSON object"), false);
+      return true;
+    },
+  );
+});
+
+test("surfaces an error frame carried inside the stream", async () => {
+  const fetcher: typeof fetch = async () => sse(JSON.stringify({ error: { message: "upstream overloaded", code: 503 } }));
+
+  await assert.rejects(callWorkerSecModel(modelEnv, fetcher, "node:test", "Return JSON", {}), /stream error.*upstream overloaded/);
+});
+
+test("rejects a stream cut short by the output token limit", async () => {
+  const fetcher: typeof fetch = async () => sse(delta('{"headline":"tru'), delta("", "length"));
+
+  await assert.rejects(callWorkerSecModel(modelEnv, fetcher, "node:test", "Return JSON", {}), /output token limit/);
+});
+
 test("scheduled analysis does not overlap an already running filing job", async () => {
   const env = {
     WEB_APP_ORIGIN: "https://site.test",

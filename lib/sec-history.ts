@@ -14,11 +14,16 @@ export const SEC_CANONICAL_SERIES_REGISTRY: RegistryEntry[] = [
   { seriesId: "net_income", concepts: ["NetIncomeLoss", "ProfitLoss"] },
   { seriesId: "diluted_eps", concepts: ["EarningsPerShareDiluted"] },
   { seriesId: "operating_cash_flow", concepts: ["NetCashProvidedByUsedInOperatingActivities"] },
-  { seriesId: "capex", concepts: ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsForAdditionsToPropertyPlantAndEquipment"] },
+  // PaymentsToAcquireProductiveAssets is what issuers use once capex covers intangibles too;
+  // NVDA switched to it in 2020 and its capex series silently stopped there.
+  { seriesId: "capex", concepts: ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsForAdditionsToPropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets"] },
   { seriesId: "cash", concepts: ["CashAndCashEquivalentsAtCarryingValue", "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"] },
   { seriesId: "debt", concepts: ["LongTermDebtAndFinanceLeaseObligations", "LongTermDebt", "DebtAndFinanceLeaseObligations"] },
   { seriesId: "shares", concepts: ["CommonStockSharesOutstanding", "WeightedAverageNumberOfDilutedSharesOutstanding"] },
 ];
+
+/** A duration fact that covers more than one quarter, kept only long enough to be differenced. */
+type CumulativeObservation = HistoricalObservation & { cumulativeDays?: number; conceptPriority?: number };
 
 type RawObservation = {
   start?: unknown;
@@ -35,7 +40,7 @@ type RawObservation = {
 export function normalizeCompanyFacts(ticker: string, payload: unknown): SecHistorySnapshot {
   const root = record(payload);
   const taxonomies = record(root?.facts);
-  const observations: HistoricalObservation[] = [];
+  const observations: CumulativeObservation[] = [];
   for (const registry of SEC_CANONICAL_SERIES_REGISTRY) {
     for (const [priority, concept] of registry.concepts.entries()) {
       for (const [taxonomy, taxonomyValue] of Object.entries(taxonomies ?? {})) {
@@ -52,8 +57,11 @@ export function normalizeCompanyFacts(ticker: string, payload: unknown): SecHist
     }
   }
   const deduped = chooseCanonicalConcept(observations);
-  const derived = deriveObservations(ticker, deduped);
-  const all = [...deduped, ...derived];
+  const reported = deduped.filter((item) => item.cumulativeDays === undefined).map(withoutCumulativeMarker);
+  const fromCumulative = deriveQuartersFromCumulative(ticker, deduped);
+  const base = [...reported, ...fromCumulative];
+  const derived = deriveObservations(ticker, base);
+  const all = [...base, ...derived];
   return {
     registryVersion: COMPANY_FACTS_REGISTRY_VERSION,
     series: [...new Set(all.map((item) => item.seriesId))].sort().map((seriesId) => ({
@@ -84,7 +92,7 @@ function normalizeObservation(
   unit: string,
   raw: RawObservation,
   conceptPriority: number,
-): (HistoricalObservation & { conceptPriority?: number }) | null {
+): CumulativeObservation | null {
   const endDate = isoDate(raw.end);
   const startDate = isoDate(raw.start);
   const value = numericText(raw.val);
@@ -93,10 +101,11 @@ function normalizeObservation(
   if (!endDate || value === null || !sourceAccession || !sourceFiledAt) return null;
   const durationDays = startDate ? daysBetween(startDate, endDate) : null;
   const annualForm = /^(10-K|20-F)/.test(String(raw.form ?? ""));
-  const periodScope = durationDays !== null
-    ? durationDays <= 130 ? "quarter" : durationDays >= 250 && annualForm ? "annual" : null
-    : annualForm ? "annual" : "quarter";
-  if (!periodScope) return null;
+  const annual = durationDays !== null ? durationDays >= 250 && annualForm : annualForm;
+  // Cash flow statements in a 10-Q are reported year-to-date, so the quarter has to be recovered
+  // by differencing successive cumulative facts rather than read off directly.
+  const cumulativeDays = durationDays !== null && durationDays > 130 && !annual ? durationDays : undefined;
+  const periodScope = annual ? "annual" : "quarter";
   const currency = /^(USD|EUR|GBP|JPY|CNY|CAD|AUD)(?:\/shares)?$/i.exec(unit)?.[1]?.toUpperCase();
   const observationKey = `${ticker}:${seriesId}:${unit}:${startDate ?? "instant"}:${endDate}:${sourceAccession}`;
   return {
@@ -116,11 +125,12 @@ function normalizeObservation(
     qualityStatus: "validated_xbrl",
     xbrlConcept: `${taxonomy}:${concept}`,
     conceptPriority,
+    ...(cumulativeDays === undefined ? {} : { cumulativeDays }),
   };
 }
 
-function chooseCanonicalConcept(observations: Array<HistoricalObservation & { conceptPriority?: number }>): HistoricalObservation[] {
-  const selected = new Map<string, HistoricalObservation & { conceptPriority?: number }>();
+function chooseCanonicalConcept(observations: CumulativeObservation[]): CumulativeObservation[] {
+  const selected = new Map<string, CumulativeObservation>();
   for (const observation of observations) {
     const key = `${observation.seriesId}:${observation.periodScope}:${observation.startDate ?? "instant"}:${observation.endDate}:${observation.unit}`;
     const previous = selected.get(key);
@@ -133,6 +143,61 @@ function chooseCanonicalConcept(observations: Array<HistoricalObservation & { co
     void conceptPriority;
     return withoutPriority;
   });
+}
+
+function withoutCumulativeMarker(observation: CumulativeObservation): HistoricalObservation {
+  const { cumulativeDays, ...rest } = observation;
+  void cumulativeDays;
+  return rest;
+}
+
+/**
+ * Recovers single-quarter values from year-to-date facts by subtracting the preceding cumulative
+ * fact in the same fiscal year. Skipped where the issuer already tagged the quarter directly.
+ */
+function deriveQuartersFromCumulative(ticker: string, observations: CumulativeObservation[]): HistoricalObservation[] {
+  const reportedQuarters = new Set(observations
+    .filter((item) => item.cumulativeDays === undefined && item.periodScope === "quarter")
+    .map((item) => `${item.seriesId}:${item.endDate}:${item.unit}`));
+  const groups = new Map<string, CumulativeObservation[]>();
+  for (const observation of observations) {
+    if (observation.periodScope !== "quarter" || !observation.startDate) continue;
+    const key = `${observation.seriesId}:${observation.unit}:${observation.startDate}`;
+    groups.set(key, [...(groups.get(key) ?? []), observation]);
+  }
+  const derived: HistoricalObservation[] = [];
+  for (const group of groups.values()) {
+    const ordered = [...group].sort((left, right) => left.endDate.localeCompare(right.endDate));
+    for (const [index, current] of ordered.entries()) {
+      const previous = ordered[index - 1];
+      if (current.cumulativeDays === undefined || !previous) continue;
+      if (reportedQuarters.has(`${current.seriesId}:${current.endDate}:${current.unit}`)) continue;
+      // Only a one-quarter gap yields a quarter. If an intermediate cumulative fact is missing the
+      // difference spans several quarters, which must not be published as a single-quarter value.
+      if (daysBetween(previous.endDate, current.endDate) > 130) continue;
+      const value = numericDifference(current.value, previous.value);
+      if (value === null) continue;
+      const formula = `${current.seriesId}[${current.startDate}..${current.endDate}] - ${current.seriesId}[${previous.startDate}..${previous.endDate}]`;
+      derived.push({
+        ...derivedObservation(ticker, current.seriesId, "quarter", current.endDate, current, value, current.unit, formula),
+        startDate: dayAfter(previous.endDate),
+      });
+    }
+  }
+  return derived;
+}
+
+function numericDifference(current: string, previous: string): string | null {
+  const left = Number(current);
+  const right = Number(previous);
+  if (!Number.isFinite(left) || !Number.isFinite(right)) return null;
+  return String(left - right);
+}
+
+function dayAfter(date: string): string {
+  const next = new Date(`${date}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return next.toISOString().slice(0, 10);
 }
 
 function deriveObservations(ticker: string, observations: HistoricalObservation[]): HistoricalObservation[] {

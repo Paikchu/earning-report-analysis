@@ -1,10 +1,13 @@
 "use client";
 
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { SEC_SUMMARY_VERSION } from "@/lib/sec";
 import type { PublicSecFiling } from "@/lib/sec-public-api";
+
+const expandEase = [0.22, 1, 0.36, 1] as const;
 
 type Page = { filings: PublicSecFiling[]; nextCursor: string | null; checkedAt: string | null };
 
@@ -78,16 +81,40 @@ export function SecFilingsSection({ ticker }: { ticker: string }) {
 }
 
 function SecFilingCard({ filing, isLatestPeriodic, isOpen, onToggle }: { filing: PublicSecFiling; isLatestPeriodic: boolean; isOpen: boolean; onToggle: () => void }) {
+  const reduceMotion = useReducedMotion();
   const panelId = `sec-filing-${filing.accessionNumber.replace(/[^A-Za-z0-9]/g, "")}`;
+  const duration = reduceMotion ? 0.01 : 0.38;
   return (
-    <article className="sec-filing-card">
+    <article className={isOpen ? "sec-filing-card is-open" : "sec-filing-card"}>
       <button aria-controls={panelId} aria-expanded={isOpen} onClick={onToggle} type="button">
         <span className="sec-form-badge">{filing.form}</span>
         <span className="sec-filing-date"><strong>{formatDate(filing.filingDate)}</strong><small>申报日</small></span>
         <span className="sec-filing-description"><strong>{filing.description || formDescription(filing.form)}</strong><small>{filing.reportDate ? `报告期 ${formatDate(filing.reportDate)}` : "SEC filing"}</small></span>
-        <span className="sec-disclosure" aria-hidden="true">{isOpen ? "−" : "+"}</span>
+        <span className="sec-disclosure" aria-hidden="true"><i /><i /></span>
       </button>
-      {isOpen && <div className="sec-filing-body" id={panelId}><FilingSummary filing={filing} isLatestPeriodic={isLatestPeriodic} /><a href={filing.edgarUrl} rel="noopener noreferrer" target="_blank">查看 SEC EDGAR 原文 ↗</a></div>}
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            animate={{ height: "auto" }}
+            className="sec-filing-panel"
+            exit={{ height: 0 }}
+            id={panelId}
+            initial={{ height: 0 }}
+            transition={{ duration, ease: expandEase }}
+          >
+            <motion.div
+              animate={{ opacity: 1, y: 0 }}
+              className="sec-filing-body"
+              exit={{ opacity: 0, y: reduceMotion ? 0 : -6 }}
+              initial={{ opacity: 0, y: reduceMotion ? 0 : -8 }}
+              transition={{ duration: reduceMotion ? 0.01 : 0.28, ease: expandEase }}
+            >
+              <FilingSummary filing={filing} isLatestPeriodic={isLatestPeriodic} />
+              <a href={filing.edgarUrl} rel="noopener noreferrer" target="_blank">查看 SEC EDGAR 原文 ↗</a>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </article>
   );
 }

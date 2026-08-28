@@ -259,7 +259,7 @@ export async function callWorkerSecModel(
   const apiKey = await resolveWorkerModelKey(env, fetcher);
   const response = await fetcher("https://api.b.ai/v1/chat/completions", {
     method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+    headers: { "content-type": "application/json", accept: "text/event-stream", authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: modelOverride || env.SEC_ANALYSIS_MODEL || "deepseek-v4-flash",
       messages: [
@@ -268,6 +268,8 @@ export async function callWorkerSecModel(
       ],
       response_format: { type: "json_object" },
       temperature: 0,
+      // Streaming keeps bytes flowing so the provider's proxy cannot time the request out at ~100s.
+      stream: true,
     }),
     signal: AbortSignal.timeout(180_000),
   });
@@ -275,10 +277,65 @@ export async function callWorkerSecModel(
     const detail = await response.text();
     throw new Error(`DeepSeek ${stage} HTTP ${response.status}: ${detail.slice(0, 300)}`);
   }
-  const data = await response.json() as { choices?: Array<{ message?: { content?: unknown } }> };
+  return parseModelJson(await readModelContent(response, stage));
+}
+
+/**
+ * Assembles the assistant message from an SSE stream, falling back to a whole-body completion for
+ * gateways that ignore `stream: true`. Throws before parsing when the stream ends early, because a
+ * truncated JSON body can still parse into a plausible but wrong object.
+ */
+export async function readModelContent(response: Response, stage: string): Promise<string> {
+  const raw = await response.text();
+  const lines = raw.split(/\r?\n/);
+  const dataLines = lines.filter((line) => line.startsWith("data:"));
+  if (!dataLines.length) return nonStreamedContent(raw, stage);
+
+  let content = "";
+  let finishReason: string | null = null;
+  let done = false;
+  for (const line of dataLines) {
+    const data = line.slice(5).trim();
+    if (!data) continue;
+    if (data === "[DONE]") {
+      done = true;
+      continue;
+    }
+    let chunk: Record<string, unknown>;
+    try {
+      chunk = JSON.parse(data) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    const error = chunk.error;
+    if (error) throw new Error(`DeepSeek ${stage} stream error: ${JSON.stringify(error).slice(0, 300)}`);
+    const choice = (chunk.choices as Array<Record<string, unknown>> | undefined)?.[0];
+    if (!choice) continue;
+    const delta = choice.delta as { content?: unknown } | undefined;
+    if (typeof delta?.content === "string") content += delta.content;
+    if (typeof choice.finish_reason === "string") finishReason = choice.finish_reason;
+  }
+
+  if (!done && !finishReason) {
+    throw new Error(`DeepSeek ${stage} stream ended before completion after ${content.length} characters`);
+  }
+  if (finishReason === "length") {
+    throw new Error(`DeepSeek ${stage} stream hit the output token limit after ${content.length} characters`);
+  }
+  if (!content) throw new Error(`DeepSeek ${stage} returned empty content`);
+  return content;
+}
+
+function nonStreamedContent(raw: string, stage: string): string {
+  let data: { choices?: Array<{ message?: { content?: unknown } }> };
+  try {
+    data = JSON.parse(raw) as typeof data;
+  } catch {
+    throw new Error(`DeepSeek ${stage} returned neither an event stream nor JSON: ${raw.slice(0, 200)}`);
+  }
   const content = data.choices?.[0]?.message?.content;
   if (typeof content !== "string" || !content) throw new Error(`DeepSeek ${stage} returned empty content`);
-  return parseModelJson(content);
+  return content;
 }
 
 export async function resolveWorkerModelKey(env: SecPipelineEnv, fetcher: typeof fetch = fetch): Promise<string> {

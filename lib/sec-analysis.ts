@@ -265,9 +265,16 @@ export function buildSecAnalysisBrief(args: {
       continue;
     }
     currentFacts.push(factFromObservation(current));
-    const earlier = observations.filter((item) => item.endDate < current.endDate && item.unit === current.unit && item.basis === current.basis);
+    // Basis is deliberately not part of comparability: a quarter recovered by differencing
+    // year-to-date facts measures the same thing as one the issuer reported directly, and
+    // excluding it silently pushed the comparison several quarters back.
+    const earlier = observations.filter((item) => item.endDate < current.endDate
+      && item.unit === current.unit
+      && (item.currency ?? "") === (current.currency ?? ""));
     const priors = {
-      qoq: args.periodScope === "annual" ? undefined : earlier[0],
+      qoq: args.periodScope === "annual"
+        ? undefined
+        : earlier.find((item) => dateDistanceDays(item.endDate, current.endDate) <= 130),
       yoy: earlier.find((item) => {
         const distance = dateDistanceDays(item.endDate, current.endDate);
         return args.periodScope === "annual" ? distance >= 300 && distance <= 800 : distance >= 300 && distance <= 450;
@@ -453,7 +460,7 @@ export function normalizeAnalysisFacts(value: unknown, validEvidenceIds: Set<str
     const valueText = String(fact?.value ?? "").trim();
     const rawMetricKey = String(fact?.metricKey ?? "").trim();
     const definition = normalizeMetricDefinition(fact?.definition);
-    const definitionKey = definition.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80);
+    const definitionKey = metricKeyFromDefinition(definition);
     const metricKey = rawMetricKey === "business_kpi" && definitionKey ? definitionKey : rawMetricKey;
     if (!metricKey || !valueText || !evidenceIds.length) return [];
     const basis = fact?.basis === "gaap" || fact?.basis === "non_gaap" || fact?.basis === "management_kpi" || fact?.basis === "derived" ? fact.basis : "unknown";
@@ -473,6 +480,31 @@ export function normalizeAnalysisFacts(value: unknown, validEvidenceIds: Set<str
       definitionHash: definition ? hashString(definition) : undefined,
     }];
   }).slice(0, 24);
+}
+
+const METRIC_KEY_MAX_CHARACTERS = 48;
+const METRIC_KEY_TRAILING_FILLER = new Set([
+  "the", "a", "an", "of", "in", "on", "at", "to", "for", "by", "from", "as", "and", "or", "with", "its", "their", "that", "which",
+]);
+
+/**
+ * Turns a KPI definition into a readable key. Truncating mid-word produced labels like
+ * `compute_networking_reportable_segment_operating_income_as_defined_in_the_segment`, so this cuts
+ * on a word boundary and drops a dangling preposition. The full definition still lives in
+ * definitionHash, which is what actually distinguishes two KPIs.
+ */
+export function metricKeyFromDefinition(definition: string): string {
+  const words = definition.replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean);
+  const kept: string[] = [];
+  let length = 0;
+  for (const word of words) {
+    const next = length ? length + 1 + word.length : word.length;
+    if (next > METRIC_KEY_MAX_CHARACTERS) break;
+    kept.push(word);
+    length = next;
+  }
+  while (kept.length > 1 && METRIC_KEY_TRAILING_FILLER.has(kept[kept.length - 1])) kept.pop();
+  return kept.join("_");
 }
 
 function normalizeMetricDefinition(value: unknown): string {

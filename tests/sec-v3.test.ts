@@ -99,6 +99,39 @@ test("does not classify a nine-month 10-Q cumulative fact as an annual observati
   assert.equal(revenue?.quarters.some((item) => item.sourceAccession === "nine-month"), false);
 });
 
+test("recovers a quarterly cash flow from year-to-date 10-Q facts", () => {
+  const payload = companyFactsPayload() as ReturnType<typeof companyFactsPayload>;
+  // Issuers tag the cash flow statement year-to-date, so Q2 exists only as H1.
+  payload.facts["us-gaap"].NetCashProvidedByUsedInOperatingActivities = { units: { USD: [
+    { start: "2026-01-01", end: "2026-03-31", val: 100, accn: "q1", fy: 2026, fp: "Q1", form: "10-Q", filed: "2026-04-30" },
+    { start: "2026-01-01", end: "2026-06-30", val: 260, accn: "h1", fy: 2026, fp: "Q2", form: "10-Q", filed: "2026-07-30" },
+  ] } };
+  payload.facts["us-gaap"].PaymentsToAcquirePropertyPlantAndEquipment = { units: { USD: [
+    { start: "2026-01-01", end: "2026-03-31", val: 30, accn: "q1", fy: 2026, fp: "Q1", form: "10-Q", filed: "2026-04-30" },
+    { start: "2026-01-01", end: "2026-06-30", val: 70, accn: "h1", fy: 2026, fp: "Q2", form: "10-Q", filed: "2026-07-30" },
+  ] } };
+  // Issuers that fold intangibles into capex tag it as PaymentsToAcquireProductiveAssets.
+  payload.facts["us-gaap"].PaymentsToAcquireProductiveAssets = { units: { USD: [
+    { start: "2026-01-01", end: "2026-09-30", val: 130, accn: "q3", fy: 2026, fp: "Q3", form: "10-Q", filed: "2026-10-30" },
+  ] } };
+  const series = normalizeCompanyFacts(issuer, payload).series;
+  const quarter = (id: string, endDate: string) => series.find((item) => item.seriesId === id)?.quarters.find((item) => item.endDate === endDate);
+  assert.equal(quarter("capex", "2026-09-30")?.value, "60", "Q3 capex comes from the productive-assets concept");
+
+  const operating = quarter("operating_cash_flow", "2026-06-30");
+  assert.equal(operating?.value, "160", "Q2 operating cash flow is H1 minus Q1");
+  assert.equal(operating?.basis, "derived");
+  assert.equal(operating?.startDate, "2026-04-01", "the derived quarter starts the day after Q1 ended");
+  assert.match(operating?.derivationFormula ?? "", /2026-06-30\] - .*2026-03-31\]/);
+
+  // Q1 is already a single quarter, so it must stay the reported value.
+  assert.equal(quarter("operating_cash_flow", "2026-03-31")?.value, "100");
+  assert.equal(quarter("operating_cash_flow", "2026-03-31")?.basis, "gaap");
+
+  // Free cash flow then derives from the recovered quarters instead of going missing.
+  assert.equal(quarter("free_cash_flow", "2026-06-30")?.value, "120");
+});
+
 test("builds a Manager brief from XBRL facts, history, memory, and deterministic comparisons", () => {
   const evidenceId = "ev:test-block";
   const observation = (endDate: string, startDate: string, value: string, id: string): HistoricalObservation => ({

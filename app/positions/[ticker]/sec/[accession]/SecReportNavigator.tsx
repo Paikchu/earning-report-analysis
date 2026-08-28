@@ -79,6 +79,28 @@ export function SecReportNavigator({ initialSections }: { initialSections: Repor
     if (itemBottom > rail.scrollTop + rail.clientHeight) rail.scrollTo({ top: itemBottom - rail.clientHeight, behavior: reduceMotion ? "auto" : "smooth" });
   }, [activeId, reduceMotion]);
 
+  const [progress, setProgress] = useState(0);
+  useEffect(() => {
+    let ticking = false;
+    const update = () => {
+      const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+      setProgress(scrollable > 0 ? Math.min(1, window.scrollY / scrollable) : 0);
+      ticking = false;
+    };
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
+
   useEffect(() => {
     if (!menuOpen) return;
     const closeOnOutsidePress = (event: PointerEvent) => {
@@ -98,6 +120,7 @@ export function SecReportNavigator({ initialSections }: { initialSections: Repor
   }, [menuOpen]);
 
   const activeSection = sections.find((section) => section.id === activeId) ?? sections[0];
+  const activeIndex = sections.findIndex((section) => section.id === activeId);
   const previewSection = useMemo(() => sections.find((section) => section.id === previewId) ?? null, [previewId, sections]);
   if (!sections.length) return null;
 
@@ -112,6 +135,13 @@ export function SecReportNavigator({ initialSections }: { initialSections: Repor
 
   return (
     <>
+      <div aria-hidden="true" data-report-progress-track="true" className="fixed inset-x-0 top-0 z-50 h-[2px]">
+        <div
+          data-report-progress-fill="true"
+          style={{ width: `${Math.round(progress * 1000) / 10}%` }}
+          className="h-full bg-[var(--color-loss)]"
+        />
+      </div>
       <nav
         ref={mobileRef}
         aria-label="报告目录"
@@ -181,16 +211,23 @@ export function SecReportNavigator({ initialSections }: { initialSections: Repor
         }}
         className="fixed left-0 top-1/2 z-40 hidden -translate-y-1/2 [@media(hover:hover)_and_(min-width:1360px)]:block"
       >
-        <ul ref={railRef} className="m-0 flex max-h-[52dvh] w-10 list-none flex-col items-start overflow-y-auto p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <ul ref={railRef} className="m-0 flex max-h-[64dvh] w-16 list-none flex-col items-start overflow-y-auto p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {sections.map((section, index) => {
             const active = section.id === activeId;
             const previewed = section.id === previewId;
             const nested = section.depth === 1;
+            const segmentState = index < activeIndex ? "passed" : index === activeIndex ? "active" : "upcoming";
+            const barState = previewed ? "expanded" : segmentState;
+            const barScale = previewed || segmentState === "active" ? 1 : segmentState === "passed" ? 0.6 : 0.35;
+            const barOpacity = previewed ? 0.9 : segmentState === "active" ? 1 : segmentState === "passed" ? 0.65 : 0.4;
+            const barColor = previewed || segmentState === "active"
+              ? "bg-[var(--color-loss)]"
+              : segmentState === "passed" ? "bg-[var(--ink-soft)]" : "bg-[var(--ink-muted)]";
             return (
               <li
                 key={section.id}
                 data-report-nav-depth={nested ? "subsection" : "section"}
-                className={`relative m-0 w-10 p-0 ${nested ? "h-6" : "h-8"}`}
+                className={`relative m-0 w-16 p-0 ${nested ? "h-4" : "h-5"}`}
               >
                 <a
                   ref={(link) => {
@@ -203,15 +240,15 @@ export function SecReportNavigator({ initialSections }: { initialSections: Repor
                   onPointerEnter={() => setPreviewId(section.id)}
                   onFocus={() => setPreviewId(section.id)}
                   onClick={() => navigate(section.id)}
-                  className={`group relative flex w-10 items-center text-[var(--ink)] no-underline ${nested ? "h-6" : "h-8"}`}
+                  className={`group relative flex w-16 items-center text-[var(--ink)] no-underline ${nested ? "h-4" : "h-5"}`}
                 >
                   <motion.span
                     aria-hidden="true"
-                    data-report-bar-state={previewed ? "expanded" : "resting"}
+                    data-report-bar-state={barState}
                     initial={false}
-                    animate={{ scaleX: previewed ? 1 : 0.38, opacity: previewed ? 0.78 : active ? 0.5 : 0.3 }}
+                    animate={{ scaleX: barScale, opacity: barOpacity }}
                     transition={{ duration: reduceMotion ? 0 : 0.22, ease: easeOutExpo }}
-                    className={`h-[2px] w-8 origin-left scale-x-[.38] opacity-30 ${active || previewed ? "bg-[var(--color-loss)]" : "bg-[var(--ink-muted)]"}`}
+                    className={`h-[2px] origin-left ${nested ? "w-10" : "w-12"} ${barColor}`}
                   />
                   <span className="sr-only">{displayIndex(section, index)} {section.title}</span>
                 </a>
@@ -220,7 +257,7 @@ export function SecReportNavigator({ initialSections }: { initialSections: Repor
           })}
         </ul>
 
-        <div className="pointer-events-none absolute left-12 top-1/2 -translate-y-1/2">
+        <div className="pointer-events-none absolute left-16 top-1/2 -translate-y-1/2">
           <AnimatePresence initial={false} mode="wait">
             {previewSection && (
               <motion.aside
