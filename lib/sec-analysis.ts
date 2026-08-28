@@ -1,6 +1,8 @@
 export const SEC_ANALYSIS_SCHEMA_VERSION = "sec-analysis.v3";
 export const SEC_ANALYSIS_PROMPT_VERSION = "sec-analysis-prompt.v3";
-export const MAX_REPAIR_ROUNDS = 2;
+// One round, matching what the Manager Review prompt tells the model it gets. Raising this without
+// also rewriting that prompt makes the Manager hoard every repairTask into the first round.
+export const MAX_REPAIR_ROUNDS = 1;
 export const MAX_REPAIR_NODES_PER_ROUND = 3;
 
 export const SEC_CANONICAL_SERIES_IDS = [

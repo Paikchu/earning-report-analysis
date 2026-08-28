@@ -36,6 +36,15 @@ flowchart TD
 - **Synthesis 不接触 filing 原文**，只看 Brief、完成节点和 Manager Review。
   `keyMetrics` 会按 `allowedMetricKeys` 过滤，超出词表的指标被丢弃。
 
+## Company Memory 的闭环
+
+Manager 从 Brief 的 `memoryItems` 里给每个节点分配 `memoryIds`；编造的 id 会被丢弃并写进
+`dataQuality.warnings`，不再静默变成空数组。节点对分到的每条记忆输出一条 `memoryChecks`
+（`confirmed` / `contradicted` / `not_addressed`），前两种必须引用节点读到的证据块，否则整条丢弃。
+Synthesis 依据这些 verdict 写记忆闭环段落；分配了却没人给结论的记忆同样进 warnings。
+Memory 提取阶段拿到这些 verdict 和本期的 guidance / risks claim，延续旧记忆时必须原样回填
+`memoryId`——合并按 id 而不是 topicKey 文本，改写措辞不会再分叉出一条新记忆。
+
 ## R2 布局
 
 `prepare` 写三个对象，读的人只取自己需要的那份：

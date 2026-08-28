@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   buildSecAnalysisBrief,
+  MAX_REPAIR_ROUNDS,
   normalizeManagerReview,
   unresolvedFingerprint,
   type CompanyMemoryItem,
@@ -16,6 +17,7 @@ import {
 import {
   buildCompanyMemorySummary,
   consolidateMemoryCandidates,
+  normalizeMemoryExtraction,
   type MemoryConsolidationState,
 } from "../lib/sec-memory.ts";
 import { runManagerRepairLoop, type WorkflowStepLike } from "../workers/sec-cron/workflow-core.ts";
@@ -506,3 +508,76 @@ function createMemoryD1() {
     },
   };
 }
+
+test("memory keeps its thread across a reworded topic when the extractor repeats the memoryId", () => {
+  const state: MemoryConsolidationState = { ticker: issuer, periodId: "2026Q1", items: [] };
+  const first = consolidateMemoryCandidates(state, [{
+    candidateId: "candidate-1", kind: "judgment" as const, topicKey: "data-center-guidance", statement: "Data center revenue should keep accelerating.",
+    evidenceIds: ["ev:1"], materialityScore: 80, confidence: "high" as const, horizon: "2026Q2",
+    nextTest: "Data center revenue grows again", falsifier: "Data center revenue declines", disposition: "active" as const,
+  }], "job-1");
+  const memoryId = first.items[0].memoryId;
+
+  const reworded = { candidateId: "candidate-2", kind: "judgment" as const, topicKey: "DC 收入指引", statement: "Data center revenue accelerated again.",
+    evidenceIds: ["ev:2"], materialityScore: 85, confidence: "high" as const, horizon: "2026Q3",
+    nextTest: "Data center revenue grows again", falsifier: "Data center revenue declines", disposition: "active" as const };
+
+  const continued = consolidateMemoryCandidates({ ...state, items: first.items }, [{ ...reworded, memoryId }], "job-2");
+  const forked = consolidateMemoryCandidates({ ...state, items: first.items }, [reworded], "job-3");
+
+  assert.equal(continued.items.length, 1);
+  assert.equal(continued.items[0].memoryId, memoryId);
+  assert.equal(continued.items[0].topicKey, "DC 收入指引");
+  assert.equal(continued.items[0].firstSeenPeriod, "2026Q1");
+  assert.equal(continued.events[0].eventType, "reaffirmed");
+
+  assert.equal(forked.items.length, 2);
+  assert.equal(forked.items.find((item) => item.memoryId === memoryId)?.status, "stale");
+});
+
+test("memory extraction keeps a candidate whose memoryId was invented, minus the id", () => {
+  const known = new Set(["memory:real"]);
+  const candidate = (memoryId: string) => ({
+    memoryId, candidateId: "candidate-1", kind: "fact", topicKey: "backlog", statement: "Backlog expanded.",
+    evidenceIds: ["ev:1"], materialityScore: 70, confidence: "high", disposition: "active",
+  });
+
+  const kept = normalizeMemoryExtraction({ candidates: [candidate("memory:real")] }, new Set(["ev:1"]), known);
+  const invented = normalizeMemoryExtraction({ candidates: [candidate("memory:hallucinated")] }, new Set(["ev:1"]), known);
+  const unchecked = normalizeMemoryExtraction({ candidates: [candidate("memory:hallucinated")] }, new Set(["ev:1"]));
+
+  assert.equal(kept.candidates[0].memoryId, "memory:real");
+  assert.equal(invented.candidates.length, 1);
+  assert.equal(invented.candidates[0].memoryId, undefined);
+  assert.equal(unchecked.candidates[0].memoryId, "memory:hallucinated");
+});
+
+test("Manager repair loop stops at the single round its prompt promises", async () => {
+  assert.equal(MAX_REPAIR_ROUNDS, 1);
+  const steps: string[] = [];
+  const step: WorkflowStepLike = { async do<T>(name: string, callback: () => Promise<T>) { steps.push(name); return callback(); } };
+  const plan: SecNodePlan = {
+    nodes: [{ id: "growth", title: "Growth", question: "What changed?", sectionIds: ["section-1"], historySeriesIds: [], memoryIds: [], acceptanceCriteria: ["answer"], materiality: "high" }],
+    outlineSections: 1,
+  };
+  let reviews = 0;
+  const result = await runManagerRepairLoop("filing-capped", step, plan, [], {
+    async review(round) {
+      reviews += 1;
+      return {
+        status: "needs_repair", questions: [{ questionId: "growth", status: "unanswered", explanation: "Still missing" }],
+        repairTasks: [{ id: `repair-${round}`, questionId: "growth", targetNodeId: "growth", title: "Growth", question: "What changed?", sectionIds: ["section-1"], keywords: [], historySeriesIds: [], memoryIds: [], acceptanceCriteria: ["answer"], materiality: "high", missingEvidence: ["driver"] }],
+        unresolvedQuestions: [`round-${round}`], coverageScore: round / 10, stopReason: null,
+      };
+    },
+    async repair(task, round) {
+      return { id: task.targetNodeId, title: task.title, status: "complete", findings: [], narrative: `repair-${round}`, evidence: [] };
+    },
+  });
+
+  assert.equal(result.rounds, 1);
+  assert.equal(reviews, 2);
+  assert.equal(result.review.status, "partial");
+  assert.equal(result.review.stopReason, "no_progress");
+  assert.equal(steps.some((name) => name.includes("round:2")), false);
+});

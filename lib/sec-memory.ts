@@ -2,6 +2,8 @@ import { hashString, type CompanyMemoryItem, type CompanyMemoryStatus } from "./
 
 export type MemoryCandidateV2 = {
   candidateId: string;
+  /** Set when the candidate continues an existing memory; the only reliable way to keep a thread. */
+  memoryId?: string;
   kind: "fact" | "judgment";
   topicKey: string;
   statement: string;
@@ -30,11 +32,18 @@ export type MemoryEventV2 = {
   evidenceIds: string[];
 };
 
-export function normalizeMemoryExtraction(value: unknown, validEvidenceIds: Set<string>): { candidates: MemoryCandidateV2[] } {
+/**
+ * `knownMemoryIds` is the set of ids the extractor was shown as priorMemory. An id outside it is
+ * invented, and honouring it would attach this period's statement to nothing; the candidate still
+ * survives as a new memory rather than being thrown away.
+ */
+export function normalizeMemoryExtraction(value: unknown, validEvidenceIds: Set<string>, knownMemoryIds?: Set<string>): { candidates: MemoryCandidateV2[] } {
   const root = record(value);
   const candidates = Array.isArray(root?.candidates) ? root.candidates.flatMap((raw): MemoryCandidateV2[] => {
     const item = record(raw);
     const kind = item?.kind === "judgment" ? "judgment" : "fact";
+    const claimedMemoryId = String(item?.memoryId ?? "").trim();
+    const memoryId = claimedMemoryId && (!knownMemoryIds || knownMemoryIds.has(claimedMemoryId)) ? claimedMemoryId : undefined;
     const topicKey = String(item?.topicKey ?? "").trim();
     const statement = String(item?.statement ?? "").trim();
     const evidenceIds = Array.isArray(item?.evidenceIds) ? item.evidenceIds.map(String).filter((id) => validEvidenceIds.has(id)).slice(0, 12) : [];
@@ -46,6 +55,7 @@ export function normalizeMemoryExtraction(value: unknown, validEvidenceIds: Set<
     const disposition = allowed.includes(item?.disposition as typeof allowed[number]) ? item?.disposition as MemoryCandidateV2["disposition"] : "provisional";
     return [{
       candidateId: String(item?.candidateId ?? `candidate:${hashString(`${kind}:${topicKey}:${statement}`)}`),
+      ...(memoryId ? { memoryId } : {}),
       kind,
       topicKey: topicKey.slice(0, 160),
       statement: statement.slice(0, 800),
@@ -69,14 +79,23 @@ export function consolidateMemoryCandidates(
   const items: CompanyMemoryItem[] = state.items.map((item) => ({ ...item, evidenceIds: [...item.evidenceIds], sourceJobIds: [...(item.sourceJobIds ?? [])] }));
   const events: MemoryEventV2[] = [];
   const seen = new Set<string>();
+  // Tracks which memories this run spoke to, by id rather than by topic text. Staleness keys off
+  // this: matching on the topic string alone meant a reworded statement forked a new memory and
+  // left the original looking omitted.
+  const touched = new Set<string>();
   for (const candidate of candidates) {
     if (candidate.kind === "judgment" && (!candidate.evidenceIds.length || !candidate.horizon || !candidate.nextTest || !candidate.falsifier)) continue;
     const normalizedKey = `${candidate.kind}:${candidate.topicKey.trim().toLowerCase()}`;
-    if (seen.has(normalizedKey)) continue;
-    seen.add(normalizedKey);
-    const existing = items.find((item) => `${item.kind}:${item.topicKey.trim().toLowerCase()}` === normalizedKey);
-    if (existing?.sourceJobIds?.includes(jobId)) continue;
+    const existing = (candidate.memoryId
+      ? items.find((item) => item.memoryId === candidate.memoryId && item.kind === candidate.kind)
+      : undefined)
+      ?? items.find((item) => `${item.kind}:${item.topicKey.trim().toLowerCase()}` === normalizedKey);
+    const dedupeKey = existing?.memoryId ?? normalizedKey;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
     const memoryId = existing?.memoryId ?? `memory:${hashString(`${state.ticker}:${normalizedKey}`)}`;
+    touched.add(memoryId);
+    if (existing?.sourceJobIds?.includes(jobId)) continue;
     const status = normalizeDisposition(candidate.disposition);
     const next: CompanyMemoryItem = {
       memoryId,
@@ -109,7 +128,7 @@ export function consolidateMemoryCandidates(
     });
   }
   for (const item of items) {
-    if (!seen.has(`${item.kind}:${item.topicKey.trim().toLowerCase()}`) && (item.status === "active" || item.status === "provisional")) {
+    if (!touched.has(item.memoryId) && (item.status === "active" || item.status === "provisional")) {
       item.status = "stale";
       item.sourceJobIds = [...new Set([...(item.sourceJobIds ?? []), jobId])];
       events.push({

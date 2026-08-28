@@ -44,6 +44,8 @@ export type SecNodePlan = {
   nodes: SecNodeSpec[];
   outlineSections: number;
   clamped?: number;
+  /** Planning defects worth publishing — invented memory ids, memory nobody picked up. */
+  warnings?: string[];
 };
 
 export type SecWorkflowEvidence = {
@@ -54,6 +56,14 @@ export type SecWorkflowEvidence = {
   excerpt: string;
 };
 
+/** A node's verdict on one Company Memory item the Manager assigned it. */
+export type SecMemoryCheck = {
+  memoryId: string;
+  verdict: "confirmed" | "contradicted" | "not_addressed";
+  note: string;
+  evidenceIds: string[];
+};
+
 export type SecNodeResult = {
   id: string;
   title: string;
@@ -61,6 +71,7 @@ export type SecNodeResult = {
   findings: SecSummaryBullet[];
   narrative: string;
   facts?: AnalysisFact[];
+  memoryChecks?: SecMemoryCheck[];
   evidence: SecWorkflowEvidence[];
   evidenceIds?: string[];
   error?: string;
