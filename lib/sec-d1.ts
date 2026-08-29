@@ -62,6 +62,20 @@ export type SecAnalysisJobUpdate = {
 
 export type SecAnalysisJobStatus = SecAnalysisJobUpdate["status"];
 
+/**
+ * How long a job may sit in a non-terminal state before another run is allowed to take it over.
+ *
+ * A job row is only rewritten when the filing starts and when it reaches a terminal state, so a
+ * workflow that dies in between — the model provider rate-limiting a whole batch does exactly this
+ * — leaves `running` as the newest row for that filing forever. `shouldAnalyze` only proceeds on a
+ * missing or `failed` status, so without a lease that filing is skipped by every later scheduled
+ * run and silently stops being re-analysed.
+ *
+ * Set well above the slowest single-filing analysis observed in production (~50 minutes, a large
+ * 10-K whose steps each retried) so a run is never taken over from itself.
+ */
+export const SEC_ANALYSIS_JOB_LEASE_MS = 2 * 60 * 60 * 1_000;
+
 export type SecMemoryJobClaim = {
   jobId: string;
   ticker: string;
@@ -184,15 +198,23 @@ export class D1SecRepository implements SecRepository {
     ).run();
   }
 
-  async getAnalysisJobStatus(ticker: string, accessionNumber: string, analysisVersion: string): Promise<SecAnalysisJobStatus | null> {
+  async getAnalysisJobStatus(
+    ticker: string,
+    accessionNumber: string,
+    analysisVersion: string,
+    now = Date.now(),
+  ): Promise<SecAnalysisJobStatus | null> {
     const row = await this.database.prepare(`
-      SELECT status
+      SELECT status, updated_at AS updatedAt
       FROM sec_analysis_jobs
       WHERE ticker = ? AND accession_number = ? AND analysis_version = ?
       ORDER BY updated_at DESC
       LIMIT 1
-    `).bind(ticker, accessionNumber, analysisVersion).first<{ status: SecAnalysisJobStatus }>();
-    return row?.status ?? null;
+    `).bind(ticker, accessionNumber, analysisVersion).first<{ status: SecAnalysisJobStatus; updatedAt: string }>();
+    if (!row) return null;
+    // Reported as failed rather than dropped to null so the caller keeps treating it as a job that
+    // ran and did not finish, which is what an expired lease means.
+    return isExpiredJobLease(row.status, row.updatedAt, now) ? "failed" : row.status;
   }
 
   async getLatestAnalysisJobStatus(ticker: string, accessionNumber: string): Promise<SecAnalysisJobStatus | null> {
@@ -797,6 +819,17 @@ export class D1SecRepository implements SecRepository {
     `).bind(ticker, reportDate, reportDate).first<{ periodId: string }>())?.periodId ?? null;
   }
 
+}
+
+/**
+ * A `queued` or `running` row older than the lease belongs to a workflow that never wrote its
+ * terminal state. An unparseable timestamp keeps the stored status: a row that cannot be dated
+ * must not be handed to a second workflow on a guess.
+ */
+function isExpiredJobLease(status: SecAnalysisJobStatus, updatedAt: string, now: number): boolean {
+  if (status !== "queued" && status !== "running") return false;
+  const updated = Date.parse(updatedAt);
+  return Number.isFinite(updated) && now - updated > SEC_ANALYSIS_JOB_LEASE_MS;
 }
 
 function parseJson<T>(value: string): T | null {
