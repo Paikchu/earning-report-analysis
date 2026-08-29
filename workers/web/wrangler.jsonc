@@ -1,0 +1,21 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "earning-report-analysis-sec-web",
+  "main": "index.ts",
+  "compatibility_date": "2026-08-26",
+  "compatibility_flags": ["nodejs_compat"],
+  // Runtime vars are injected into the generated config by scripts/prepare-config.ts.
+  // Runtime secrets remain in Cloudflare and are preserved with --keep-vars.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "earning-report-analysis-sec-web",
+      // Build-only prepare-config.ts replaces this value in dist/server/wrangler.json.
+      "database_id": "00000000-0000-4000-8000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

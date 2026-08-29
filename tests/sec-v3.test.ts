@@ -20,7 +20,7 @@ import {
   normalizeMemoryExtraction,
   type MemoryConsolidationState,
 } from "../lib/sec-memory.ts";
-import { runManagerRepairLoop, type WorkflowStepLike } from "../workers/sec-cron/workflow-core.ts";
+import { runManagerRepairLoop, type WorkflowStepLike } from "../workers/pipeline/workflow-core.ts";
 import type { SecFilingSummary, SecNodePlan, SecNodeResult } from "../lib/sec.ts";
 import type { SecAnalysisArtifact } from "../lib/sec-types.ts";
 import { planPreparedSecFiling, prepareSecFiling } from "../lib/sec-pipeline.ts";

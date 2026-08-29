@@ -1,12 +1,12 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-import { PLACEHOLDER_D1_DATABASE_ID, WEB_WORKER_CONFIG_PATH } from "../build/web-worker-config.ts";
+import { PLACEHOLDER_D1_DATABASE_ID, WEB_WORKER_CONFIG_PATH } from "../config.ts";
 
 const configPath = process.env.SEC_WEB_WRANGLER_CONFIG ?? WEB_WORKER_CONFIG_PATH;
 const databaseId = required("SEC_WEB_D1_DATABASE_ID");
 const config = JSON.parse(await readFile(configPath, "utf8")) as {
   name?: string;
-  d1_databases?: Array<{ binding: string; database_id: string; database_name?: string }>;
+  d1_databases?: Array<{ binding: string; database_id: string; database_name?: string; migrations_dir?: string }>;
   vars?: Record<string, string>;
 };
 
@@ -16,7 +16,12 @@ if (!Array.isArray(config.d1_databases) || !config.d1_databases.some((binding) =
 
 config.name = process.env.SEC_WEB_WORKER_NAME?.trim() || "earning-report-analysis-sec-web";
 config.d1_databases = config.d1_databases.map((binding) => binding.binding === "DB"
-  ? { ...binding, database_id: databaseId, database_name: process.env.SEC_WEB_D1_DATABASE_NAME?.trim() || "earning-report-analysis-sec-web" }
+  ? {
+      ...binding,
+      database_id: databaseId,
+      database_name: process.env.SEC_WEB_D1_DATABASE_NAME?.trim() || "earning-report-analysis-sec-web",
+      migrations_dir: "../migrations",
+    }
   : binding);
 config.vars = {
   ...config.vars,
@@ -25,7 +30,14 @@ config.vars = {
 };
 
 await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
-console.log(JSON.stringify({ configPath, worker: config.name, d1Binding: "DB", databaseId, databaseName: config.d1_databases.find((binding) => binding.binding === "DB")?.database_name }));
+console.log(JSON.stringify({
+  configPath,
+  worker: config.name,
+  d1Binding: "DB",
+  databaseIdConfigured: true,
+  databaseName: config.d1_databases.find((binding) => binding.binding === "DB")?.database_name,
+  migrationsDirectory: "dist/migrations",
+}));
 
 function required(name: string): string {
   const value = process.env[name]?.trim() ?? "";

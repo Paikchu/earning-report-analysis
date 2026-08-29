@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { handleSecAnalysisRequest, runSecRefresh, type SecCronEnv } from "../workers/sec-cron/core.ts";
+import { handleSecAnalysisRequest, runSecRefresh, type SecCronEnv } from "../workers/pipeline/core.ts";
 
 function binding(started: Array<{ ticker: string; backfill?: boolean }>) {
   return { async create(options: { params: { ticker: string; backfill?: boolean }; id: string }) { started.push(options.params); return { id: options.id }; } };

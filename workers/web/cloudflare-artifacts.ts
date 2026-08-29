@@ -23,9 +23,11 @@ export function cloudflareArtifacts(): Plugin {
       root = config.root;
     },
     async closeBundle() {
+      // Keep migrations next to, rather than inside, the server bundle. prepare-config.ts
+      // rewrites the generated DB binding to `../migrations` before deploy.
       const outputDirectory = resolve(root, "dist", "migrations");
       const legacyOutputDirectory = resolve(root, "dist", ".openai");
-      const drizzleSource = resolve(root, "drizzle");
+      const drizzleSource = resolve(root, "workers", "web", "migrations");
 
       await rm(outputDirectory, { recursive: true, force: true });
       await rm(legacyOutputDirectory, { recursive: true, force: true });

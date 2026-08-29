@@ -5,13 +5,32 @@ import test from "node:test";
 test("declares SEC tables and removes portfolio tables from the standalone schema", async () => {
   const [schema, migration] = await Promise.all([
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
-    readFile(new URL("../drizzle/0006_standalone_sec.sql", import.meta.url), "utf8"),
+    readFile(new URL("../workers/web/migrations/0006_standalone_sec.sql", import.meta.url), "utf8"),
   ]);
   assert.match(schema, /sqliteTable\("sec_cache"/);
   assert.match(schema, /sqliteTable\("sec_filing_summaries"/);
   assert.match(schema, /sqliteTable\("sec_published_reports"/);
   assert.match(migration, /DROP TABLE IF EXISTS `holding_plans`/);
   assert.match(migration, /DROP TABLE IF EXISTS `plan_levels`/);
+});
+
+test("keeps both Cloudflare Workers as explicit deploy units", async () => {
+  const [webConfig, pipelineConfig, viteConfig, packageSource] = await Promise.all([
+    readFile(new URL("../workers/web/wrangler.jsonc", import.meta.url), "utf8"),
+    readFile(new URL("../workers/pipeline/wrangler.jsonc", import.meta.url), "utf8"),
+    readFile(new URL("../vite.config.ts", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(webConfig, /"name": "earning-report-analysis-sec-web"/);
+  assert.match(webConfig, /"main": "index\.ts"/);
+  assert.match(webConfig, /"migrations_dir": "migrations"/);
+  assert.match(pipelineConfig, /"name": "earning-report-analysis-sec-pipeline"/);
+  assert.match(viteConfig, /configPath: "workers\/web\/wrangler\.jsonc"/);
+  assert.match(packageSource, /"worker:web:version:built"/);
+  assert.match(packageSource, /wrangler versions upload --config dist\/server\/wrangler\.json/);
+  assert.match(packageSource, /"worker:pipeline:version"/);
+  assert.match(packageSource, /wrangler versions upload --config workers\/pipeline\/wrangler\.jsonc/);
 });
 
 test("exposes the standalone stock and report routes", async () => {
@@ -87,10 +106,10 @@ test("keeps only short authenticated internal bridge routes", async () => {
 
 test("ships SEC analysis as a durable Cloudflare workflow with isolated model credentials", async () => {
   const [workerSource, workerConfig, operations, core, runtime] = await Promise.all([
-    readFile(new URL("../workers/sec-cron/index.ts", import.meta.url), "utf8"),
-    readFile(new URL("../workers/sec-cron/wrangler.jsonc", import.meta.url), "utf8"),
-    readFile(new URL("../workers/sec-cron/operations.ts", import.meta.url), "utf8"),
-    readFile(new URL("../workers/sec-cron/core.ts", import.meta.url), "utf8"),
+    readFile(new URL("../workers/pipeline/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../workers/pipeline/wrangler.jsonc", import.meta.url), "utf8"),
+    readFile(new URL("../workers/pipeline/operations.ts", import.meta.url), "utf8"),
+    readFile(new URL("../workers/pipeline/core.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/sec-runtime.ts", import.meta.url), "utf8"),
   ]);
   assert.match(workerSource, /WorkflowEntrypoint/);

@@ -3,9 +3,9 @@ import test from "node:test";
 
 import type { SecAnalysisArtifact } from "../lib/sec-types.ts";
 import type { SecFiling, SecNodeSpec } from "../lib/sec.ts";
-import { callWorkerSecModel, createSecPipelineOperations, modelForStage, type SecPipelineEnv } from "../workers/sec-cron/operations.ts";
-import { executeSecMemoryWorkflow } from "../workers/sec-cron/memory-workflow.ts";
-import { modelExecutionForAttempt, retryDelayForAttempt } from "../workers/sec-cron/retry-policy.ts";
+import { callWorkerSecModel, createSecPipelineOperations, modelForStage, type SecPipelineEnv } from "../workers/pipeline/operations.ts";
+import { executeSecMemoryWorkflow } from "../workers/pipeline/memory-workflow.ts";
+import { modelExecutionForAttempt, retryDelayForAttempt } from "../workers/pipeline/retry-policy.ts";
 
 const filing: SecFiling = {
   ticker: "MSFT", cik: "0000789019", cikNumber: 789019, companyName: "Microsoft Corp", form: "10-K",

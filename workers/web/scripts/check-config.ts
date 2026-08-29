@@ -1,15 +1,16 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 
-import { PLACEHOLDER_D1_DATABASE_ID, WEB_WORKER_CONFIG_PATH } from "../build/web-worker-config.ts";
+import { PLACEHOLDER_D1_DATABASE_ID, WEB_WORKER_CONFIG_PATH } from "../config.ts";
 
 const configPath = process.env.SEC_WEB_WRANGLER_CONFIG ?? WEB_WORKER_CONFIG_PATH;
-const pipelineConfigPath = "workers/sec-cron/wrangler.jsonc";
+const pipelineConfigPath = "workers/pipeline/wrangler.jsonc";
 
 const config = JSON.parse(await readFile(configPath, "utf8")) as {
   name?: string;
   compatibility_date?: string;
   compatibility_flags?: string[];
-  d1_databases?: Array<{ binding: string; database_id: string; database_name?: string }>;
+  d1_databases?: Array<{ binding: string; database_id: string; database_name?: string; migrations_dir?: string }>;
 };
 
 const database = config.d1_databases?.find((binding) => binding.binding === "DB");
@@ -19,9 +20,22 @@ const problems: string[] = [];
 if (!database) {
   problems.push("has no DB D1 binding");
 } else if (database.database_id === PLACEHOLDER_D1_DATABASE_ID) {
-  problems.push("still carries the placeholder D1 id — run `npm run web:prepare` with the real SEC_WEB_D1_DATABASE_ID");
+  problems.push("still carries the placeholder D1 id — run `npm run worker:web:prepare` with the real SEC_WEB_D1_DATABASE_ID");
 } else if (!/^[0-9a-f-]{20,}$/i.test(database.database_id)) {
   problems.push(`has a malformed D1 id: ${database.database_id}`);
+}
+
+const migrationsDirectory = database?.migrations_dir
+  ? resolve(dirname(configPath), database.migrations_dir)
+  : "";
+if (!migrationsDirectory) {
+  problems.push("has no migrations_dir on the DB binding");
+} else {
+  try {
+    await access(migrationsDirectory);
+  } catch {
+    problems.push(`points DB migrations_dir at a missing directory: ${migrationsDirectory}`);
+  }
 }
 
 if (!config.compatibility_flags?.includes("nodejs_compat")) {
@@ -41,6 +55,7 @@ console.log(JSON.stringify({
   worker: config.name,
   compatibilityDate: config.compatibility_date,
   databaseName: database?.database_name,
+  migrationsDirectory,
 }));
 
 function pipelineCompatibilityDate(source: string): string {

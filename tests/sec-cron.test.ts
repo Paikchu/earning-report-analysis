@@ -6,7 +6,7 @@ import {
   runSecRefresh,
   type SecCronEnv,
   type SecWorkflowBinding,
-} from "../workers/sec-cron/core.ts";
+} from "../workers/pipeline/core.ts";
 
 const env: SecCronEnv = {
   WEB_APP_ORIGIN: "https://web.example",
