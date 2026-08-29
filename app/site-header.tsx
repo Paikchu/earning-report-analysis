@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type SearchResult = { symbol: string; name: string; exchange: string; type: "stock" | "etf" };
+import type { SecurityType } from "@/lib/symbol-directory";
+
+type SearchResult = { symbol: string; name: string; exchange: string; type: SecurityType };
 
 export function SiteHeader({ initialQuery = "" }: { initialQuery?: string }) {
   const router = useRouter();

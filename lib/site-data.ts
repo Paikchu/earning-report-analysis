@@ -1,5 +1,5 @@
 import symbolDirectoryData from "../data/us-securities.json" with { type: "json" };
-import { normalizeTicker, searchSecurities, type SymbolDirectoryEntry } from "./symbol-directory.ts";
+import { DEFAULT_SEARCH_TYPES, normalizeTicker, searchSecurities, type SecurityType, type SymbolDirectoryEntry } from "./symbol-directory.ts";
 
 export const symbolDirectory = symbolDirectoryData as {
   generatedAt: string;
@@ -14,6 +14,10 @@ export function findSecurity(rawTicker: string): SymbolDirectoryEntry | null {
   return symbolSearchEntries.find((security) => security.symbol === ticker) ?? null;
 }
 
-export function searchCompanyDirectory(rawQuery: string, limit = 8): SymbolDirectoryEntry[] {
-  return searchSecurities(symbolSearchEntries, rawQuery, new Set(), limit).map(({ symbol, name, exchange, type }) => ({ symbol, name, exchange, type }));
+export function searchCompanyDirectory(
+  rawQuery: string,
+  limit = 8,
+  types: readonly SecurityType[] = DEFAULT_SEARCH_TYPES,
+): SymbolDirectoryEntry[] {
+  return searchSecurities(symbolSearchEntries, rawQuery, new Set(), limit, types).map(({ symbol, name, exchange, type }) => ({ symbol, name, exchange, type }));
 }

@@ -27,7 +27,7 @@ npm run test:sec
 
 ## API
 
-- `GET /api/v1/search?q=MSFT`
+- `GET /api/v1/search?q=MSFT`，默认只返回普通股；`types=stock,etf,fund,preferred,bond,etn` 可放开其他证券类别
 - `GET /api/v1/companies/:ticker/filings?cursor=&limit=20`
 - `GET /api/v1/companies/:ticker/filings/:accession`
 - `POST /api/v1/admin/companies/:ticker/refresh`，`Authorization: Bearer $SEC_ADMIN_TOKEN`
