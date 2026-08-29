@@ -306,6 +306,71 @@ test("synthesizes one full report from node outputs and verified structured data
   assert.deepEqual(result.artifact.report.keyMetrics[0].evidenceIds, ["xbrl:revenue:2026-06-30"]);
 });
 
+test("reports a margin move in percentage points and an amount in percent", async () => {
+  const prepared = await prepareSecFiling(filing, {
+    userAgent: "test@example.com",
+    fetcher: async () => new Response("<h1>Revenue</h1><p>Operating margin fell on restructuring charges.</p>"),
+  });
+  const marginObservation = (endDate: string, value: string) => ({
+    observationId: `xbrl:operating_margin:${endDate}`,
+    seriesId: "operating_margin" as const,
+    metricKey: "operating_margin",
+    value,
+    unit: "ratio",
+    basis: "derived" as const,
+    periodScope: "annual" as const,
+    startDate: endDate,
+    endDate,
+    sourceAccession: "annual",
+    sourceFiledAt: endDate,
+    sourceVersion: "sec-canonical-series.v1",
+    qualityStatus: "validated_xbrl" as const,
+    derivationFormula: "operating_income/revenue",
+  });
+  const history = xbrlHistory("120", "100");
+  history.series.push({
+    seriesId: "operating_margin",
+    quarters: [],
+    annual: [marginObservation("2026-06-30", "-0.2955143299222338"), marginObservation("2025-06-30", "-0.09690272057271924")],
+  });
+  const context = analysisContext(prepared.periodId, history);
+  const plan = normalizePlan(prepared.outline[0].id);
+  const nodes = [{
+    id: "revenue-growth",
+    title: "收入增长",
+    status: "complete" as const,
+    findings: [{ label: "利润率", detail: "营业利润率因重组费用走弱。", importance: "high" as const }],
+    narrative: "重组费用拖累营业利润率。",
+    facts: [],
+    evidence: [],
+  }];
+
+  const result = await summarizePreparedSecFiling(
+    prepared,
+    context,
+    async () => ({
+      headline: "重组费用拖累营业利润率",
+      bullets: completeBullets(),
+      analystView: "利润率能否回升取决于重组是否一次性。",
+      report: completeReport(),
+      keyMetrics: [
+        { metricKey: "operating_margin", currentValue: "-0.2955143299222338", evidenceIds: ["xbrl:operating_margin:2026-06-30"] },
+        { metricKey: "revenue", currentValue: "120", evidenceIds: ["xbrl:revenue:2026-06-30"] },
+      ],
+      changes: { qoq: [], yoy: [], guidance: [], risks: [] },
+      dataQuality: { coverage: 1, warnings: [] },
+    }),
+    new Date("2026-08-05T00:00:00.000Z"),
+    plan,
+    nodes,
+  );
+  const metric = (metricKey: string) => result.artifact.report.keyMetrics.find((item) => item.metricKey === metricKey);
+
+  // The relative form of this move is -205%, which tells a reader nothing once the base is negative.
+  assert.equal(metric("operating_margin")?.yoy, "-19.9个百分点");
+  assert.equal(metric("revenue")?.yoy, "+20.0%");
+});
+
 test("drops unverifiable keyMetrics instead of failing the whole report", async () => {
   const prepared = await prepareSecFiling(filing, {
     userAgent: "test@example.com",

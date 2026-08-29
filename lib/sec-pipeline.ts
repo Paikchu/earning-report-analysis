@@ -567,6 +567,7 @@ function synthesisSystemPrompt() {
     "keyMetrics 的 metricKey 必须来自 allowedMetricKeys，超出列表的指标会被丢弃。",
     "完整研报的章节逻辑必须来自 nodeAnalyses，不要重新套用固定主题模板。",
     "数字、同比、环比和证据只能使用结构化输入中已有的值；不得编造或把 qoq 与 yoy 混写。",
+    "毛利率、营业利润率等比率指标的变化一律写「个百分点」，取 brief.comparisons 的 percentagePointDelta；只有金额和股数才用相对百分比。",
     "report 输出 900 至 1,600 字简体中文正文，按投资者阅读逻辑用空行分段，不要使用 Markdown 标题或项目符号。",
     "headline 给出有方向性的结论；bullets 输出 3 至 5 条核心结论；analystView 说明投资含义但不给买卖建议。",
     "Manager Review 为 partial 时，report 必须明确列出未解决问题、失败节点和 stop reason。",
@@ -592,6 +593,7 @@ function comparisonFromBrief(
       currentValue: entry.currentValue,
       priorValue: entry.priorValue,
       percentageDelta: entry.percentageDelta,
+      percentagePointDelta: entry.percentagePointDelta,
       comparable: true,
       reason: undefined,
     })),
@@ -608,10 +610,11 @@ function priorPeriodIdFromEntries(brief: SecAnalysisBrief, entries: SecAnalysisB
 
 function addDeterministicDeltas(report: SecAnalysisArtifact["report"], qoq: ComparisonResult | null, yoy: ComparisonResult | null) {
   const deltaValue = (comparison: ComparisonResult | null, metricKey: string) => {
-    const delta = comparison?.metricDeltas.find((item) => item.metricKey === metricKey)?.percentageDelta;
-    if (delta === undefined) return undefined;
-    const value = Number(delta);
-    return Number.isFinite(value) ? `${value >= 0 ? "+" : ""}${(value * 100).toFixed(1)}%` : undefined;
+    const delta = comparison?.metricDeltas.find((item) => item.metricKey === metricKey);
+    if (!delta) return undefined;
+    // A ratio reports the distance it actually moved; only an amount is meaningfully expressed as
+    // a percentage of itself.
+    return scaledDelta(delta.percentagePointDelta, "个百分点") ?? scaledDelta(delta.percentageDelta, "%");
   };
   return {
     ...report,
@@ -621,6 +624,19 @@ function addDeterministicDeltas(report: SecAnalysisArtifact["report"], qoq: Comp
       yoy: deltaValue(yoy, metric.metricKey) ?? metric.yoy,
     })),
   };
+}
+
+/**
+ * Both deltas are stored as fractions, so both render by the same hundredfold. The sign comes off
+ * the rounded number rather than the raw one, which is what keeps a delta that rounds away from
+ * printing as "-0.0".
+ */
+function scaledDelta(value: string | undefined, suffix: string): string | undefined {
+  if (value === undefined) return undefined;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return undefined;
+  const rounded = Number((number * 100).toFixed(1));
+  return `${rounded > 0 ? "+" : ""}${rounded.toFixed(1)}${suffix}`;
 }
 
 function enforceDeterministicReportQuality(

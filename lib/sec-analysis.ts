@@ -88,6 +88,8 @@ export type SecAnalysisBrief = {
     currentValue: string;
     priorValue: string;
     percentageDelta?: string;
+    /** Set for ratio-unit series only, as the fraction the ratio moved. See `pointDelta`. */
+    percentagePointDelta?: string;
     unit: string;
     currency?: string;
     basis: string;
@@ -204,6 +206,8 @@ export type ComparisonResult = {
     priorValue: string;
     absoluteDelta?: string;
     percentageDelta?: string;
+    /** Set for ratio-unit series only, as the fraction the ratio moved. See `pointDelta`. */
+    percentagePointDelta?: string;
     reason?: string;
   }>;
   narrativeDeltas: Array<{
@@ -289,12 +293,14 @@ export function buildSecAnalysisBrief(args: {
     for (const comparisonType of ["qoq", "yoy"] as const) {
       const prior = priors[comparisonType];
       if (!prior) continue;
+      const points = pointDelta(current.value, prior.value, current.unit);
       comparisons.push({
         seriesId: series.seriesId,
         comparisonType,
         currentValue: current.value,
         priorValue: prior.value,
         percentageDelta: percentageDelta(current.value, prior.value),
+        ...(points === undefined ? {} : { percentagePointDelta: points }),
         unit: current.unit,
         currency: current.currency,
         basis: current.basis,
@@ -336,6 +342,25 @@ function factFromObservation(observation: HistoricalObservation): AnalysisFact {
     sourceLabel: observation.basis === "derived" ? "derived_calculation" : "fact_source_reported",
     definitionHash: observation.xbrlConcept ?? observation.derivationFormula,
   };
+}
+
+/**
+ * How far a ratio moved, in the ratio's own units — percentage points once rendered.
+ *
+ * A margin is already a percentage, so expressing its change as a percentage of itself compounds
+ * two different scales: operating margin going -9.69% to -29.55% reads as -205% relative, which
+ * says nothing a reader can use, while the honest answer is 19.9 points worse. The relative form
+ * degrades further as the base approaches zero and flips meaning when the base is negative.
+ *
+ * Only ratio-unit series get one. An amount has no percentage points to move, and keeps the
+ * relative delta on its own.
+ */
+function pointDelta(current: string, prior: string, unit: string): string | undefined {
+  if (unit !== "ratio") return undefined;
+  const currentNumber = numericValue(current);
+  const priorNumber = numericValue(prior);
+  if (currentNumber === null || priorNumber === null) return undefined;
+  return String(currentNumber - priorNumber);
 }
 
 function percentageDelta(current: string, prior: string): string | undefined {

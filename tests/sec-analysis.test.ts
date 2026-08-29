@@ -149,6 +149,40 @@ test("derives current facts and both comparisons from XBRL alone", () => {
   assert.ok(brief.allowedMetricKeys.includes("free_cash_flow"));
 });
 
+test("measures a margin in percentage points and an amount in percent", () => {
+  const margin = (endDate: string, value: string) => ({
+    ...observation("operating_margin", endDate, value),
+    unit: "ratio",
+    currency: undefined,
+    basis: "derived" as const,
+  });
+  const brief = buildSecAnalysisBrief({
+    ticker: "NET",
+    filingId: "acc-1",
+    periodId: "NET:2026-06-30:quarter",
+    periodScope: "quarter",
+    reportDate: "2026-06-30",
+    history: {
+      registryVersion: "sec-canonical-series.v1",
+      series: [
+        { seriesId: "operating_margin", quarters: [margin("2026-06-30", "-0.2955143299222338"), margin("2026-03-31", "-0.09690272057271924")], annual: [] },
+        { seriesId: "revenue", quarters: [observation("revenue", "2026-06-30", "696061000"), observation("revenue", "2026-03-31", "639755000")], annual: [] },
+      ],
+    },
+    memorySummary: "",
+    memoryItems: [],
+  });
+  const find = (seriesId: string) => brief.comparisons.find((item) => item.seriesId === seriesId && item.comparisonType === "qoq");
+
+  // -9.69% to -29.55% is 19.9 points worse. The relative form reads -205%, which is why a ratio
+  // needs its own delta rather than the one every amount uses.
+  assert.equal(Number(find("operating_margin")?.percentagePointDelta).toFixed(4), "-0.1986");
+  assert.equal(Number(find("operating_margin")?.percentageDelta).toFixed(2), "-2.05");
+  // An amount has no percentage points to move, so it carries the relative delta alone.
+  assert.equal(find("revenue")?.percentagePointDelta, undefined);
+  assert.equal(Number(find("revenue")?.percentageDelta).toFixed(4), "0.0880");
+});
+
 test("compares a differenced quarter against the directly reported quarter before it", () => {
   // A cash flow series mixes bases: Q1 is tagged directly, later quarters are recovered from
   // year-to-date facts. The comparison must still use the immediately preceding quarter.
