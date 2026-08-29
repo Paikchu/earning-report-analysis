@@ -36,14 +36,19 @@ flowchart TD
 - **Synthesis 不接触 filing 原文**，只看 Brief、完成节点和 Manager Review。
   `keyMetrics` 会按 `allowedMetricKeys` 过滤，超出词表的指标被丢弃。
 
-## Company Memory 的闭环
+## Company Memory 只写不读
 
-Manager 从 Brief 的 `memoryItems` 里给每个节点分配 `memoryIds`；编造的 id 会被丢弃并写进
-`dataQuality.warnings`，不再静默变成空数组。节点对分到的每条记忆输出一条 `memoryChecks`
-（`confirmed` / `contradicted` / `not_addressed`），前两种必须引用节点读到的证据块，否则整条丢弃。
-Synthesis 依据这些 verdict 写记忆闭环段落；分配了却没人给结论的记忆同样进 warnings。
-Memory 提取阶段拿到这些 verdict 和本期的 guidance / risks claim，延续旧记忆时必须原样回填
-`memoryId`——合并按 id 而不是 topicKey 文本，改写措辞不会再分叉出一条新记忆。
+**分析阶段不使用历史记忆。** Manager、节点和 Synthesis 收到的 Brief 都经过 `briefForAnalysis`
+过滤，`companyMemorySummary` 与 `memoryItems` 不在其中，三个 system prompt 也不再提记忆。
+每篇研报只根据本期 filing、XBRL 序列和预计算的同比环比生成。
+
+**提取侧照常运行。** Brief 本身仍然携带记忆——它是写进 R2 的记录，也是提取阶段唯一能拿到
+`priorMemory` 的地方。发布后照旧建 memory job、跑 `SecMemoryWorkflow`，延续旧记忆时必须原样回填
+`memoryId`：合并按 id 而不是 topicKey 文本，改写措辞不会分叉出一条新记忆，`sec_memory_items`
+因此能继续正确积累。
+
+想恢复注入，把 `planPreparedSecFiling`、`analyzePreparedSecNode` 和 `summarizePreparedSecFiling`
+里的 `briefForAnalysis(brief)` 换回 `brief`，并把记忆相关的 prompt 段落写回去。
 
 ## R2 布局
 

@@ -86,10 +86,11 @@ test("keeps only short authenticated internal bridge routes", async () => {
 });
 
 test("ships SEC analysis as a durable Cloudflare workflow with isolated model credentials", async () => {
-  const [workerSource, workerConfig, operations, runtime] = await Promise.all([
+  const [workerSource, workerConfig, operations, core, runtime] = await Promise.all([
     readFile(new URL("../workers/sec-cron/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../workers/sec-cron/wrangler.jsonc", import.meta.url), "utf8"),
     readFile(new URL("../workers/sec-cron/operations.ts", import.meta.url), "utf8"),
+    readFile(new URL("../workers/sec-cron/core.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/sec-runtime.ts", import.meta.url), "utf8"),
   ]);
   assert.match(workerSource, /WorkflowEntrypoint/);
@@ -97,7 +98,10 @@ test("ships SEC analysis as a durable Cloudflare workflow with isolated model cr
   assert.match(workerConfig, /"compatibility_flags": \["nodejs_compat"\]/);
   assert.match(workerConfig, /"workflows"/);
   assert.match(workerConfig, /"r2_buckets"/);
-  assert.doesNotMatch(workerConfig, /"SEC_TRACKED_TICKERS"\s*:\s*""/);
+  assert.doesNotMatch(workerConfig, /SEC_TRACKED_TICKERS/);
+  // The whitelist has one home, the Web Worker; the Pipeline reads it over the bridge.
+  assert.match(core, /\/api\/internal\/sec\/watchlist/);
+  assert.doesNotMatch(core, /env\.SEC_TRACKED_TICKERS/);
   assert.match(operations, /AI_API_KEY/);
   assert.match(operations, /glm-5.3-flash/);
   assert.doesNotMatch(runtime, /AI_API_KEY/);

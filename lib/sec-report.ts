@@ -2,7 +2,6 @@ import {
   cleanSecNodeId,
   type SecDocument,
   type SecHeadingCandidate,
-  type SecMemoryCheck,
   type SecNodePlan,
   type SecNodeResult,
   type SecNodeSpec,
@@ -61,17 +60,11 @@ export function describeSecOutline(outline: SecOutlineSection[]): Array<{ id: st
   return outline.map(({ id, title, characters }) => ({ id, title, characters }));
 }
 
-/**
- * `knownMemoryIds` switches on memory validation: the Manager only ever sees the ids in the brief,
- * so anything else it emits is invented, and silently filtering those leaves nodes with no memory
- * and nobody the wiser. Pass `undefined` to skip the check.
- */
-export function normalizeSecNodePlan(value: unknown, outline: SecOutlineSection[], knownMemoryIds?: Set<string>): SecNodePlan {
+export function normalizeSecNodePlan(value: unknown, outline: SecOutlineSection[]): SecNodePlan {
   const root = asRecord(value);
   const knownSections = new Set(outline.map((section) => section.id));
   const knownSeriesIds = new Set<string>(SEC_CANONICAL_SERIES_IDS);
   const usedIds = new Set<string>();
-  const inventedMemoryIds = new Set<string>();
   const inventedSeriesIds = new Set<string>();
   const nodes = (Array.isArray(root?.nodes) ? root.nodes : []).flatMap((item): SecNodeSpec[] => {
     const input = asRecord(item);
@@ -90,14 +83,7 @@ export function normalizeSecNodePlan(value: unknown, outline: SecOutlineSection[
     for (let suffix = 2; usedIds.has(id); suffix += 1) id = `${baseId}-${suffix}`;
     usedIds.add(id);
     const requestedSeriesIds = (Array.isArray(input.historySeriesIds) ? input.historySeriesIds : []).map(String).map((item) => item.trim()).filter(Boolean);
-    const requestedMemoryIds = (Array.isArray(input.memoryIds) ? input.memoryIds : []).map(String).map((item) => item.trim()).filter(Boolean);
     for (const seriesId of requestedSeriesIds) if (!knownSeriesIds.has(seriesId)) inventedSeriesIds.add(seriesId);
-    const memoryIds = requestedMemoryIds.filter((memoryId) => {
-      if (!knownMemoryIds) return true;
-      if (knownMemoryIds.has(memoryId)) return true;
-      inventedMemoryIds.add(memoryId);
-      return false;
-    }).slice(0, 20);
     return [{
       id,
       title,
@@ -105,7 +91,7 @@ export function normalizeSecNodePlan(value: unknown, outline: SecOutlineSection[
       sectionIds,
       ...(keywords.length ? { keywords } : {}),
       historySeriesIds: requestedSeriesIds.filter((item) => knownSeriesIds.has(item)).slice(0, 12) as SecCanonicalSeriesId[],
-      memoryIds,
+      memoryIds: [],
       acceptanceCriteria: Array.isArray(input.acceptanceCriteria) ? input.acceptanceCriteria.map((criterion) => cleanLine(criterion, 240)).filter(Boolean).slice(0, 8) : ["明确回答任务问题并引用当前 filing 证据"],
       materiality: input.materiality === "high" || input.materiality === "low" ? input.materiality : "medium",
     }];
@@ -113,11 +99,7 @@ export function normalizeSecNodePlan(value: unknown, outline: SecOutlineSection[
   const clamped = Math.max(0, nodes.length - MAX_NODES);
   const kept = nodes.slice(0, MAX_NODES);
   const warnings: string[] = [];
-  if (inventedMemoryIds.size) warnings.push(`Manager referenced memory ids that are not in the brief: ${[...inventedMemoryIds].sort().slice(0, 8).join(", ")}`);
   if (inventedSeriesIds.size) warnings.push(`Manager referenced unknown history series: ${[...inventedSeriesIds].sort().slice(0, 8).join(", ")}`);
-  if (knownMemoryIds?.size && !kept.some((node) => node.memoryIds.length)) {
-    warnings.push(`Company Memory was supplied (${knownMemoryIds.size} items) but no planned node picked any of it up`);
-  }
   return {
     nodes: kept,
     outlineSections: outline.length,
@@ -212,7 +194,6 @@ export function normalizeSecNodeResult(
   }).slice(0, 6);
   const narrative = cleanProse(input.narrative, 4_000);
   const facts = normalizeAnalysisFacts(input.facts, validEvidenceIds);
-  const memoryChecks = normalizeMemoryChecks(input.memoryChecks, new Set(spec.memoryIds ?? []), validEvidenceIds);
   return {
     id: spec.id,
     title: spec.title,
@@ -220,34 +201,8 @@ export function normalizeSecNodeResult(
     findings,
     narrative,
     facts,
-    ...(memoryChecks.length ? { memoryChecks } : {}),
     evidence: evidence.slice(0, 16),
   };
-}
-
-/**
- * A verdict is only worth keeping when it names memory the node was actually given, and a
- * confirmed or contradicted verdict without evidence is an assertion, not a check — dropped the
- * same way an unsourced fact is.
- */
-function normalizeMemoryChecks(value: unknown, assignedMemoryIds: Set<string>, validEvidenceIds: Set<string>): SecMemoryCheck[] {
-  if (!Array.isArray(value) || !assignedMemoryIds.size) return [];
-  const seen = new Set<string>();
-  return value.flatMap((item): SecMemoryCheck[] => {
-    const check = asRecord(item);
-    const memoryId = String(check?.memoryId ?? "").trim();
-    if (!assignedMemoryIds.has(memoryId) || seen.has(memoryId)) return [];
-    const verdicts = ["confirmed", "contradicted", "not_addressed"] as const;
-    const verdict = verdicts.includes(check?.verdict as typeof verdicts[number]) ? check?.verdict as SecMemoryCheck["verdict"] : "not_addressed";
-    const evidenceIds = (Array.isArray(check?.evidenceIds) ? check.evidenceIds : [])
-      .map(String)
-      .map((id) => validEvidenceIds.has(id) ? id : `ev:${id}`)
-      .filter((id) => validEvidenceIds.has(id))
-      .slice(0, 6);
-    if (verdict !== "not_addressed" && !evidenceIds.length) return [];
-    seen.add(memoryId);
-    return [{ memoryId, verdict, note: cleanLine(check?.note, 300), evidenceIds }];
-  }).slice(0, assignedMemoryIds.size);
 }
 
 function selectEvidence(text: string, terms: string[], maxCharacters: number, maxSelected: number): { text: string; evidence: SecWorkflowEvidence[] } {
