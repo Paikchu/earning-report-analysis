@@ -137,6 +137,33 @@ test("reads the latest status for an analysis version", async () => {
   assert.deepEqual(selectedValues, ["MSFT", "acc-1", "sec-analysis.v2"]);
 });
 
+test("hands a filing back once a non-terminal job outlives its lease", async () => {
+  const jobRow = (status: string, updatedAt: string) => ({
+    prepare() {
+      return {
+        bind() {
+          return {
+            async first<T>() { return { status, updatedAt } as T; },
+          };
+        },
+      };
+    },
+  });
+  const now = Date.parse("2026-08-29T12:00:00.000Z");
+  const read = (status: string, updatedAt: string) =>
+    new D1SecRepository(asDatabase(jobRow(status, updatedAt))).getAnalysisJobStatus("MSFT", "acc-1", "sec-analysis.v3", now);
+
+  // The workflow that wrote this row died three days ago without ever reaching a terminal state.
+  assert.equal(await read("running", "2026-08-26T15:30:13.000Z"), "failed");
+  assert.equal(await read("queued", "2026-08-26T15:30:13.000Z"), "failed");
+  // A live run inside the lease keeps its own work.
+  assert.equal(await read("running", "2026-08-29T11:30:00.000Z"), "running");
+  // A finished job is never reopened, however old it is.
+  assert.equal(await read("complete", "2026-08-04T18:44:48.000Z"), "complete");
+  // An undatable row keeps its stored status rather than being handed to a second workflow.
+  assert.equal(await read("running", "not a timestamp"), "running");
+});
+
 test("does not publish an analysis artifact that failed verification", async () => {
   const sql: string[] = [];
   const database = {
