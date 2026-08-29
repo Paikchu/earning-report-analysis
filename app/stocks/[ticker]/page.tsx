@@ -5,6 +5,7 @@ import { normalizeTrackedTicker } from "@/lib/sec-config";
 import { SecFilingsSection } from "@/app/positions/[ticker]/SecFilingsSection";
 import { FundamentalCharts } from "./FundamentalCharts";
 import {
+  hasExplicitFundamentalPageState,
   parseFundamentalPageState,
   stockPageSearchParamsToUrlSearchParams,
   type StockPageSearchParams,
@@ -22,9 +23,11 @@ export default async function StockPage({
   const ticker = normalizeTrackedTicker((await params).ticker);
   if (!ticker) notFound();
   const security = findSecurity(ticker);
-  const initialState = parseFundamentalPageState(
-    stockPageSearchParamsToUrlSearchParams(await searchParams),
-  );
+  const normalizedSearchParams = stockPageSearchParamsToUrlSearchParams(await searchParams);
+  const initialState = parseFundamentalPageState(normalizedSearchParams);
+  const initialPreferenceSource = hasExplicitFundamentalPageState(normalizedSearchParams)
+    ? "url"
+    : "preset";
   return (
     <div className="sec-app-shell stock-analysis-shell">
       <SiteHeader initialQuery={security?.symbol ?? ticker} />
@@ -39,6 +42,7 @@ export default async function StockPage({
             ticker={ticker}
             companyName={security?.name ?? ticker}
             initialState={initialState}
+            initialPreferenceSource={initialPreferenceSource}
           />
           <div className="stock-analysis-filings">
             <SecFilingsSection ticker={ticker} />

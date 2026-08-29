@@ -44,6 +44,10 @@ export function parseFundamentalPageState(searchParams: URLSearchParams): Fundam
   };
 }
 
+export function hasExplicitFundamentalPageState(searchParams: URLSearchParams): boolean {
+  return searchParams.has("metrics") || searchParams.has("chart") || searchParams.has("periods");
+}
+
 export function stockPageSearchParamsToUrlSearchParams(
   searchParams: StockPageSearchParams,
 ): URLSearchParams {

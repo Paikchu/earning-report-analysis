@@ -526,7 +526,7 @@ function buildChartLayout(
   height: number,
 ): FundamentalChartLayout {
   const compact = width < 540;
-  const plotLeft = compact ? 54 : 72;
+  const plotLeft = compact ? 70 : 72;
   const plotRight = width - (hasRightAxis ? (compact ? 54 : 76) : (compact ? 18 : 32));
   const plotTop = 24;
   const plotBottom = height - (compact ? 44 : 56);

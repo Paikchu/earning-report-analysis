@@ -22,6 +22,11 @@ import {
   type FundamentalChartMode,
   type FundamentalPageState,
 } from "@/lib/fundamental-page-state";
+import {
+  resolveFundamentalPresentation,
+  sliceFundamentalsForChart,
+  type ResolvedFundamentalPresentation,
+} from "@/lib/fundamental-chart-plan";
 import type { FundamentalMetricKey } from "@/lib/fundamental-metrics";
 import type { PublicFundamentalsResponse } from "@/lib/fundamentals-api";
 
@@ -31,6 +36,8 @@ type FundamentalChartsProps = {
   ticker: string;
   companyName: string;
   initialState: FundamentalPageState;
+  initialPreferenceSource?: "url" | "preset";
+  initialAiPlan?: unknown;
 };
 
 type FundamentalChartsViewProps = {
@@ -40,6 +47,7 @@ type FundamentalChartsViewProps = {
   pageState: FundamentalPageState;
   requestState: FundamentalsRequestState;
   error: string | null;
+  presentation?: ResolvedFundamentalPresentation | null;
   onMetricKeysChange(metricKeys: FundamentalMetricKey[]): void;
   onChartChange(chart: FundamentalChartMode): void;
   onPeriodCountChange(periodCount: number): void;
@@ -52,13 +60,36 @@ const CHART_MODES: readonly { value: FundamentalChartMode; label: string }[] = [
   { value: "line", label: "折线" },
 ];
 
-export function FundamentalCharts({ ticker, companyName, initialState }: FundamentalChartsProps) {
+export function FundamentalCharts({
+  ticker,
+  companyName,
+  initialState,
+  initialPreferenceSource = "preset",
+  initialAiPlan,
+}: FundamentalChartsProps) {
   const [pageState, setPageState] = useState(initialState);
+  const [overrideSource, setOverrideSource] = useState<"url" | "user" | null>(
+    initialPreferenceSource === "url" ? "url" : null,
+  );
   const [data, setData] = useState<PublicFundamentalsResponse | null>(null);
   const dataRef = useRef<PublicFundamentalsResponse | null>(null);
   const [requestState, setRequestState] = useState<FundamentalsRequestState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [retryVersion, setRetryVersion] = useState(0);
+  const presentation = useMemo(() => {
+    if (!data || data.status !== "ready") return null;
+    const override = {
+      metricKeys: pageState.metricKeys,
+      chart: pageState.chart,
+      periodCount: pageState.periodCount,
+    };
+    return resolveFundamentalPresentation({
+      data,
+      userOverride: overrideSource === "user" ? override : null,
+      urlOverride: overrideSource === "url" ? override : null,
+      aiCandidate: initialAiPlan,
+    });
+  }, [data, initialAiPlan, overrideSource, pageState]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -99,10 +130,11 @@ export function FundamentalCharts({ ticker, companyName, initialState }: Fundame
   }, [pageState.periodCount, retryVersion, ticker]);
 
   useEffect(() => {
+    if (!overrideSource) return;
     const url = new URL(window.location.href);
     url.search = writeFundamentalPageState(url.searchParams, pageState).toString();
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-  }, [pageState]);
+  }, [overrideSource, pageState]);
 
   return (
     <FundamentalChartsView
@@ -112,11 +144,21 @@ export function FundamentalCharts({ ticker, companyName, initialState }: Fundame
       pageState={pageState}
       requestState={requestState}
       error={error}
+      presentation={presentation}
       onMetricKeysChange={(metricKeys) => {
-        if (metricKeys.length > 0) setPageState((current) => ({ ...current, metricKeys }));
+        if (metricKeys.length > 0) {
+          setOverrideSource("user");
+          setPageState((current) => ({ ...current, metricKeys }));
+        }
       }}
-      onChartChange={(chart) => setPageState((current) => ({ ...current, chart }))}
-      onPeriodCountChange={(periodCount) => setPageState((current) => ({ ...current, periodCount }))}
+      onChartChange={(chart) => {
+        setOverrideSource("user");
+        setPageState((current) => ({ ...current, chart }));
+      }}
+      onPeriodCountChange={(periodCount) => {
+        setOverrideSource("user");
+        setPageState((current) => ({ ...current, periodCount }));
+      }}
       onRetry={() => setRetryVersion((version) => version + 1)}
     />
   );
@@ -129,6 +171,7 @@ export function FundamentalChartsView({
   pageState,
   requestState,
   error,
+  presentation,
   onMetricKeysChange,
   onChartChange,
   onPeriodCountChange,
@@ -146,6 +189,24 @@ export function FundamentalChartsView({
     () => selectedSeries.map((series) => ({ metricKey: series.metricKey })),
     [selectedSeries],
   );
+  const effectivePresentation = useMemo(() => {
+    if (presentation || !data || data.status !== "ready") return presentation ?? null;
+    try {
+      return resolveFundamentalPresentation({
+        data,
+        urlOverride: {
+          metricKeys: pageState.metricKeys,
+          chart: pageState.chart,
+          periodCount: pageState.periodCount,
+        },
+      });
+    } catch {
+      return null;
+    }
+  }, [data, pageState, presentation]);
+  const selectorLegend = effectivePresentation?.source === "preset" || effectivePresentation?.source === "ai"
+    ? "自定义叠加（操作后接管）"
+    : "选择叠加指标";
 
   useEffect(() => {
     if (!selectorOpen) return;
@@ -195,7 +256,10 @@ export function FundamentalChartsView({
           <h2 id="fundamentals-heading">基本面趋势</h2>
           <p>{companyName}（{ticker}）最近 {pageState.periodCount} 个季度的核心财务指标。</p>
         </div>
-        <RequestStatus requestState={requestState} data={data} error={error} />
+        <div className="fundamentals-workbench__status-group">
+          <PresentationStatus presentation={effectivePresentation} />
+          <RequestStatus requestState={requestState} data={data} error={error} />
+        </div>
       </header>
 
       <div className="fundamentals-workbench__toolbar" aria-label="图表显示设置">
@@ -245,6 +309,7 @@ export function FundamentalChartsView({
             requestState={requestState}
             chart={pageState.chart}
             seriesSpecs={seriesSpecs}
+            presentation={effectivePresentation}
             onRetry={onRetry}
           />
         </div>
@@ -256,6 +321,7 @@ export function FundamentalChartsView({
               selectedMetricKeys={pageState.metricKeys}
               onChange={onMetricKeysChange}
               minSelection={1}
+              legend={selectorLegend}
             />
           ) : <SelectorPlaceholder />}
         </aside>
@@ -291,6 +357,7 @@ export function FundamentalChartsView({
                 selectedMetricKeys={pageState.metricKeys}
                 onChange={onMetricKeysChange}
                 minSelection={1}
+                legend={selectorLegend}
               />
             ) : <SelectorPlaceholder />}
           </div>
@@ -306,6 +373,7 @@ function ChartPanel({
   requestState,
   chart,
   seriesSpecs,
+  presentation,
   onRetry,
 }: {
   data: PublicFundamentalsResponse | null;
@@ -313,6 +381,7 @@ function ChartPanel({
   requestState: FundamentalsRequestState;
   chart: FundamentalChartMode;
   seriesSpecs: { metricKey: FundamentalMetricKey }[];
+  presentation: ResolvedFundamentalPresentation | null;
   onRetry(): void;
 }) {
   if (!data && requestState === "error") {
@@ -326,6 +395,26 @@ function ChartPanel({
   }
   if (!data) return <ChartSkeleton />;
 
+  if (presentation && data.status === "ready") {
+    return (
+      <div
+        className="fundamentals-workbench__chart-stack"
+        data-presentation-source={presentation.source}
+        data-company-classification={presentation.profile.classification}
+      >
+        {presentation.plan.charts.map((plannedChart) => (
+          <FundamentalComboChart
+            key={plannedChart.id}
+            title={plannedChart.title}
+            description={plannedChart.insight}
+            data={sliceFundamentalsForChart(data, plannedChart.periodCount)}
+            series={plannedChart.series}
+          />
+        ))}
+      </div>
+    );
+  }
+
   const props = {
     title: "季度基本面叠加图",
     description: "按报告期末对齐；不同颜色代表不同指标，单位不兼容时自动使用左右双轴。",
@@ -335,6 +424,31 @@ function ChartPanel({
   if (chart === "bar") return <FundamentalBarChart {...props} />;
   if (chart === "line") return <FundamentalLineChart {...props} />;
   return <FundamentalComboChart {...props} />;
+}
+
+function PresentationStatus({
+  presentation,
+}: {
+  presentation: ResolvedFundamentalPresentation | null;
+}) {
+  if (!presentation) return null;
+  const labels: Record<ResolvedFundamentalPresentation["source"], string> = {
+    preset: "规则预设",
+    ai: "AI 方案",
+    url: "链接视图",
+    user: "自定义",
+  };
+  const rejectedAi = presentation.rejectedAiIssues.length > 0;
+  return (
+    <span
+      className="fundamentals-workbench__presentation-status"
+      data-source={presentation.source}
+      data-tone={rejectedAi ? "warning" : undefined}
+      title={rejectedAi ? `AI 方案未通过校验：${presentation.rejectedAiIssues[0]?.message ?? "未知原因"}` : undefined}
+    >
+      {rejectedAi ? "AI 已回退 · " : ""}{labels[presentation.source]} · {presentation.plan.charts.length} 图
+    </span>
+  );
 }
 
 function RequestStatus({

@@ -3,8 +3,9 @@ import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { FundamentalChartsView } from "../app/stocks/[ticker]/FundamentalCharts";
+import { resolveFundamentalPresentation } from "../lib/fundamental-chart-plan.ts";
 import type { FundamentalPageState } from "../lib/fundamental-page-state.ts";
-import { makeChartResponse } from "./fixtures/fundamental-chart.ts";
+import { makeChartResponse, makeChartSeries } from "./fixtures/fundamental-chart.ts";
 
 const pageState: FundamentalPageState = {
   metricKeys: ["total_revenue", "gross_margin"],
@@ -92,4 +93,35 @@ test("line mode forces the shared renderer to draw line marks", () => {
 
   assert.match(html, /class="fundamental-chart__line"/);
   assert.doesNotMatch(html, /class="fundamental-chart__bar"/);
+});
+
+test("capital-intensive preset renders a protected second chart without changing user controls", () => {
+  const data = makeChartResponse([
+    makeChartSeries("total_revenue", [100, 110, 120, 130, 140, 150]),
+    makeChartSeries("gross_margin", [40, 41, 42, 41, 40, 39]),
+    makeChartSeries("capital_expenditure", [-20, -22, -25, -28, -32, -50]),
+    makeChartSeries("free_cash_flow", [12, 11, 10, 8, 5, -2]),
+  ]);
+  const presentation = resolveFundamentalPresentation({ data });
+  const html = renderToStaticMarkup(
+    <FundamentalChartsView
+      ticker="ACME"
+      companyName="ACME Industrial"
+      data={data}
+      pageState={pageState}
+      requestState="ready"
+      error={null}
+      presentation={presentation}
+      {...callbacks}
+    />,
+  );
+
+  assert.equal((html.match(/data-chart-role="fundamental-chart"/g) ?? []).length, 2);
+  assert.match(html, /data-presentation-source="preset"/);
+  assert.match(html, /data-company-classification="capital_intensive"/);
+  assert.match(html, /投入强度与现金流/);
+  assert.match(html, /资本开支/);
+  assert.match(html, /规则预设 · 2 图/);
+  assert.match(html, /自定义叠加（操作后接管）/);
+  assert.equal((html.match(/data-chart-role="metric-selector"/g) ?? []).length, 1);
 });

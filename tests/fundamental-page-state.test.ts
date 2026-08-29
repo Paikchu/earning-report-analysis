@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   DEFAULT_FUNDAMENTAL_PAGE_STATE,
+  hasExplicitFundamentalPageState,
   limitFundamentalMetricAxes,
   normalizeFundamentalPageState,
   parseFundamentalPageState,
@@ -56,6 +57,13 @@ test("server search params adapter retains repeated and scalar values", () => {
   assert.equal(params.get("metrics"), "total_revenue,gross_margin");
   assert.deepEqual(params.getAll("tag"), ["one", "two"]);
   assert.equal(params.has("missing"), false);
+});
+
+test("only fundamentals query keys opt the page out of the deterministic preset", () => {
+  assert.equal(hasExplicitFundamentalPageState(new URLSearchParams("view=compact")), false);
+  assert.equal(hasExplicitFundamentalPageState(new URLSearchParams("metrics=total_revenue")), true);
+  assert.equal(hasExplicitFundamentalPageState(new URLSearchParams("chart=line")), true);
+  assert.equal(hasExplicitFundamentalPageState(new URLSearchParams("periods=8")), true);
 });
 
 test("selection reconciliation retains available choices then falls back to priority metrics", () => {

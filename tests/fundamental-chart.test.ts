@@ -153,7 +153,8 @@ test("recomputes plot geometry for a mobile-width container", () => {
   assert.equal(mobile.layout.width, 360);
   assert.equal(mobile.layout.height, 340);
   assert.ok(mobile.layout.periodStep < desktop.layout.periodStep);
-  assert.ok(mobile.layout.plotWidth > 240);
+  assert.ok(mobile.layout.plotLeft >= 70);
+  assert.ok(mobile.layout.plotWidth > 220);
 });
 
 test("keeps every period label when space permits and thins dense mobile labels deterministically", () => {
