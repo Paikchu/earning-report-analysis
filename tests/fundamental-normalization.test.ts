@@ -93,14 +93,28 @@ test("rejects a payload with fewer than two usable quarters", () => {
   );
 });
 
-test("rejects a payload without latest-quarter revenue", () => {
+test("rejects a payload without any quarterly revenue", () => {
   const parsed = parseYahooFundamentalsPayload(fixture, "ACME");
-  parsed.observations = parsed.observations.filter((item) =>
-    item.periodEnd !== "2026-03-31" || item.metricKey !== "total_revenue");
+  parsed.observations = parsed.observations.filter((item) => item.metricKey !== "total_revenue");
 
   assert.throws(
     () => normalizeYahooFundamentals(parsed),
     (error: unknown) => error instanceof FundamentalDataQualityError
       && error.code === "MISSING_LATEST_REVENUE",
   );
+});
+
+test("excludes a trailing partial quarter instead of rejecting prior complete quarters", () => {
+  const parsed = parseYahooFundamentalsPayload(fixture, "ACME");
+  const latestEps = parsed.observations.find((item) =>
+    item.periodEnd === "2026-03-31" && item.metricKey === "diluted_eps");
+  assert.ok(latestEps);
+  parsed.observations.push({ ...latestEps, periodEnd: "2026-06-30" });
+
+  const snapshot = normalizeYahooFundamentals(parsed);
+
+  assert.deepEqual(snapshot.periods.map((period) => period.periodEnd), ["2025-12-31", "2026-03-31"]);
+  assert.equal(snapshot.observations.some((item) => item.periodEnd === "2026-06-30"), false);
+  assert.ok(snapshot.warnings.includes("2026-06-30:incomplete_quarter_excluded"));
+  assert.equal(snapshot.qualityStatus, "partial");
 });

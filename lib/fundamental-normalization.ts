@@ -166,28 +166,50 @@ export function normalizeYahooFundamentals(payload: YahooFundamentalsPayload): N
   const quarterPeriods = [...periods.values()]
     .filter((period) => period.periodType === "3M")
     .sort((left, right) => left.periodEnd.localeCompare(right.periodEnd));
-  if (quarterPeriods.length < FUNDAMENTAL_MIN_QUARTER_COUNT) {
+  const revenueQuarterPeriodIds = new Set(
+    [...observations.values()]
+      .filter((observation) => observation.periodType === "3M" && observation.metricKey === "total_revenue")
+      .map((observation) => observation.periodId),
+  );
+  if (revenueQuarterPeriodIds.size === 0) {
+    throw new FundamentalDataQualityError(
+      "MISSING_LATEST_REVENUE",
+      "Yahoo payload does not contain quarterly total revenue.",
+    );
+  }
+
+  const publishableQuarterPeriods = quarterPeriods.filter((period) => revenueQuarterPeriodIds.has(period.periodId));
+  if (publishableQuarterPeriods.length < FUNDAMENTAL_MIN_QUARTER_COUNT) {
     throw new FundamentalDataQualityError(
       "INSUFFICIENT_QUARTERS",
       `Yahoo payload contains fewer than ${FUNDAMENTAL_MIN_QUARTER_COUNT} usable quarters.`,
     );
   }
 
-  const latestQuarter = quarterPeriods.at(-1)!;
+  const excludedQuarterPeriodIds = new Set(
+    quarterPeriods
+      .filter((period) => !revenueQuarterPeriodIds.has(period.periodId))
+      .map((period) => period.periodId),
+  );
+  for (const period of quarterPeriods) {
+    if (excludedQuarterPeriodIds.has(period.periodId)) {
+      warnings.push(`${period.periodEnd}:incomplete_quarter_excluded`);
+    }
+  }
+
+  const publishedPeriods = [...periods.values()].filter((period) =>
+    period.periodType !== "3M" || revenueQuarterPeriodIds.has(period.periodId));
+  const publishedObservations = [...observations.values()].filter((observation) =>
+    observation.periodType !== "3M" || revenueQuarterPeriodIds.has(observation.periodId));
+  const latestQuarter = publishableQuarterPeriods.at(-1)!;
   const latestMetricKeys = new Set(
-    [...observations.values()]
+    publishedObservations
       .filter((observation) => observation.periodId === latestQuarter.periodId)
       .map((observation) => observation.metricKey),
   );
-  if (!latestMetricKeys.has("total_revenue")) {
-    throw new FundamentalDataQualityError(
-      "MISSING_LATEST_REVENUE",
-      "Yahoo payload does not contain total revenue for the latest usable quarter.",
-    );
-  }
 
   const issueCount = payload.issues.length + warnings.length;
-  const isComplete = quarterPeriods.length >= FUNDAMENTAL_COMPLETE_QUARTER_COUNT
+  const isComplete = publishableQuarterPeriods.length >= FUNDAMENTAL_COMPLETE_QUARTER_COUNT
     && issueCount === 0
     && FUNDAMENTAL_CORE_METRICS.every((metricKey) => latestMetricKeys.has(metricKey));
 
@@ -200,9 +222,9 @@ export function normalizeYahooFundamentals(payload: YahooFundamentalsPayload): N
     qualityStatus: isComplete ? "complete" : "partial",
     issueCount,
     warnings,
-    periods: [...periods.values()].sort((left, right) =>
+    periods: publishedPeriods.sort((left, right) =>
       left.periodEnd.localeCompare(right.periodEnd) || left.periodType.localeCompare(right.periodType)),
-    observations: [...observations.values()].sort((left, right) =>
+    observations: publishedObservations.sort((left, right) =>
       left.periodEnd.localeCompare(right.periodEnd) || left.metricKey.localeCompare(right.metricKey)),
   };
 }

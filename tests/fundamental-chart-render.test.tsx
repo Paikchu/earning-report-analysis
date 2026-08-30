@@ -80,6 +80,7 @@ test("pending and invalid configurations render explicit fallback states", () =>
   );
 
   assert.match(pendingHtml, /财报趋势正在准备/);
+  assert.match(pendingHtml, /图表会自动更新/);
   assert.doesNotMatch(pendingHtml, /role="img"/);
   assert.match(invalidHtml, /超过两种不可共用的单位/);
   assert.doesNotMatch(invalidHtml, /role="img"/);

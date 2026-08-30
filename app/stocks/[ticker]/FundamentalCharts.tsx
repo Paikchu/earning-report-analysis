@@ -60,6 +60,8 @@ const CHART_MODES: readonly { value: FundamentalChartMode; label: string }[] = [
   { value: "line", label: "折线" },
 ];
 
+const FUNDAMENTALS_PENDING_POLL_DELAYS_MS = [1_000, 2_000, 4_000, 8_000] as const;
+
 export function FundamentalCharts({
   ticker,
   companyName,
@@ -96,22 +98,32 @@ export function FundamentalCharts({
     setRequestState(dataRef.current ? "refreshing" : "loading");
     setError(null);
 
-    void fetch(
-      `/api/v1/companies/${encodeURIComponent(ticker)}/fundamentals?periodCount=${pageState.periodCount}`,
-      { signal: controller.signal },
-    )
-      .then(async (response) => {
+    void (async () => {
+      for (let attempt = 0; ; attempt += 1) {
+        const response = await fetch(
+          `/api/v1/companies/${encodeURIComponent(ticker)}/fundamentals?periodCount=${pageState.periodCount}`,
+          { signal: controller.signal },
+        );
         const payload = await response.json() as PublicFundamentalsResponse | { error?: string };
         if (!response.ok || !("status" in payload)) {
           throw new Error("error" in payload && payload.error ? payload.error : "基本面数据请求失败。");
         }
         dataRef.current = payload;
         setData(payload);
+        if (payload.status === "pending") {
+          const delay = FUNDAMENTALS_PENDING_POLL_DELAYS_MS[attempt];
+          if (delay === undefined) {
+            throw new Error("基本面同步未能及时完成，请稍后重试。");
+          }
+          setRequestState("refreshing");
+          await waitForFundamentalsPoll(delay, controller.signal);
+          continue;
+        }
         setPageState((current) => {
           const availableMetricKeys = payload.series
             .filter((series) => series.available)
             .map((series) => series.metricKey);
-          if (payload.status !== "ready" || availableMetricKeys.length === 0) return current;
+          if (availableMetricKeys.length === 0) return current;
           const metricKeys = limitFundamentalMetricAxes(
             reconcileFundamentalMetricSelection(current.metricKeys, availableMetricKeys),
             payload.series,
@@ -119,11 +131,13 @@ export function FundamentalCharts({
           return sameMetricKeys(metricKeys, current.metricKeys) ? current : { ...current, metricKeys };
         });
         setRequestState("ready");
-      })
+        return;
+      }
+    })()
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return;
         setError(reason instanceof Error ? reason.message : "基本面数据请求失败。");
-        setRequestState(dataRef.current ? "ready" : "error");
+        setRequestState(dataRef.current?.status === "ready" ? "ready" : "error");
       });
 
     return () => controller.abort();
@@ -394,6 +408,15 @@ function ChartPanel({
     );
   }
   if (!data) return <ChartSkeleton />;
+  if (data.status === "pending" && requestState === "error") {
+    return (
+      <div className="fundamentals-workbench__request-message" role="alert">
+        <span>基本面同步未完成</span>
+        <p>{error ?? "请稍后重试。SEC 文件仍可在右侧独立查看。"}</p>
+        <button type="button" onClick={onRetry}>重新获取</button>
+      </div>
+    );
+  }
 
   if (presentation && data.status === "ready") {
     return (
@@ -461,9 +484,13 @@ function RequestStatus({
   error: string | null;
 }) {
   if (requestState === "loading") return <span className="fundamentals-workbench__request-status">载入中</span>;
+  if (requestState === "refreshing" && data?.status === "pending") {
+    return <span className="fundamentals-workbench__request-status">同步中</span>;
+  }
   if (requestState === "refreshing") return <span className="fundamentals-workbench__request-status">更新中</span>;
-  if (error && data) return <span className="fundamentals-workbench__request-status" data-tone="warning">刷新失败 · 显示上次结果</span>;
+  if (error && data?.status === "ready") return <span className="fundamentals-workbench__request-status" data-tone="warning">刷新失败 · 显示上次结果</span>;
   if (requestState === "error") return <span className="fundamentals-workbench__request-status" data-tone="warning">获取失败</span>;
+  if (data?.status === "pending") return <span className="fundamentals-workbench__request-status">同步中</span>;
   return <span className="fundamentals-workbench__request-status" data-tone="ready">已连接</span>;
 }
 
@@ -492,6 +519,24 @@ function SelectorPlaceholder() {
 
 function sameMetricKeys(left: readonly FundamentalMetricKey[], right: readonly FundamentalMetricKey[]) {
   return left.length === right.length && left.every((metricKey, index) => metricKey === right[index]);
+}
+
+function waitForFundamentalsPoll(milliseconds: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const handleAbort = () => {
+      window.clearTimeout(timeout);
+      reject(signal.reason);
+    };
+    const timeout = window.setTimeout(() => {
+      signal.removeEventListener("abort", handleAbort);
+      resolve();
+    }, milliseconds);
+    signal.addEventListener("abort", handleAbort, { once: true });
+  });
 }
 
 function prefersReducedMotion() {

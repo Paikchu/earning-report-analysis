@@ -90,7 +90,7 @@ export function FundamentalChartRenderer({
       <ChartFrame className={className} title={title} description={description}>
         <ChartMessage
           title="财报趋势正在准备"
-          detail="首次请求已进入刷新队列。数据可用后，组件会使用同一份配置绘制图表。"
+          detail="正在同步季度数据。数据可用后，图表会自动更新。"
         />
         <ChartSource data={data} />
       </ChartFrame>

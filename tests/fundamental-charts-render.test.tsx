@@ -76,6 +76,35 @@ test("request states remain local to the fundamentals surface", () => {
   assert.match(errorHtml, /模拟的网络故障/);
   assert.match(errorHtml, /重新获取/);
   assert.doesNotMatch(errorHtml, /data-chart-role="fundamental-chart"/);
+
+  const pendingErrorHtml = renderToStaticMarkup(
+    <FundamentalChartsView
+      ticker="ACME"
+      companyName="ACME Industrial"
+      data={{ ...makeChartResponse(), status: "pending", fetchedAt: null, periods: [], series: [] }}
+      pageState={pageState}
+      requestState="error"
+      error="基本面同步未能及时完成，请稍后重试。"
+      {...callbacks}
+    />,
+  );
+  assert.match(pendingErrorHtml, /基本面同步未完成/);
+  assert.match(pendingErrorHtml, /基本面同步未能及时完成/);
+  assert.match(pendingErrorHtml, /重新获取/);
+
+  const pendingHtml = renderToStaticMarkup(
+    <FundamentalChartsView
+      ticker="ACME"
+      companyName="ACME Industrial"
+      data={{ ...makeChartResponse(), status: "pending", fetchedAt: null, periods: [], series: [] }}
+      pageState={pageState}
+      requestState="refreshing"
+      error={null}
+      {...callbacks}
+    />,
+  );
+  assert.match(pendingHtml, /同步中/);
+  assert.doesNotMatch(pendingHtml, /已连接/);
 });
 
 test("line mode forces the shared renderer to draw line marks", () => {
