@@ -20,6 +20,8 @@ import type { SecAnalysisArtifact, SecAnalysisContext } from "../../lib/sec-type
 import type { SecWorkflowParams } from "./core.ts";
 import { modelExecutionForAttempt, type SecModelExecution } from "./retry-policy.ts";
 
+const SEC_NODE_CONCURRENCY = 2;
+
 /**
  * Job lookup version. Event filings additionally key on the summary version: bumping
  * SEC_SUMMARY_VERSION invalidates stored event summaries so they regenerate through the
@@ -194,7 +196,7 @@ export async function executeSecAnalysisWorkflow(
       const plan = await step.do(`manager:${accession}`, (stepContext) => operations.plan(filing, prepared, brief, executionFor(stepContext)));
       if (!plan.nodes.length) throw new Error("Manager planned no analysis nodes");
       stage = "nodes-round-0";
-      const nodes = await mapWithConcurrency(plan.nodes, 4, (spec, index) => step.do(
+      const nodes = await mapWithConcurrency(plan.nodes, SEC_NODE_CONCURRENCY, (spec, index) => step.do(
         `node:${accession}:round:0:${index}:${spec.id}`,
         (stepContext) => operations.analyzeNode(spec, filing, prepared, brief, 0, executionFor(stepContext)),
       ));

@@ -191,6 +191,43 @@ test("runs filing analysis as durable stages and fans analysis nodes out indepen
   assert.equal(publishedSummaries[0].managerReview?.status, "complete");
 });
 
+test("bounds node analysis to two concurrent model calls per workflow", async () => {
+  const defaultOperations = operations();
+  const plannedNodes = ["one", "two", "three", "four"].map((id) => nodeSpec({
+    id,
+    title: id,
+    question: `Analyze ${id}`,
+    sectionIds: [id],
+  }));
+  let active = 0;
+  let maximumActive = 0;
+  const ops = operations({
+    async plan() {
+      return { nodes: plannedNodes, outlineSections: plannedNodes.length };
+    },
+    async analyzeNode(spec, analyzedFiling, prepared, brief, round, execution) {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      try {
+        return await defaultOperations.analyzeNode(spec, analyzedFiling, prepared, brief, round, execution);
+      } finally {
+        active -= 1;
+      }
+    },
+  });
+
+  const result = await executeSecAnalysisWorkflow(
+    { ticker: "TESTCO", requestedBy: "manual" },
+    "workflow-node-concurrency",
+    stepRecorder([]),
+    ops,
+  );
+
+  assert.deepEqual(result, { analyzed: [filing.accessionNumber], skipped: [], failed: [] });
+  assert.equal(maximumActive, 2);
+});
+
 test("publishes full reports directly after synthesis without claim checks", async () => {
   const steps: string[] = [];
   let published = 0;

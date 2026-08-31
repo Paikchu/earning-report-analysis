@@ -13,7 +13,10 @@
     {
       "name": "earning-report-analysis-sec-analysis",
       "binding": "SEC_ANALYSIS_WORKFLOW",
-      "class_name": "SecAnalysisWorkflow"
+      "class_name": "SecAnalysisWorkflow",
+      "concurrency": {
+        "limit": 4
+      }
     },
     {
       "name": "earning-report-analysis-sec-memory",
@@ -45,7 +48,10 @@
         {
           "name": "earning-report-analysis-sec-analysis-staging",
           "binding": "SEC_ANALYSIS_WORKFLOW",
-          "class_name": "SecAnalysisWorkflow"
+          "class_name": "SecAnalysisWorkflow",
+          "concurrency": {
+            "limit": 4
+          }
         },
         {
           "name": "earning-report-analysis-sec-memory-staging",

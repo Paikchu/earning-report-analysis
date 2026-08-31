@@ -104,10 +104,11 @@ test("keeps only short authenticated internal bridge routes", async () => {
   assert.doesNotMatch(sources.join("\n"), /SEC_BOOTSTRAP|model-key|oai-sites-authorization/);
 });
 
-test("ships SEC analysis as a durable Cloudflare workflow with isolated model credentials", async () => {
-  const [workerSource, workerConfig, operations, core, runtime] = await Promise.all([
+test("ships SEC analysis as a bounded durable Cloudflare workflow with isolated model credentials", async () => {
+  const [workerSource, workerConfig, workflowCore, operations, core, runtime] = await Promise.all([
     readFile(new URL("../workers/pipeline/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../workers/pipeline/wrangler.jsonc", import.meta.url), "utf8"),
+    readFile(new URL("../workers/pipeline/workflow-core.ts", import.meta.url), "utf8"),
     readFile(new URL("../workers/pipeline/operations.ts", import.meta.url), "utf8"),
     readFile(new URL("../workers/pipeline/core.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/sec-runtime.ts", import.meta.url), "utf8"),
@@ -116,7 +117,10 @@ test("ships SEC analysis as a durable Cloudflare workflow with isolated model cr
   assert.match(workerSource, /class SecAnalysisWorkflow/);
   assert.match(workerConfig, /"compatibility_flags": \["nodejs_compat"\]/);
   assert.match(workerConfig, /"workflows"/);
+  assert.equal(workerConfig.match(/"concurrency":\s*\{\s*"limit": 4\s*\}/g)?.length, 2);
   assert.match(workerConfig, /"r2_buckets"/);
+  assert.match(workflowCore, /const SEC_NODE_CONCURRENCY = 2;/);
+  assert.match(workflowCore, /mapWithConcurrency\(plan\.nodes, SEC_NODE_CONCURRENCY,/);
   assert.doesNotMatch(workerConfig, /SEC_TRACKED_TICKERS/);
   // The whitelist has one home, the Web Worker; the Pipeline reads it over the bridge.
   assert.match(core, /\/api\/internal\/sec\/watchlist/);

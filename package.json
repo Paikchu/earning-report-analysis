@@ -41,7 +41,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
-    "@cloudflare/workers-types": "4.20260702.1",
+    "@cloudflare/workers-types": "5.20260830.1",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
@@ -56,7 +56,7 @@
     "typescript": "5.9.3",
     "vinext": "0.0.50",
     "vite": "8.0.13",
-    "wrangler": "4.92.0"
+    "wrangler": "4.127.1"
   },
   "type": "module"
 }
