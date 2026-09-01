@@ -137,10 +137,10 @@ export type FundamentalSeriesVisual = {
 };
 
 const SERIES_VISUALS: readonly FundamentalSeriesVisual[] = [
-  { color: "#9f3528", dashArray: undefined, pointShape: "circle", barPattern: "solid" },
-  { color: "#1e5b70", dashArray: "8 5", pointShape: "square", barPattern: "diagonal" },
-  { color: "#5a4e8c", dashArray: "2 4", pointShape: "diamond", barPattern: "dots" },
-  { color: "#3f6449", dashArray: "12 4 2 4", pointShape: "triangle", barPattern: "cross" },
+  { color: "#004961", dashArray: undefined, pointShape: "circle", barPattern: "solid" },
+  { color: "#0088b0", dashArray: "8 5", pointShape: "square", barPattern: "diagonal" },
+  { color: "#aa0b56", dashArray: "2 4", pointShape: "diamond", barPattern: "dots" },
+  { color: "#8a6a2e", dashArray: "12 4 2 4", pointShape: "triangle", barPattern: "cross" },
 ] as const;
 
 export class FundamentalChartSpecError extends Error {

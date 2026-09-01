@@ -660,9 +660,9 @@ function ChartPatterns({ patternId }: { patternId: string }) {
         return (
           <pattern key={pattern} id={`${patternId}-${pattern}`} width="8" height="8" patternUnits="userSpaceOnUse">
             <rect width="8" height="8" fill={color} opacity="0.9" />
-            {pattern === "diagonal" ? <path d="M-2 2 L2 -2 M0 8 L8 0 M6 10 L10 6" stroke="#f3ecdf" strokeWidth="1.4" opacity="0.72" /> : null}
-            {pattern === "dots" ? <circle cx="4" cy="4" r="1.4" fill="#f3ecdf" opacity="0.78" /> : null}
-            {pattern === "cross" ? <path d="M4 0 V8 M0 4 H8" stroke="#f3ecdf" strokeWidth="1" opacity="0.7" /> : null}
+            {pattern === "diagonal" ? <path d="M-2 2 L2 -2 M0 8 L8 0 M6 10 L10 6" stroke="var(--paper)" strokeWidth="1.4" opacity="0.72" /> : null}
+            {pattern === "dots" ? <circle cx="4" cy="4" r="1.4" fill="var(--paper)" opacity="0.78" /> : null}
+            {pattern === "cross" ? <path d="M4 0 V8 M0 4 H8" stroke="var(--paper)" strokeWidth="1" opacity="0.7" /> : null}
           </pattern>
         );
       })}
@@ -684,15 +684,15 @@ function PointShape({
   size: number;
 }) {
   if (shape === "square") {
-    return <rect x={x - size} y={y - size} width={size * 2} height={size * 2} fill="#f3ecdf" stroke={color} strokeWidth="2" />;
+    return <rect x={x - size} y={y - size} width={size * 2} height={size * 2} fill="var(--paper)" stroke={color} strokeWidth="2" />;
   }
   if (shape === "diamond") {
-    return <path d={`M${x},${y - size - 0.5} L${x + size + 0.5},${y} L${x},${y + size + 0.5} L${x - size - 0.5},${y} Z`} fill="#f3ecdf" stroke={color} strokeWidth="2" />;
+    return <path d={`M${x},${y - size - 0.5} L${x + size + 0.5},${y} L${x},${y + size + 0.5} L${x - size - 0.5},${y} Z`} fill="var(--paper)" stroke={color} strokeWidth="2" />;
   }
   if (shape === "triangle") {
-    return <path d={`M${x},${y - size - 1} L${x + size + 1},${y + size} L${x - size - 1},${y + size} Z`} fill="#f3ecdf" stroke={color} strokeWidth="2" />;
+    return <path d={`M${x},${y - size - 1} L${x + size + 1},${y + size} L${x - size - 1},${y + size} Z`} fill="var(--paper)" stroke={color} strokeWidth="2" />;
   }
-  return <circle cx={x} cy={y} r={size} fill="#f3ecdf" stroke={color} strokeWidth="2" />;
+  return <circle cx={x} cy={y} r={size} fill="var(--paper)" stroke={color} strokeWidth="2" />;
 }
 
 function BarLegendSwatch({ visual }: { visual: FundamentalSeriesVisual }) {
@@ -700,16 +700,16 @@ function BarLegendSwatch({ visual }: { visual: FundamentalSeriesVisual }) {
     <g>
       <rect x="5" y="2" width="16" height="12" rx="1" fill={visual.color} stroke={visual.color} />
       {visual.barPattern === "diagonal" ? (
-        <path d="M5 12 L15 2 M11 14 L21 4" stroke="#f3ecdf" strokeWidth="1.2" />
+        <path d="M5 12 L15 2 M11 14 L21 4" stroke="var(--paper)" strokeWidth="1.2" />
       ) : null}
       {visual.barPattern === "dots" ? (
         <>
-          <circle cx="10" cy="6" r="1.2" fill="#f3ecdf" />
-          <circle cx="17" cy="10" r="1.2" fill="#f3ecdf" />
+          <circle cx="10" cy="6" r="1.2" fill="var(--paper)" />
+          <circle cx="17" cy="10" r="1.2" fill="var(--paper)" />
         </>
       ) : null}
       {visual.barPattern === "cross" ? (
-        <path d="M13 2 V14 M5 8 H21" stroke="#f3ecdf" strokeWidth="1" />
+        <path d="M13 2 V14 M5 8 H21" stroke="var(--paper)" strokeWidth="1" />
       ) : null}
     </g>
   );

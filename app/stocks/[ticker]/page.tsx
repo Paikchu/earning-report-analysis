@@ -3,6 +3,7 @@ import { SiteHeader } from "@/app/site-header";
 import { findSecurity } from "@/lib/site-data";
 import { normalizeTrackedTicker } from "@/lib/sec-config";
 import { SecFilingsSection } from "@/app/positions/[ticker]/SecFilingsSection";
+import { BusinessOutlook } from "./BusinessOutlook";
 import { FundamentalCharts } from "./FundamentalCharts";
 import {
   hasExplicitFundamentalPageState,
@@ -32,20 +33,22 @@ export default async function StockPage({
     <div className="sec-app-shell stock-analysis-shell">
       <SiteHeader initialQuery={security?.symbol ?? ticker} />
       <main className="stock-analysis-page">
-        <header className="stock-analysis-header">
-          <span>{ticker}</span>
-          <h1>{security?.name ?? ticker}</h1>
-          <p>季度基本面与公司原始披露，在同一时间线上交叉阅读。</p>
-        </header>
         <div className="stock-analysis-grid">
-          <FundamentalCharts
-            ticker={ticker}
-            companyName={security?.name ?? ticker}
-            initialState={initialState}
-            initialPreferenceSource={initialPreferenceSource}
-          />
+          <div className="stock-analysis-primary">
+            <header className="stock-analysis-header">
+              <h1>{security?.name ?? ticker}</h1>
+              <span>{ticker}{security?.exchange ? ` · ${security.exchange}` : ""}</span>
+            </header>
+            <BusinessOutlook ticker={ticker} />
+            <FundamentalCharts
+              ticker={ticker}
+              companyName={security?.name ?? ticker}
+              initialState={initialState}
+              initialPreferenceSource={initialPreferenceSource}
+            />
+          </div>
           <div className="stock-analysis-filings">
-            <SecFilingsSection ticker={ticker} />
+            <SecFilingsSection ticker={ticker} title="披露时间线" />
           </div>
         </div>
       </main>

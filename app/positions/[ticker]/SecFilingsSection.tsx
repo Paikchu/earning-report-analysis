@@ -11,7 +11,7 @@ const expandEase = [0.22, 1, 0.36, 1] as const;
 
 type Page = { filings: PublicSecFiling[]; nextCursor: string | null; checkedAt: string | null };
 
-export function SecFilingsSection({ ticker }: { ticker: string }) {
+export function SecFilingsSection({ ticker, title = "SEC 文件与 AI 解读" }: { ticker: string; title?: string }) {
   const [filings, setFilings] = useState<PublicSecFiling[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [checkedAt, setCheckedAt] = useState<string | null>(null);
@@ -68,7 +68,7 @@ export function SecFilingsSection({ ticker }: { ticker: string }) {
   return (
     <section className="sec-filings-section" id="sec-filings" aria-labelledby="sec-filings-title">
       <div className="detail-section-heading">
-        <h2 id="sec-filings-title">SEC 文件与 AI 解读</h2>
+        <h2 id="sec-filings-title">{title}</h2>
         {checkedAt && <span className="sec-updated">最近检查 {formatDateTime(checkedAt)}</span>}
       </div>
       {status === "loading" && <p className="sec-state" role="status">正在读取 SEC 文件…</p>}
