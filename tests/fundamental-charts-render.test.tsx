@@ -124,7 +124,7 @@ test("line mode forces the shared renderer to draw line marks", () => {
   assert.doesNotMatch(html, /class="fundamental-chart__bar"/);
 });
 
-test("capital-intensive preset renders a protected second chart without changing user controls", () => {
+test("capital-intensive preset keeps capex on the single core chart without changing user controls", () => {
   const data = makeChartResponse([
     makeChartSeries("total_revenue", [100, 110, 120, 130, 140, 150]),
     makeChartSeries("gross_margin", [40, 41, 42, 41, 40, 39]),
@@ -145,12 +145,12 @@ test("capital-intensive preset renders a protected second chart without changing
     />,
   );
 
-  assert.equal((html.match(/data-chart-role="fundamental-chart"/g) ?? []).length, 2);
+  assert.equal((html.match(/data-chart-role="fundamental-chart"/g) ?? []).length, 1);
   assert.match(html, /data-presentation-source="preset"/);
   assert.match(html, /data-company-classification="capital_intensive"/);
-  assert.match(html, /投入强度与现金流/);
+  assert.match(html, /增长、盈利质量与资本开支/);
   assert.match(html, /资本开支/);
-  assert.match(html, /规则预设 · 2 图/);
+  assert.match(html, /规则预设 · 1 图/);
   assert.match(html, /自定义叠加（操作后接管）/);
   assert.equal((html.match(/data-chart-role="metric-selector"/g) ?? []).length, 1);
 });

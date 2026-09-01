@@ -17,7 +17,9 @@ import type { PublicFundamentalsResponse } from "./fundamentals-api.ts";
 export const FUNDAMENTAL_CHART_PLAN_SCHEMA_VERSION = "fundamental-chart-plan.v1";
 export const FUNDAMENTAL_COMPANY_PROFILE_VERSION = "fundamental-company-profile.v1";
 export const FUNDAMENTAL_PRESET_VERSION = "fundamental-preset.v1";
-export const FUNDAMENTAL_CHART_PLAN_MAX_CHARTS = 2;
+// A plan is exactly one chart. Rules fold what they want emphasised into that
+// chart (see buildCoreChart) instead of ever handing the page a second panel.
+export const FUNDAMENTAL_CHART_PLAN_CHART_COUNT = 1;
 export const FUNDAMENTAL_CHART_PLAN_PERIOD_OPTIONS = [5, 8, 12] as const;
 
 export type FundamentalCompanyClassification =
@@ -65,7 +67,7 @@ export type FundamentalChartPlan = {
   ticker: string;
   inputDataHash: string;
   provenance: FundamentalChartPlanProvenance;
-  charts: FundamentalChartPlanChart[];
+  charts: readonly [FundamentalChartPlanChart];
 };
 
 export type FundamentalChartPlanIssue = {
@@ -77,7 +79,6 @@ export type FundamentalChartPlanIssue = {
     | "STALE_INPUT_DATA"
     | "MISSING_PROVENANCE"
     | "CHART_COUNT"
-    | "DUPLICATE_CHART"
     | "INVALID_CHART"
     | "INVALID_SERIES"
     | "UNAVAILABLE_METRIC"
@@ -138,8 +139,8 @@ export const FUNDAMENTAL_AI_CHART_PLAN_JSON_SCHEMA = Object.freeze({
     promptVersion: { type: "string", minLength: 1, maxLength: 80 },
     charts: {
       type: "array",
-      minItems: 1,
-      maxItems: FUNDAMENTAL_CHART_PLAN_MAX_CHARTS,
+      minItems: FUNDAMENTAL_CHART_PLAN_CHART_COUNT,
+      maxItems: FUNDAMENTAL_CHART_PLAN_CHART_COUNT,
       items: {
         type: "object",
         additionalProperties: false,
@@ -258,29 +259,21 @@ export function validateAiFundamentalChartPlan(
   }
 
   const rawCharts = Array.isArray(candidate.charts) ? candidate.charts : [];
-  if (rawCharts.length < 1 || rawCharts.length > FUNDAMENTAL_CHART_PLAN_MAX_CHARTS) {
+  if (rawCharts.length !== FUNDAMENTAL_CHART_PLAN_CHART_COUNT) {
     issues.push({
       code: "CHART_COUNT",
       path: "$.charts",
-      message: `ChartPlan 必须包含 1–${FUNDAMENTAL_CHART_PLAN_MAX_CHARTS} 张图。`,
+      message: `ChartPlan 必须且只能包含 ${FUNDAMENTAL_CHART_PLAN_CHART_COUNT} 张图。`,
     });
   }
-  const chartIds = new Set<string>();
-  const charts: FundamentalChartPlanChart[] = [];
-  rawCharts.slice(0, FUNDAMENTAL_CHART_PLAN_MAX_CHARTS).forEach((rawChart, chartIndex) => {
-    const path = `$.charts[${chartIndex}]`;
-    const chart = parseChart(rawChart, path, data, issues);
-    if (!chart) return;
-    if (chartIds.has(chart.id)) {
-      issues.push({ code: "DUPLICATE_CHART", path: `${path}.id`, message: `图表 id 重复：${chart.id}` });
-      return;
-    }
-    chartIds.add(chart.id);
-    charts.push(chart);
-  });
+  // A surplus chart is rejected outright rather than truncated: a model that asked
+  // for two panels planned against a layout this page does not have, so fall back.
+  const chart = rawCharts.length === FUNDAMENTAL_CHART_PLAN_CHART_COUNT
+    ? parseChart(rawCharts[0], "$.charts[0]", data, issues)
+    : null;
 
   for (const metricKey of profile.guardrailMetrics) {
-    if (!charts.some((chart) => chart.series.some((series) => series.metricKey === metricKey))) {
+    if (!chart?.series.some((series) => series.metricKey === metricKey)) {
       issues.push({
         code: "MISSING_GUARDRAIL_METRIC",
         path: "$.charts",
@@ -288,7 +281,7 @@ export function validateAiFundamentalChartPlan(
       });
     }
   }
-  if (issues.length > 0 || !modelVersion || !promptVersion) return invalid(issues);
+  if (issues.length > 0 || !modelVersion || !promptVersion || !chart) return invalid(issues);
 
   return {
     ok: true,
@@ -298,7 +291,7 @@ export function validateAiFundamentalChartPlan(
       ticker: data.ticker,
       inputDataHash: data.dataVersion,
       provenance: { kind: "ai", modelVersion, promptVersion },
-      charts,
+      charts: [chart],
     },
   };
 }
@@ -311,41 +304,11 @@ export function buildDeterministicFundamentalChartPlan(
     throw new Error("Cannot build a deterministic chart plan without ready fundamentals data.");
   }
   const periodCount = normalizePlanPeriodCount(data.requestedPeriodCount);
-  const charts: FundamentalChartPlanChart[] = [buildCoreChart(data, periodCount)];
-
-  if (profile.classification === "capital_intensive" && availableSeries(data, "capital_expenditure")) {
-    const series: FundamentalChartPlanSeries[] = [
-      { metricKey: "capital_expenditure", mark: "bar", transform: "value", axis: "left" },
-    ];
-    if (availableSeries(data, "free_cash_flow")) {
-      series.push({ metricKey: "free_cash_flow", mark: "line", transform: "value", axis: "left" });
-    } else if (availableSeries(data, "operating_cash_flow")) {
-      series.push({ metricKey: "operating_cash_flow", mark: "line", transform: "value", axis: "left" });
-    }
-    charts.push({
-      id: "investment-cash-flow",
-      title: "投入强度与现金流",
-      insight: "资本开支强度或最近季度变化触发确定性展示，不由模型省略。",
-      periodCount,
-      series,
-    });
-  } else if (
-    profile.classification === "growth_investing"
-    && availableSeries(data, "research_and_development")
-  ) {
-    const series: FundamentalChartPlanSeries[] = [
-      { metricKey: "research_and_development", mark: "bar", transform: "value", axis: "left" },
-    ];
-    if (availableSeries(data, "operating_income")) {
-      series.push({ metricKey: "operating_income", mark: "line", transform: "value", axis: "left" });
-    }
-    charts.push({
-      id: "research-operating-leverage",
-      title: "研发投入与经营杠杆",
-      insight: "研发强度达到规则阈值，补充观察投入能否转化为营业利润。",
-      periodCount,
-      series,
-    });
+  // Whatever the rules want emphasised rides the core chart, so the preset always
+  // opens on exactly one panel instead of splitting for a single extra series.
+  const emphasisMetrics: FundamentalMetricKey[] = [...profile.guardrailMetrics];
+  if (profile.classification === "growth_investing") {
+    emphasisMetrics.push("research_and_development");
   }
 
   return {
@@ -353,7 +316,7 @@ export function buildDeterministicFundamentalChartPlan(
     ticker: data.ticker,
     inputDataHash: data.dataVersion,
     provenance: { kind: "preset", presetVersion: FUNDAMENTAL_PRESET_VERSION },
-    charts: charts.slice(0, FUNDAMENTAL_CHART_PLAN_MAX_CHARTS),
+    charts: [buildCoreChart(data, periodCount, emphasisMetrics)],
   };
 }
 
@@ -507,6 +470,7 @@ function parseSeries(
 function buildCoreChart(
   data: PublicFundamentalsResponse,
   periodCount: FundamentalChartPlanChart["periodCount"],
+  emphasisMetrics: readonly FundamentalMetricKey[] = [],
 ): FundamentalChartPlanChart {
   const series: FundamentalChartPlanSeries[] = [];
   if (availableSeries(data, "total_revenue")) {
@@ -527,12 +491,45 @@ function buildCoreChart(
       axis: "left",
     });
   }
+
+  // Capex and R&D are currency like revenue, so an emphasis metric joins the axis
+  // the core chart already draws instead of earning a chart of its own.
+  const merged = [...series];
+  const emphasisLabels: string[] = [];
+  for (const metricKey of emphasisMetrics) {
+    const source = data.series.find((candidate) => candidate.metricKey === metricKey);
+    if (!source?.available) continue;
+    if (merged.some((existing) => existing.metricKey === metricKey)) continue;
+    // Axis stays unset: a same-unit metric lands on the axis its unit already owns,
+    // and only a genuinely different unit is pushed to the opposite side.
+    const candidate: FundamentalChartPlanSeries = {
+      metricKey,
+      mark: source.defaultMark,
+      transform: "value",
+    };
+    try {
+      buildFundamentalChartModel(
+        sliceFundamentalsForChart(data, periodCount).periods,
+        data.series,
+        [...merged, candidate],
+      );
+      merged.push(candidate);
+      emphasisLabels.push(source.label);
+    } catch {
+      // The axis or series budget cannot take this metric. Keep the core chart
+      // renderable rather than emitting a spec the chart model would reject.
+    }
+  }
+
+  const emphasis = emphasisLabels.join("、");
   return {
     id: "core-growth-quality",
-    title: "增长与盈利质量",
-    insight: "用营收规模与利润率共同判断增长是否带来更好的经营质量。",
+    title: emphasis ? `增长、盈利质量与${emphasis}` : "增长与盈利质量",
+    insight: emphasis
+      ? `营收与利润率判断增长质量；${emphasis}按规则并入同一张图，单位相同即共用一条轴。`
+      : "用营收规模与利润率共同判断增长是否带来更好的经营质量。",
     periodCount,
-    series,
+    series: merged,
   };
 }
 

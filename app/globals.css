@@ -3001,7 +3001,6 @@ td { font-size: 14px; }
 
 .fundamentals-workbench__chart { min-width: 0; grid-area: chart; scroll-margin-top: 16px; outline: none; }
 .fundamentals-workbench__chart-stack { min-width: 0; display: grid; gap: 34px; }
-.fundamentals-workbench__chart-stack .fundamental-chart + .fundamental-chart { padding-top: 28px; border-top: 1px solid var(--ink); }
 .fundamentals-workbench__selector { min-width: 0; padding-top: 12px; grid-area: selector; }
 .fundamentals-workbench__selector .fundamental-metric-selector { padding-top: 0; border-top: 0; }
 .fundamentals-workbench__selector .fundamental-metric-selector legend { font: 600 12px/1 var(--serif); }

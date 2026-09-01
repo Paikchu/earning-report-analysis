@@ -570,21 +570,21 @@ function ChartPanel({
   }
 
   if (presentation && data.status === "ready") {
+    // A plan carries exactly one chart, so this reads the chart instead of mapping
+    // a list the type no longer allows to grow.
+    const [plannedChart] = presentation.plan.charts;
     return (
       <div
         className="fundamentals-workbench__chart-stack"
         data-presentation-source={presentation.source}
         data-company-classification={presentation.profile.classification}
       >
-        {presentation.plan.charts.map((plannedChart) => (
-          <FundamentalComboChart
-            key={plannedChart.id}
-            title={plannedChart.title}
-            description={plannedChart.insight}
-            data={sliceFundamentalsForChart(data, plannedChart.periodCount)}
-            series={plannedChart.series}
-          />
-        ))}
+        <FundamentalComboChart
+          title={plannedChart.title}
+          description={plannedChart.insight}
+          data={sliceFundamentalsForChart(data, plannedChart.periodCount)}
+          series={plannedChart.series}
+        />
       </div>
     );
   }
