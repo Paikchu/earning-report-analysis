@@ -14,7 +14,7 @@ import {
   makePendingChartResponse,
 } from "./fixtures/fundamental-chart.ts";
 
-test("combo chart renders semantic SVG, redundant encodings, keyboard targets, status, and data table", () => {
+test("combo chart renders semantic SVG, redundant encodings, keyboard targets, and status", () => {
   const data = makeChartResponse();
   const html = renderToStaticMarkup(
     <FundamentalComboChart
@@ -36,12 +36,11 @@ test("combo chart renders semantic SVG, redundant encodings, keyboard targets, s
   assert.match(html, /data-axis-side="right"/);
   assert.match(html, /data-zero-axis="right"/);
   assert.equal((html.match(/data-period-end=/g) ?? []).length, 6);
-  assert.equal((html.match(/tabindex="0"/g) ?? []).length, 7);
+  assert.equal((html.match(/tabindex="0"/g) ?? []).length, 6);
   assert.equal((html.match(/role="button"/g) ?? []).length, 6);
   assert.match(html, /stroke-dasharray="/);
   assert.match(html, /<pattern/);
-  assert.match(html, /data-chart-role="data-table"/);
-  assert.match(html, /<caption class="sr-only">图表中的季度基本面数据<\/caption>/);
+  assert.doesNotMatch(html, /data-chart-role="data-table"/);
   assert.match(html, /数据待更新/);
   assert.match(html, /部分数据/);
   assert.match(html, /来源：Yahoo Finance/);

@@ -24,8 +24,6 @@ import {
   buildFundamentalChartModel,
   buildFundamentalChartTooltip,
   formatFundamentalAxisTick,
-  formatFundamentalChartValue,
-  formatFundamentalPeriod,
   fundamentalSeriesAxisKey,
   getFundamentalSeriesVisual,
   linePath,
@@ -42,7 +40,6 @@ export type FundamentalChartRendererProps = {
   description?: string;
   data: PublicFundamentalsResponse;
   series: readonly FundamentalChartSeriesSpec[];
-  showDataTable?: boolean;
   className?: string;
 };
 
@@ -61,7 +58,6 @@ export function FundamentalChartRenderer({
   description,
   data,
   series,
-  showDataTable = true,
   className,
 }: FundamentalChartRendererProps) {
   const titleId = useId();
@@ -111,7 +107,6 @@ export function FundamentalChartRenderer({
     return (
       <ChartFrame className={className} title={title} description={description}>
         <ChartMessage title="暂无可绘制数据" detail="所选指标在这些报告期内均为空。可更换指标或扩大报告期范围。" />
-        {showDataTable ? <FundamentalChartDataTable model={model} /> : null}
         <ChartSource data={data} />
       </ChartFrame>
     );
@@ -142,7 +137,6 @@ export function FundamentalChartRenderer({
           ? "可使用 Tab 键依次查看每个报告期的数据。"
           : buildFundamentalChartTooltip(model, activePeriodIndex).accessibleLabel}
       </p>
-      {showDataTable ? <FundamentalChartDataTable model={model} /> : null}
       <ChartSource data={data} />
     </figure>
   );
@@ -608,35 +602,6 @@ function ChartTooltip({
         );
       })}
     </g>
-  );
-}
-
-function FundamentalChartDataTable({ model }: { model: FundamentalChartModel }) {
-  return (
-    <details className="fundamental-chart__table" data-chart-role="data-table">
-      <summary>查看数据表</summary>
-      <div className="fundamental-chart__table-scroll" tabIndex={0}>
-        <table>
-          <caption className="sr-only">图表中的季度基本面数据</caption>
-          <thead>
-            <tr>
-              <th scope="col">指标</th>
-              {model.periods.map((period) => <th scope="col" key={period.periodEnd}>{formatFundamentalPeriod(period.periodEnd)}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {model.series.map((series) => (
-              <tr key={series.id}>
-                <th scope="row">{series.label}</th>
-                {series.points.map((point) => (
-                  <td key={point.periodEnd}>{formatFundamentalChartValue(point.value, series)}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </details>
   );
 }
 
