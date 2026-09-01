@@ -94,27 +94,27 @@
 .fundamental-chart__status [data-status="partial"] { color: var(--vermilion); }
 
 .fundamental-chart__legend {
-  margin: 18px 0 4px;
-  padding: 0;
+  margin: 0;
+  padding: 14px 0 4px;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 20px;
+  gap: 6px 18px;
   list-style: none;
 }
 
 .fundamental-chart__legend li {
-  min-height: 28px;
+  min-height: 24px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  color: var(--ink-soft);
-  font-size: 12px;
-  font-weight: 650;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .fundamental-chart__legend svg { flex: 0 0 auto; overflow: visible; }
-.fundamental-chart__legend small { color: var(--ink-muted); font-size: 10px; font-weight: 650; }
+.fundamental-chart__legend small { color: var(--ink-muted); font-size: 11px; font-weight: 500; }
 
 .fundamental-chart__viewport {
   width: 100%;
@@ -1889,15 +1889,24 @@ td { font-size: 14px; }
   font-size: 12px;
 }
 .sec-filing-list { margin-top: 16px; border-top: 1px solid var(--ink); }
-.sec-filing-card { border-bottom: 1px solid var(--paper-deep); }
+/* Timeline row: a right-aligned date column, the rail itself (drawn as the
+   card's ::before so it runs through the expanded panel too), then the entry.
+   The three track widths derive from one pair of variables so the row, the
+   rail, the dot and the expanded panel can never drift apart. */
+.sec-filing-card {
+  --timeline-date: 86px;
+  --timeline-gap: 20px;
+  --timeline-rail: calc(var(--timeline-date) + var(--timeline-gap));
+  --timeline-body: calc(var(--timeline-rail) + 1px + var(--timeline-gap));
+  border-bottom: 1px solid var(--paper-deep);
+}
 .sec-filing-card > button {
   width: 100%;
-  min-height: 68px;
-  padding: 13px 4px;
+  padding: 15px 4px 15px 0;
   display: grid;
-  grid-template-columns: 66px 108px minmax(0, 1fr) 20px;
-  align-items: center;
-  gap: 14px;
+  grid-template-columns: var(--timeline-date) minmax(0, 1fr);
+  align-items: start;
+  column-gap: calc(var(--timeline-gap) * 2 + 1px);
   color: var(--ink);
   border: 0;
   background: transparent;
@@ -1936,12 +1945,15 @@ td { font-size: 14px; }
 .sec-form-badge[data-form="11-K"] { background: #4a4a6e; }
 .sec-form-badge[data-form="13F-HR"],
 .sec-form-badge[data-form="13F"] { background: #4a6e6b; }
-.sec-filing-date,
-.sec-filing-description { min-width: 0; display: grid; gap: 5px; }
-.sec-filing-date strong,
-.sec-filing-description strong { overflow: hidden; font: 600 12px/1.2 var(--serif); text-overflow: ellipsis; white-space: nowrap; }
-.sec-filing-date small,
-.sec-filing-description small { color: var(--ink-muted); font-size: 12px; }
+.sec-filing-date { min-width: 0; display: grid; gap: 3px; text-align: right; }
+.sec-filing-date strong { overflow: hidden; font: 600 15px/1.2 var(--serif); font-variant-numeric: tabular-nums lining-nums; text-overflow: ellipsis; white-space: nowrap; }
+.sec-filing-date small { color: var(--ink-muted); font-size: 12px; }
+.sec-filing-entry { min-width: 0; display: grid; gap: 6px; }
+.sec-filing-meta { min-width: 0; display: flex; align-items: baseline; gap: 10px; }
+.sec-filing-meta small { min-width: 0; overflow: hidden; color: var(--ink-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.sec-filing-meta .sec-disclosure { flex: 0 0 auto; margin-left: auto; align-self: center; }
+.sec-filing-headline { font: 600 16px/1.5 var(--serif); letter-spacing: -.01em; text-wrap: pretty; }
+.sec-filing-headline[data-pending="true"] { color: var(--ink-muted); font-weight: 500; }
 .sec-disclosure {
   position: relative;
   width: 14px;
@@ -1962,7 +1974,7 @@ td { font-size: 14px; }
 .sec-disclosure i:last-child { transform: translate(-50%, -50%) rotate(90deg); }
 .sec-filing-card.is-open .sec-disclosure i:last-child { transform: translate(-50%, -50%) rotate(90deg) scaleX(0); }
 .sec-filing-panel { overflow: hidden; }
-.sec-filing-body { padding: 3px 4px 20px 188px; }
+.sec-filing-body { padding: 3px 4px 22px var(--timeline-body); }
 .sec-filing-body > a { min-height: 44px; display: inline-flex; align-items: center; color: var(--ink-muted); font-size: 12px; text-decoration: none; }
 .sec-filing-body > a:hover { color: var(--ink); }
 .sec-summary { display: grid; gap: 14px; }
@@ -1974,17 +1986,23 @@ td { font-size: 14px; }
 .sec-summary li[data-importance="low"] i { background: var(--paper-deep); }
 .sec-summary li span { color: var(--ink-soft); font-size: 14px; line-height: 1.6; }
 .sec-summary li strong { margin-right: 7px; color: var(--ink); }
-.sec-analysis-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.sec-analysis-metric { min-width: 0; padding: 10px 0; border-top: 1px solid var(--paper-deep); display: grid; gap: 4px; }
-.sec-analysis-metric span { color: var(--ink-muted); font-size: 12px; letter-spacing: .04em; }
-.sec-analysis-metric strong { overflow: hidden; font: 600 18px/1.15 var(--serif); text-overflow: ellipsis; white-space: nowrap; }
-.sec-analysis-metric small { color: var(--ink-muted); font-size: 12px; line-height: 1.4; }
+.sec-analysis-metrics { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 2px 20px; }
+.sec-analysis-metric { min-width: 0; padding: 9px 0; border-top: 1px solid var(--paper-deep); display: grid; gap: 3px; }
+.sec-analysis-metric dt { color: var(--ink-muted); font-size: 12px; letter-spacing: .02em; }
+.sec-analysis-metric dd { margin: 0; min-width: 0; display: grid; gap: 3px; }
+.sec-analysis-metric strong { overflow: hidden; font: 600 17px/1.15 var(--serif); font-variant-numeric: tabular-nums lining-nums; text-overflow: ellipsis; white-space: nowrap; }
+.sec-analysis-metric small { color: var(--ink-muted); font-size: 11px; line-height: 1.4; }
 .sec-analysis-changes { margin: 0; padding: 8px 0 0; border-top: 1px solid var(--paper-deep); display: grid; gap: 10px; list-style: none; }
 .sec-analysis-changes li { display: grid; grid-template-columns: 7px minmax(0, 1fr); align-items: start; gap: 9px; }
 .sec-analysis-changes li i { width: 5px; height: 5px; margin-top: 6px; background: var(--color-loss); border-radius: 50%; }
 .sec-analysis-changes li span { color: var(--ink-soft); font-size: 14px; line-height: 1.6; }
 .sec-analysis-changes li strong { margin-right: 7px; color: var(--ink); }
-.sec-analysis-warning { margin: 0; color: var(--color-loss); font-size: 12px; line-height: 1.5; }
+/* Data-quality notes are provenance, not findings: keep them reachable without
+   letting two paragraphs of red type outweigh the filing's own headline. */
+.sec-analysis-quality { margin: 0; }
+.sec-analysis-quality > summary { width: fit-content; min-height: 28px; display: flex; align-items: center; color: var(--ink-muted); font-size: 12px; cursor: pointer; }
+.sec-analysis-quality > summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.sec-analysis-warning { margin: 6px 0 0; color: var(--ink-muted); font-size: 12px; line-height: 1.55; }
 .sec-analyst-view {
   margin: 0;
   padding: 13px 14px;
@@ -2528,9 +2546,8 @@ td { font-size: 14px; }
   .ownership-metrics { grid-template-columns: 1fr; gap: 0; }
   .ownership-metric { padding: 11px 0 11px 12px; border-bottom: 1px solid var(--paper-deep); }
   .ownership-metric:last-child { border-bottom: 0; }
-  .sec-filing-card > button { grid-template-columns: 60px minmax(0, 1fr) 18px; gap: 10px; }
-  .sec-filing-date { display: none; }
-  .sec-filing-body { padding-left: 4px; }
+  .sec-filing-card { --timeline-date: 56px; --timeline-gap: 12px; }
+  .sec-filing-date strong { font-size: 13px; }
   .detail-section-heading { align-items: flex-start; flex-direction: column; gap: 9px; }
   .sec-analysis-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sec-report-shell { width: calc(100% - 24px); padding-top: 16px; }
@@ -2708,8 +2725,13 @@ td { font-size: 14px; }
    data surfaces while sharing one reading canvas. Color/type tokens now live
    in :root (site-wide); this block only holds this page's own layout, like
    the wider shell and the compact header variant. */
+/* 1600px of content inside a 72px gutter on each side, per the redesign: the
+   shell carries the gutter as padding so the header rule and both columns share
+   one margin instead of the page bleeding to the window edge. */
 .stock-analysis-shell {
-  width: min(1600px, calc(100% - 48px));
+  width: min(1744px, 100%);
+  padding-inline: clamp(22px, 4.5vw, 72px);
+  box-sizing: border-box;
   background: var(--paper);
 }
 
@@ -2720,7 +2742,7 @@ td { font-size: 14px; }
 .stock-analysis-shell .sec-search-form kbd { color: var(--color-profit); border-color: var(--hairline); font-weight: 700; }
 .stock-analysis-shell .sec-search-results { border-color: var(--ink); background: var(--paper); }
 
-.stock-analysis-page { padding: 40px 0 100px; }
+.stock-analysis-page { padding: 36px 0 64px; }
 
 .stock-analysis-header {
   min-height: 56px;
@@ -2770,7 +2792,7 @@ td { font-size: 14px; }
   display: grid;
   grid-template-columns: minmax(0, 1fr) 520px;
   gap: clamp(32px, 4vw, 72px);
-  align-items: start;
+  align-items: stretch;
 }
 
 .stock-analysis-primary { min-width: 0; display: flex; flex-direction: column; }
@@ -2834,36 +2856,39 @@ td { font-size: 14px; }
 .fundamentals-workbench { padding-top: 34px; scroll-margin-top: 20px; }
 
 .fundamentals-workbench__header {
-  min-height: 74px;
+  min-height: 56px;
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 20px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--ink);
 }
 
+.fundamentals-workbench__title { min-width: 0; display: flex; align-items: baseline; gap: 14px; }
+.fundamentals-workbench__header-actions { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 14px; }
+
 .fundamentals-workbench__eyebrow {
-  display: block;
-  margin-bottom: 9px;
-  color: var(--color-loss);
+  color: var(--ink-muted);
   font-size: 10px;
   font-weight: 750;
   letter-spacing: .11em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .fundamentals-workbench__header h2 {
   margin: 0;
-  font: 600 clamp(25px, 2.2vw, 32px)/1.05 var(--serif);
-  letter-spacing: -.02em;
+  font: 600 25px/1 var(--serif);
+  letter-spacing: -.018em;
 }
 
-.fundamentals-workbench__header p {
-  max-width: 540px;
-  margin: 8px 0 0;
-  color: var(--ink-muted);
-  font-size: 11px;
-  line-height: 1.5;
-}
+.fundamentals-workbench__period-select { display: inline-flex; align-items: baseline; }
+
+/* Table and chart share one box so switching swaps the contents instead of
+   moving everything below it. The app's chart panel is taller than the 430px
+   the design mocks, so 430px is the floor rather than a hard clip. */
+.fundamentals-workbench__frame { min-height: 430px; padding-top: 2px; }
 
 .fundamentals-workbench__request-status {
   min-height: 28px;
@@ -2901,13 +2926,12 @@ td { font-size: 14px; }
 .fundamentals-workbench__presentation-status[data-tone="warning"] { color: #8a4c20; }
 
 .fundamentals-workbench__toolbar {
-  min-height: 54px;
-  padding: 5px 0;
+  min-height: 48px;
+  padding: 3px 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border-top: 1px solid var(--ink);
   border-bottom: 1px solid var(--paper-deep);
 }
 
@@ -2965,20 +2989,37 @@ td { font-size: 14px; }
 
 .fundamentals-workbench__mobile-selector-trigger { display: none; }
 
+/* The overlay picker reads as one strip above the chart, the way the redesign
+   shows it, instead of a full-height sidebar that trebled the section height. */
 .fundamentals-workbench__grid {
   display: grid;
-  grid-template-columns: minmax(148px, 168px) minmax(0, 1fr);
-  grid-template-areas: "selector chart";
-  gap: clamp(18px, 2vw, 28px);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "selector" "chart";
+  gap: 6px;
   align-items: start;
 }
 
 .fundamentals-workbench__chart { min-width: 0; grid-area: chart; scroll-margin-top: 16px; outline: none; }
 .fundamentals-workbench__chart-stack { min-width: 0; display: grid; gap: 34px; }
 .fundamentals-workbench__chart-stack .fundamental-chart + .fundamental-chart { padding-top: 28px; border-top: 1px solid var(--ink); }
-.fundamentals-workbench__selector { min-width: 0; padding-top: 24px; grid-area: selector; }
-.fundamentals-workbench__selector .fundamental-metric-selector__options { grid-template-columns: 1fr; }
-.fundamentals-workbench__selector .fundamental-metric-selector__option { padding-inline: 8px; }
+.fundamentals-workbench__selector { min-width: 0; padding-top: 12px; grid-area: selector; }
+.fundamentals-workbench__selector .fundamental-metric-selector { padding-top: 0; border-top: 0; }
+.fundamentals-workbench__selector .fundamental-metric-selector legend { font: 600 12px/1 var(--serif); }
+.fundamentals-workbench__selector .fundamental-metric-selector__help { display: inline; margin-left: 8px; }
+.fundamentals-workbench__selector .fundamental-metric-selector__options {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fundamentals-workbench__selector .fundamental-metric-selector__option {
+  min-height: 30px;
+  padding: 0 9px;
+  flex: 0 0 auto;
+  gap: 6px;
+  font-size: 11px;
+}
+.fundamentals-workbench__selector .fundamental-metric-selector__option input { width: 13px; height: 13px; }
 
 .fundamentals-workbench__skeleton {
   min-height: 454px;
@@ -3052,24 +3093,16 @@ td { font-size: 14px; }
 .fundamentals-workbench__view-toggle button[aria-pressed="true"] { color: var(--paper); background: var(--ink); }
 .fundamentals-workbench__view-toggle button:focus-visible { outline: 2px solid var(--color-loss); outline-offset: 2px; }
 
-.fundamentals-workbench__table-toolbar {
-  min-height: 44px;
-  padding: 5px 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border-top: 1px solid var(--ink);
-  border-bottom: 1px solid var(--paper-deep);
-}
 .fundamentals-workbench__quarter-select {
-  min-height: 34px;
-  padding: 0 24px 0 8px;
+  min-height: 28px;
+  padding: 0 18px 2px 2px;
   color: var(--ink);
-  border: 1px solid var(--paper-deep);
+  border: 0;
+  border-bottom: 1px solid var(--accent);
   border-radius: 0;
   background: transparent;
   font: 600 13px/1 var(--serif);
+  cursor: pointer;
 }
 .fundamentals-workbench__quarter-select:focus-visible { outline: 2px solid var(--color-loss); outline-offset: 2px; }
 
@@ -3106,12 +3139,31 @@ td { font-size: 14px; }
 .fundamentals-workbench__table-row dd[data-delta="down"] { color: var(--color-loss); }
 .fundamentals-workbench__table-empty { grid-column: 1 / -1; padding: 40px 0; color: var(--ink-muted); font-size: 13px; text-align: center; }
 
+/* Disclosure timeline. The rail is one continuous 1px line placed in the gap
+   between the date column and the entry, so the date can never collide with it
+   and the dot always sits on it. The column stretches to the page height and
+   scrolls inside itself, paging in earlier filings as the reader reaches the
+   end. */
 .stock-analysis-filings {
-  padding-left: clamp(26px, 2.5vw, 40px);
+  --timeline-body: 127px;
+  position: relative;
+  min-height: 640px;
   border-left: 1px solid var(--paper-deep);
 }
-.stock-analysis-filings .sec-filings-section { padding-top: 0; }
+/* Taking the rail out of flow is what makes "as tall as the left column" true:
+   the grid row is then sized by the fundamentals column alone, and the rail
+   fills whatever that comes to and scrolls the overflow. */
+.stock-analysis-filings .sec-filings-section {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-top: 0;
+  padding-left: clamp(26px, 2.5vw, 40px);
+}
 .stock-analysis-filings .detail-section-heading {
+  flex: none;
   min-height: 56px;
   align-items: flex-end;
   padding-bottom: 11px;
@@ -3120,14 +3172,22 @@ td { font-size: 14px; }
 .stock-analysis-filings .detail-section-heading h2 { margin: 0; font: 600 25px/1 var(--serif); letter-spacing: -.018em; }
 .stock-analysis-filings .sec-updated { color: var(--ink-muted); font: 500 11px/1 var(--serif); letter-spacing: .06em; text-transform: uppercase; }
 
-.stock-analysis-filings .sec-filing-list { margin-top: 22px; padding-top: 0; border-top: 0; }
+.stock-analysis-filings .sec-filing-scroll {
+  flex: 1;
+  min-height: 0;
+  padding-top: 22px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.stock-analysis-filings .sec-filing-list { margin-top: 0; padding-top: 0; border-top: 0; }
 .stock-analysis-filings .sec-filing-card { position: relative; border-bottom: 0; }
 .stock-analysis-filings .sec-filing-card::before {
   content: "";
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 188px;
+  left: var(--timeline-rail);
   width: 1px;
   background: var(--hairline);
 }
@@ -3135,47 +3195,73 @@ td { font-size: 14px; }
 .stock-analysis-filings .sec-filing-card::after {
   content: "";
   position: absolute;
-  top: 27px;
-  left: 184px;
+  top: 19px;
+  left: calc(var(--timeline-rail) - 3px);
   width: 7px;
   height: 7px;
   background: var(--ink-muted);
 }
-.stock-analysis-filings .sec-filing-card:first-child::after { top: 25px; left: 183px; width: 9px; height: 9px; background: var(--flag); }
-.stock-analysis-filings .sec-filing-card > button { min-height: 0; padding: 15px 0; grid-template-columns: 66px 108px minmax(0, 1fr) 20px; }
-.stock-analysis-filings .sec-filing-date strong,
-.stock-analysis-filings .sec-filing-description strong { font: 600 13px/1.3 var(--serif); }
+.stock-analysis-filings .sec-filing-card:first-child::after {
+  top: 18px;
+  left: calc(var(--timeline-rail) - 4px);
+  width: 9px;
+  height: 9px;
+  background: var(--flag);
+}
+.stock-analysis-filings .sec-filing-card > button { padding: 15px 0; }
 .stock-analysis-filings .sec-form-badge {
+  flex: 0 0 auto;
   padding: 0;
   color: var(--ink-soft);
   background: transparent;
   font: 600 11px/1 var(--serif);
-  letter-spacing: .1em;
+  letter-spacing: .14em;
   text-transform: uppercase;
 }
 .stock-analysis-filings .sec-filing-card:first-child .sec-form-badge { color: var(--color-loss); }
-.stock-analysis-filings .sec-filing-body { padding-left: 84px; }
+.stock-analysis-filings .sec-filing-card:first-child .sec-filing-headline { font: 600 19px/1.42 var(--serif); letter-spacing: -.012em; }
+.stock-analysis-filings .sec-filing-body { padding-left: var(--timeline-body); }
+
+.stock-analysis-filings .sec-filing-rail-status {
+  margin: 0;
+  padding: 2px 0 8px var(--timeline-body);
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+.stock-analysis-filings .sec-filing-footer {
+  flex: none;
+  min-height: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+}
+.stock-analysis-filings .sec-load-more { margin-top: 0; padding: 8px 14px; font-size: 12px; }
 
 .fundamentals-bottom-sheet { display: none; }
 
 @media (max-width: 1080px) {
-  .stock-analysis-shell { width: min(1180px, calc(100% - 48px)); }
+  .stock-analysis-shell { width: min(1324px, 100%); }
   .stock-analysis-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
-  .stock-analysis-filings { margin-top: 48px; padding-left: 0; border-left: 0; border-top: 1px solid var(--paper-deep); padding-top: 32px; }
-  .stock-analysis-filings .sec-filing-body { padding-left: 188px; }
+  /* Stacked: the rail no longer competes with the chart column, so let it grow
+     with the page instead of filling and scrolling a fixed box. */
+  .stock-analysis-filings { position: static; min-height: 0; margin-top: 48px; border-left: 0; border-top: 1px solid var(--paper-deep); }
+  .stock-analysis-filings .sec-filings-section { position: static; padding-top: 32px; padding-left: 0; }
+  .stock-analysis-filings .sec-filing-scroll { overflow: visible; }
 }
 
 @media (max-width: 700px) {
-  .stock-analysis-shell { width: min(100% - 28px, 1180px); }
-  .stock-analysis-page { padding: 24px 0 74px; }
+  .stock-analysis-shell { width: 100%; padding-inline: 22px; }
+  .stock-analysis-page { padding: 24px 0 56px; }
   .stock-analysis-header { min-height: 0; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; padding-bottom: 16px; }
   .stock-analysis-header h1 { font-size: 27px; }
   .stock-analysis-header p { flex-basis: 100%; text-align: left; }
   .stock-outlook { padding-top: 18px; }
   .stock-outlook__clues { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .fundamentals-workbench { padding-top: 26px; }
-  .fundamentals-workbench__header { min-height: 0; display: grid; gap: 12px; }
-  .fundamentals-workbench__header h2 { font-size: 27px; }
+  .fundamentals-workbench__header { min-height: 0; flex-wrap: wrap; align-items: baseline; gap: 10px 12px; }
+  .fundamentals-workbench__title { flex: 1 1 100%; }
+  .fundamentals-workbench__header-actions { flex: 1 1 100%; align-items: center; justify-content: space-between; }
+  .fundamentals-workbench__header h2 { font-size: 25px; }
   .fundamentals-workbench__status-group { justify-items: start; }
   .fundamentals-workbench__request-status { width: fit-content; }
   .fundamentals-workbench__toolbar { flex-wrap: wrap; }
@@ -3209,9 +3295,9 @@ td { font-size: 14px; }
   .fundamentals-workbench__table-col-head,
   .fundamentals-workbench__table-row { grid-template-columns: minmax(0, 1fr) 88px 58px; }
   .fundamentals-workbench__table-row dd:last-of-type { display: none; }
-  .stock-analysis-filings { margin-top: 36px; padding-top: 26px; }
+  .stock-analysis-filings { --timeline-body: 81px; margin-top: 36px; padding-top: 26px; }
   .stock-analysis-filings .detail-section-heading { min-height: 0; }
-  .stock-analysis-filings .sec-filing-body { padding-left: 4px; }
+  .stock-analysis-filings .sec-filing-card:first-child .sec-filing-headline { font-size: 18px; }
   .fundamentals-bottom-sheet { position: fixed; z-index: 50; inset: 0; display: grid; align-items: end; }
   .fundamentals-bottom-sheet__backdrop { position: absolute; inset: 0; border: 0; background: rgb(32 30 29 / 44%); cursor: pointer; }
   .fundamentals-bottom-sheet__dialog {

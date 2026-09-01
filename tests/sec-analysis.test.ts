@@ -7,6 +7,7 @@ import {
   normalizeAnalysisFacts,
   type SecHistorySnapshot,
 } from "../lib/sec-analysis.ts";
+import { formatSecMetricLabel, formatSecMetricValue } from "../lib/sec-metric-format.ts";
 
 const blocks = buildFilingBlocks([
   "Item 1. Business",
@@ -241,4 +242,21 @@ test("reports series the filing period has no XBRL value for instead of guessing
   assert.deepEqual(brief.currentFacts, []);
   assert.deepEqual(brief.missingSeriesIds, ["revenue"]);
   assert.deepEqual(brief.comparisons, []);
+});
+
+test("timeline metric formatting turns stored magnitudes into readable figures", () => {
+  assert.equal(formatSecMetricLabel("revenue"), "营收");
+  assert.equal(formatSecMetricLabel("gross_margin"), "毛利率");
+  // Unknown keys still read as words rather than snake_case.
+  assert.equal(formatSecMetricLabel("segment_backlog"), "segment backlog");
+
+  assert.equal(formatSecMetricValue("revenue", "96221000000"), "962.2 亿");
+  assert.equal(formatSecMetricValue("net_income", "-25000000"), "-2500.0 万");
+  // Ratios arrive either as a fraction or as an already-scaled percentage.
+  assert.equal(formatSecMetricValue("gross_margin", "0.7497531724"), "75.0%");
+  assert.equal(formatSecMetricValue("operating_margin", "66.2"), "66.2%");
+  assert.equal(formatSecMetricValue("diluted_eps", "2.42"), "2.42");
+  // Anything the model wrote as prose is left alone.
+  assert.equal(formatSecMetricValue("revenue", "962.2 亿美元"), "962.2 亿美元");
+  assert.equal(formatSecMetricValue("long_term_debt", "not disclosed"), "not disclosed");
 });

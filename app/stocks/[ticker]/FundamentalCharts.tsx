@@ -197,8 +197,8 @@ export function FundamentalCharts({
 }
 
 export function FundamentalChartsView({
-  ticker,
-  companyName,
+  // ticker/companyName stay on the props so callers are unchanged; the section
+  // heading no longer repeats the company, which the page header already names.
   data,
   pageState,
   requestState,
@@ -303,40 +303,42 @@ export function FundamentalChartsView({
 
   return (
     <section className="fundamentals-workbench" aria-labelledby="fundamentals-heading">
+      {/* One header line carries the section name, the period being read and the
+          table/chart switch, so both views open on the same baseline instead of
+          each bringing its own toolbar. */}
       <header className="fundamentals-workbench__header">
-        <div>
+        <div className="fundamentals-workbench__title">
+          <h2 id="fundamentals-heading">基本面</h2>
+          {viewMode === "table" && periodOptions.length > 0 ? (
+            <label className="fundamentals-workbench__period-select">
+              <span className="sr-only">报告期</span>
+              <select
+                className="fundamentals-workbench__quarter-select"
+                aria-label="选择报告期"
+                value={activePeriodEnd ?? ""}
+                onChange={(event) => setSelectedPeriodEnd(event.currentTarget.value)}
+              >
+                {periodOptions.map((period) => (
+                  <option value={period.periodEnd} key={period.periodEnd}>{formatFundamentalPeriod(period.periodEnd)}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <span className="fundamentals-workbench__eyebrow">Yahoo Finance · 季度数据</span>
-          <h2 id="fundamentals-heading">基本面趋势</h2>
-          <p>{companyName}（{ticker}）最近 {pageState.periodCount} 个季度的核心财务指标。</p>
         </div>
-        <div className="fundamentals-workbench__status-group">
-          <PresentationStatus presentation={effectivePresentation} />
-          <RequestStatus requestState={requestState} data={data} error={error} />
+        <div className="fundamentals-workbench__header-actions">
+          <div className="fundamentals-workbench__status-group">
+            <PresentationStatus presentation={effectivePresentation} />
+            <RequestStatus requestState={requestState} data={data} error={error} />
+          </div>
+          <div className="fundamentals-workbench__view-toggle" role="group" aria-label="表格或图表视图">
+            <button type="button" aria-pressed={viewMode === "table"} onClick={() => setViewMode("table")}>表格</button>
+            <button type="button" aria-pressed={viewMode === "chart"} onClick={() => setViewMode("chart")}>图表</button>
+          </div>
         </div>
       </header>
 
-      <div className="fundamentals-workbench__table-toolbar">
-        {viewMode === "table" && periodOptions.length > 0 ? (
-          <label className="fundamentals-workbench__period-control">
-            <span>报告期</span>
-            <select
-              className="fundamentals-workbench__quarter-select"
-              aria-label="选择报告期"
-              value={activePeriodEnd ?? ""}
-              onChange={(event) => setSelectedPeriodEnd(event.currentTarget.value)}
-            >
-              {periodOptions.map((period) => (
-                <option value={period.periodEnd} key={period.periodEnd}>{formatFundamentalPeriod(period.periodEnd)}</option>
-              ))}
-            </select>
-          </label>
-        ) : <span />}
-        <div className="fundamentals-workbench__view-toggle" role="group" aria-label="表格或图表视图">
-          <button type="button" aria-pressed={viewMode === "table"} onClick={() => setViewMode("table")}>表格</button>
-          <button type="button" aria-pressed={viewMode === "chart"} onClick={() => setViewMode("chart")}>图表</button>
-        </div>
-      </div>
-
+      <div className="fundamentals-workbench__frame">
       {viewMode === "table" ? (
         <div className="fundamentals-workbench__table" role="table" aria-label="基本面快照">
           <SnapshotColumn rows={snapshotRowsA} />
@@ -387,17 +389,6 @@ export function FundamentalChartsView({
           </div>
 
           <div className="fundamentals-workbench__grid">
-            <div className="fundamentals-workbench__chart" ref={chartRef} tabIndex={-1}>
-              <ChartPanel
-                data={data}
-                error={error}
-                requestState={requestState}
-                chart={pageState.chart}
-                seriesSpecs={seriesSpecs}
-                presentation={effectivePresentation}
-                onRetry={onRetry}
-              />
-            </div>
             <aside className="fundamentals-workbench__selector" aria-label="基本面指标">
               {data?.series.length ? (
                 <MetricSelector
@@ -410,9 +401,21 @@ export function FundamentalChartsView({
                 />
               ) : <SelectorPlaceholder />}
             </aside>
+            <div className="fundamentals-workbench__chart" ref={chartRef} tabIndex={-1}>
+              <ChartPanel
+                data={data}
+                error={error}
+                requestState={requestState}
+                chart={pageState.chart}
+                seriesSpecs={seriesSpecs}
+                presentation={effectivePresentation}
+                onRetry={onRetry}
+              />
+            </div>
           </div>
         </>
       )}
+      </div>
 
       {selectorOpen ? (
         <div className="fundamentals-bottom-sheet" data-state="open">

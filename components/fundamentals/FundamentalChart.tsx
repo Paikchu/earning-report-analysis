@@ -284,14 +284,13 @@ function ChartLegend({ model }: { model: FundamentalChartModel }) {
         const visual = getFundamentalSeriesVisual(index);
         return (
           <li key={series.id}>
-            <svg width="26" height="16" viewBox="0 0 26 16" aria-hidden="true">
+            {/* Square block for a bar series, flat rule for a line series — the
+                same two marks the chart itself draws, at legend scale. */}
+            <svg width="17" height="11" viewBox="0 0 17 11" aria-hidden="true">
               {series.mark === "bar" ? (
                 <BarLegendSwatch visual={visual} />
               ) : (
-                <>
-                  <line x1="1" x2="25" y1="8" y2="8" stroke={visual.color} strokeWidth="2.2" strokeDasharray={visual.dashArray} />
-                  <PointShape shape={visual.pointShape} x={13} y={8} color={visual.color} size={3.2} />
-                </>
+                <line x1="0" x2="17" y1="5.5" y2="5.5" stroke={visual.color} strokeWidth="2" strokeDasharray={visual.dashArray} />
               )}
             </svg>
             <span>{series.label}</span>
@@ -698,18 +697,18 @@ function PointShape({
 function BarLegendSwatch({ visual }: { visual: FundamentalSeriesVisual }) {
   return (
     <g>
-      <rect x="5" y="2" width="16" height="12" rx="1" fill={visual.color} stroke={visual.color} />
+      <rect x="3" y="0" width="11" height="11" fill={visual.color} stroke={visual.color} />
       {visual.barPattern === "diagonal" ? (
-        <path d="M5 12 L15 2 M11 14 L21 4" stroke="var(--paper)" strokeWidth="1.2" />
+        <path d="M3 9 L11 1 M6 11 L14 3" stroke="var(--paper)" strokeWidth="1.2" />
       ) : null}
       {visual.barPattern === "dots" ? (
         <>
-          <circle cx="10" cy="6" r="1.2" fill="var(--paper)" />
-          <circle cx="17" cy="10" r="1.2" fill="var(--paper)" />
+          <circle cx="6.5" cy="3.5" r="1.1" fill="var(--paper)" />
+          <circle cx="10.5" cy="7.5" r="1.1" fill="var(--paper)" />
         </>
       ) : null}
       {visual.barPattern === "cross" ? (
-        <path d="M13 2 V14 M5 8 H21" stroke="var(--paper)" strokeWidth="1" />
+        <path d="M8.5 0 V11 M3 5.5 H14" stroke="var(--paper)" strokeWidth="1" />
       ) : null}
     </g>
   );

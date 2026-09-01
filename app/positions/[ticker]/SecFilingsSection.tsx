@@ -5,20 +5,29 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { SEC_SUMMARY_VERSION, type SecEventCategory } from "@/lib/sec";
+import { formatSecMetricLabel, formatSecMetricValue } from "@/lib/sec-metric-format";
 import type { PublicSecFiling } from "@/lib/sec-public-api";
 
 const expandEase = [0.22, 1, 0.36, 1] as const;
 
-type Page = { filings: PublicSecFiling[]; nextCursor: string | null; checkedAt: string | null };
+/** Distance from the bottom of the rail that starts the next page. */
+const TIMELINE_PREFETCH_PX = 180;
+/** Guard so an under-filled first screen cannot page through the whole history. */
+const TIMELINE_AUTOFILL_LIMIT = 6;
+
+type Page = { filings: PublicSecFiling[]; nextCursor: string | null; checkedAt: string | null; total?: number };
 
 export function SecFilingsSection({ ticker, title = "SEC 文件与 AI 解读" }: { ticker: string; title?: string }) {
   const [filings, setFilings] = useState<PublicSecFiling[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [total, setTotal] = useState(0);
   const [checkedAt, setCheckedAt] = useState<string | null>(null);
   const [openAccessions, setOpenAccessions] = useState<Set<string>>(() => new Set());
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [loadingMore, setLoadingMore] = useState(false);
   const filingsRef = useRef<PublicSecFiling[]>([]);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const autofillRounds = useRef(0);
 
   const load = useCallback(async (cursor: string | null, append: boolean) => {
     if (append) setLoadingMore(true);
@@ -32,8 +41,12 @@ export function SecFilingsSection({ ticker, title = "SEC 文件与 AI 解读" }:
       filingsRef.current = merged;
       setFilings(merged);
       setNextCursor(page.nextCursor);
+      setTotal(Math.max(page.total ?? 0, merged.length));
       setCheckedAt(page.checkedAt);
-      if (!append) setOpenAccessions(new Set(defaultOpenAccessions(merged)));
+      if (!append) {
+        autofillRounds.current = 0;
+        setOpenAccessions(new Set(defaultOpenAccessions(merged)));
+      }
       setStatus("ready");
     } catch {
       setStatus("error");
@@ -65,6 +78,30 @@ export function SecFilingsSection({ ticker, title = "SEC 文件与 AI 解读" }:
     });
   }, []);
 
+  const loadMore = useCallback(() => {
+    if (!nextCursor || loadingMore) return;
+    void load(nextCursor, true);
+  }, [load, loadingMore, nextCursor]);
+
+  const handleTimelineScroll = useCallback(() => {
+    const rail = scrollRef.current;
+    if (!rail || !nextCursor || loadingMore) return;
+    if (rail.scrollHeight - rail.scrollTop - rail.clientHeight > TIMELINE_PREFETCH_PX) return;
+    autofillRounds.current = 0;
+    void load(nextCursor, true);
+  }, [load, loadingMore, nextCursor]);
+
+  // A tall viewport can leave the rail shorter than its own column, which would
+  // hide the fact that more filings exist. Top it up until it can scroll.
+  useEffect(() => {
+    const rail = scrollRef.current;
+    if (!rail || !nextCursor || loadingMore || status !== "ready") return;
+    if (rail.scrollHeight > rail.clientHeight + 8) return;
+    if (autofillRounds.current >= TIMELINE_AUTOFILL_LIMIT) return;
+    autofillRounds.current += 1;
+    void load(nextCursor, true);
+  }, [filings, load, loadingMore, nextCursor, status]);
+
   return (
     <section className="sec-filings-section" id="sec-filings" aria-labelledby="sec-filings-title">
       <div className="detail-section-heading">
@@ -76,18 +113,33 @@ export function SecFilingsSection({ ticker, title = "SEC 文件与 AI 解读" }:
       {status === "ready" && filings.length === 0 && <p className="sec-state">暂未收录该股票的 SEC 报告。</p>}
       {status === "ready" && filings.length > 0 && (
         <>
-          <div className="sec-filing-list">
-            {filings.map((filing, index) => (
-              <SecFilingCard
-                filing={filing}
-                isLatestPeriodic={isPeriodicFiling(filing.form) && !filings.slice(0, index).some((candidate) => isPeriodicFiling(candidate.form))}
-                isOpen={openAccessions.has(filing.accessionNumber)}
-                key={filing.accessionNumber}
-                onToggle={() => toggleAccession(filing.accessionNumber)}
-              />
-            ))}
+          <div className="sec-filing-scroll" ref={scrollRef} onScroll={handleTimelineScroll}>
+            <div className="sec-filing-list">
+              {filings.map((filing, index) => (
+                <SecFilingCard
+                  filing={filing}
+                  isLatestPeriodic={isPeriodicFiling(filing.form) && !filings.slice(0, index).some((candidate) => isPeriodicFiling(candidate.form))}
+                  isOpen={openAccessions.has(filing.accessionNumber)}
+                  key={filing.accessionNumber}
+                  onToggle={() => toggleAccession(filing.accessionNumber)}
+                />
+              ))}
+            </div>
+            <p className="sec-filing-rail-status" role="status">
+              {loadingMore
+                ? "正在载入更早申报…"
+                : total > filings.length
+                  ? `已显示 ${filings.length} / ${total} 份`
+                  : `已显示全部 ${filings.length} 份申报`}
+            </p>
           </div>
-          {nextCursor && <button className="sec-load-more" type="button" disabled={loadingMore} onClick={() => void load(nextCursor, true)}>{loadingMore ? "正在读取…" : "加载更早申报"}</button>}
+          <div className="sec-filing-footer">
+            {nextCursor && (
+              <button className="sec-load-more" type="button" disabled={loadingMore} onClick={loadMore}>
+                {loadingMore ? "正在读取…" : "加载更早申报"}
+              </button>
+            )}
+          </div>
         </>
       )}
     </section>
@@ -98,13 +150,24 @@ function SecFilingCard({ filing, isLatestPeriodic, isOpen, onToggle }: { filing:
   const reduceMotion = useReducedMotion();
   const panelId = `sec-filing-${filing.accessionNumber.replace(/[^A-Za-z0-9]/g, "")}`;
   const duration = reduceMotion ? 0.01 : 0.38;
+  const headline = filing.summary?.headline || filing.analysis?.headline || "";
   return (
     <article className={isOpen ? "sec-filing-card is-open" : "sec-filing-card"}>
       <button aria-controls={panelId} aria-expanded={isOpen} onClick={onToggle} type="button">
-        <span className="sec-form-badge" data-form={filing.form}>{filing.form}</span>
-        <span className="sec-filing-date"><strong>{formatDate(filing.filingDate)}</strong><small>申报日</small></span>
-        <span className="sec-filing-description"><strong>{filing.description || formDescription(filing.form)}</strong><small>{filing.reportDate ? `报告期 ${formatDate(filing.reportDate)}` : "SEC filing"}</small></span>
-        <span className="sec-disclosure" aria-hidden="true"><i /><i /></span>
+        <span className="sec-filing-date">
+          <strong>{formatMonthDay(filing.filingDate)}</strong>
+          <small>{formatYear(filing.filingDate)}</small>
+        </span>
+        <span className="sec-filing-entry">
+          <span className="sec-filing-meta">
+            <span className="sec-form-badge" data-form={filing.form}>{filing.form}</span>
+            <small>{formDescription(filing.form)}{filing.reportDate ? ` · 报告期 ${formatMonthDay(filing.reportDate)}` : ""}</small>
+            <span className="sec-disclosure" aria-hidden="true"><i /><i /></span>
+          </span>
+          <strong className="sec-filing-headline" data-pending={headline ? undefined : "true"}>
+            {headline || "AI 解读生成中"}
+          </strong>
+        </span>
       </button>
       <AnimatePresence initial={false}>
         {isOpen && (
@@ -135,7 +198,7 @@ function SecFilingCard({ filing, isLatestPeriodic, isOpen, onToggle }: { filing:
 
 function FilingSummary({ filing, isLatestPeriodic }: { filing: PublicSecFiling; isLatestPeriodic: boolean }) {
   if (isLatestPeriodic && filing.summary?.version === SEC_SUMMARY_VERSION && filing.summary.report) {
-    return <div className="sec-summary sec-full-report-ready"><p className="sec-summary-headline">{filing.summary.headline || filing.analysis?.headline}</p><Link href={`/stocks/${encodeURIComponent(filing.ticker)}/sec/${encodeURIComponent(filing.accessionNumber)}`}>阅读完整报告 →</Link><small className="sec-ai-note">基于 SEC 原始申报 · {formatDateTime(filing.summary.generatedAt)}</small></div>;
+    return <div className="sec-summary sec-full-report-ready"><Link href={`/stocks/${encodeURIComponent(filing.ticker)}/sec/${encodeURIComponent(filing.accessionNumber)}`}>阅读完整报告 →</Link><small className="sec-ai-note">基于 SEC 原始申报 · {formatDateTime(filing.summary.generatedAt)}</small></div>;
   }
   if (filing.analysis) return <StructuredAnalysis filing={filing} />;
   const summary = filing.summary;
@@ -146,7 +209,6 @@ function FilingSummary({ filing, isLatestPeriodic }: { filing: PublicSecFiling; 
   return (
     <div className="sec-summary">
       {categoryLabel && <span className="sec-event-category" data-category={summary.eventCategory}>{categoryLabel}</span>}
-      {summary.headline && <p className="sec-summary-headline">{summary.headline}</p>}
       {summary.bullets.length > 0 && (
         <ul>
           {summary.bullets.map((bullet, index) => (
@@ -175,10 +237,26 @@ function StructuredAnalysis({ filing }: { filing: PublicSecFiling }) {
   const changes = [...report.changes.qoq.map((change) => ({ ...change, label: "环比" })), ...report.changes.yoy.map((change) => ({ ...change, label: "同比" }))].filter((change) => change.changeType !== "not_mentioned").slice(0, 8);
   return (
     <div className="sec-summary sec-analysis">
-      {report.headline && <p className="sec-summary-headline">{report.headline}</p>}
-      {report.keyMetrics.length > 0 && <div className="sec-analysis-metrics" aria-label="关键财务数据">{report.keyMetrics.slice(0, 6).map((metric) => <div className="sec-analysis-metric" key={metric.metricKey}><span>{metric.metricKey}</span><strong>{metric.currentValue}</strong><small>{metric.qoq ? `环比 ${metric.qoq}` : "环比暂无可比数据"}{metric.yoy ? ` · 同比 ${metric.yoy}` : " · 同比暂无可比数据"}</small></div>)}</div>}
+      {report.keyMetrics.length > 0 && (
+        <dl className="sec-analysis-metrics" aria-label="关键财务数据">
+          {report.keyMetrics.slice(0, 6).map((metric) => (
+            <div className="sec-analysis-metric" key={metric.metricKey}>
+              <dt>{formatSecMetricLabel(metric.metricKey)}</dt>
+              <dd>
+                <strong>{formatSecMetricValue(metric.metricKey, metric.currentValue)}</strong>
+                <small>{metric.qoq ? `环比 ${metric.qoq}` : "环比暂无"}{metric.yoy ? ` · 同比 ${metric.yoy}` : " · 同比暂无"}</small>
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
       {changes.length > 0 && <ul className="sec-analysis-changes">{changes.map((change, index) => <li key={`${change.label}-${change.topicKey}-${index}`}><i aria-hidden="true" /><span><strong>{change.label} · {change.topicKey}</strong>{change.currentStatement ?? change.priorStatement ?? ""}</span></li>)}</ul>}
-      {report.dataQuality.warnings.map((warning) => <p className="sec-analysis-warning" key={warning}>{warning}</p>)}
+      {report.dataQuality.warnings.length > 0 && (
+        <details className="sec-analysis-quality">
+          <summary>数据口径与修正说明（{report.dataQuality.warnings.length}）</summary>
+          {report.dataQuality.warnings.map((warning) => <p className="sec-analysis-warning" key={warning}>{warning}</p>)}
+        </details>
+      )}
       <small className="sec-ai-note">结构化财报解读 · {formatDateTime(filing.summary?.generatedAt ?? new Date().toISOString())}</small>
     </div>
   );
@@ -194,5 +272,12 @@ function defaultOpenAccessions(filings: PublicSecFiling[]): string[] {
   if (currentYearAccessions.length > 0) return currentYearAccessions;
   return filings[0] ? [filings[0].accessionNumber] : [];
 }
-function formatDate(value: string): string { const date = new Date(`${value}T00:00:00Z`); return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" }).format(date) : value; }
+function formatMonthDay(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  return match ? `${Number(match[2])}月${Number(match[3])}日` : value;
+}
+function formatYear(value: string): string {
+  const match = /^(\d{4})/.exec(value);
+  return match ? match[1]! : "";
+}
 function formatDateTime(value: string): string { const date = new Date(value); return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Shanghai" }).format(date) : value; }
