@@ -4,7 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { SEC_SUMMARY_VERSION, type SecEventCategory } from "@/lib/sec";
+import type { SecEventCategory } from "@/lib/sec";
 import { formatSecMetricLabel, formatSecMetricValue } from "@/lib/sec-metric-format";
 import type { PublicSecFiling } from "@/lib/sec-public-api";
 
@@ -21,7 +21,6 @@ export function SecFilingsSection({ ticker, title = "SEC 文件与 AI 解读" }:
   const [filings, setFilings] = useState<PublicSecFiling[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
-  const [checkedAt, setCheckedAt] = useState<string | null>(null);
   const [openAccessions, setOpenAccessions] = useState<Set<string>>(() => new Set());
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [loadingMore, setLoadingMore] = useState(false);
@@ -42,7 +41,6 @@ export function SecFilingsSection({ ticker, title = "SEC 文件与 AI 解读" }:
       setFilings(merged);
       setNextCursor(page.nextCursor);
       setTotal(Math.max(page.total ?? 0, merged.length));
-      setCheckedAt(page.checkedAt);
       if (!append) {
         autofillRounds.current = 0;
         setOpenAccessions(new Set(defaultOpenAccessions(merged)));
@@ -106,7 +104,6 @@ export function SecFilingsSection({ ticker, title = "SEC 文件与 AI 解读" }:
     <section className="sec-filings-section" id="sec-filings" aria-labelledby="sec-filings-title">
       <div className="detail-section-heading">
         <h2 id="sec-filings-title">{title}</h2>
-        {checkedAt && <span className="sec-updated">最近检查 {formatDateTime(checkedAt)}</span>}
       </div>
       {status === "loading" && <p className="sec-state" role="status">正在读取 SEC 文件…</p>}
       {status === "error" && <p className="sec-state sec-state-error" role="alert">SEC 数据读取失败。</p>}
@@ -151,6 +148,13 @@ function SecFilingCard({ filing, isLatestPeriodic, isOpen, onToggle }: { filing:
   const panelId = `sec-filing-${filing.accessionNumber.replace(/[^A-Za-z0-9]/g, "")}`;
   const duration = reduceMotion ? 0.01 : 0.38;
   const headline = filing.summary?.headline || filing.analysis?.headline || "";
+  // The report page renders whatever narrative is stored, so the entry point
+  // asks the same question it does. Requiring the current summary version made
+  // the link disappear for the whole regeneration window after a version bump,
+  // while the report it points at was still on file and still readable.
+  const fullReportHref = isLatestPeriodic && filing.summary?.report
+    ? `/stocks/${encodeURIComponent(filing.ticker)}/sec/${encodeURIComponent(filing.accessionNumber)}`
+    : null;
   return (
     <article className={isOpen ? "sec-filing-card is-open" : "sec-filing-card"}>
       <button aria-controls={panelId} aria-expanded={isOpen} onClick={onToggle} type="button">
@@ -186,8 +190,11 @@ function SecFilingCard({ filing, isLatestPeriodic, isOpen, onToggle }: { filing:
               initial={{ opacity: 0, y: reduceMotion ? 0 : -8 }}
               transition={{ duration: reduceMotion ? 0.01 : 0.28, ease: expandEase }}
             >
-              <FilingSummary filing={filing} isLatestPeriodic={isLatestPeriodic} />
-              <a href={filing.edgarUrl} rel="noopener noreferrer" target="_blank">查看 SEC EDGAR 原文 ↗</a>
+              <FilingSummary filing={filing} />
+              <div className="sec-filing-actions">
+                {fullReportHref && <Link className="sec-full-report-link" href={fullReportHref}>阅读完整报告 →</Link>}
+                <a href={filing.edgarUrl} rel="noopener noreferrer" target="_blank">查看 SEC EDGAR 原文 ↗</a>
+              </div>
             </motion.div>
           </motion.div>
         )}
@@ -196,10 +203,7 @@ function SecFilingCard({ filing, isLatestPeriodic, isOpen, onToggle }: { filing:
   );
 }
 
-function FilingSummary({ filing, isLatestPeriodic }: { filing: PublicSecFiling; isLatestPeriodic: boolean }) {
-  if (isLatestPeriodic && filing.summary?.version === SEC_SUMMARY_VERSION && filing.summary.report) {
-    return <div className="sec-summary sec-full-report-ready"><Link href={`/stocks/${encodeURIComponent(filing.ticker)}/sec/${encodeURIComponent(filing.accessionNumber)}`}>阅读完整报告 →</Link><small className="sec-ai-note">基于 SEC 原始申报 · {formatDateTime(filing.summary.generatedAt)}</small></div>;
-  }
+function FilingSummary({ filing }: { filing: PublicSecFiling }) {
   if (filing.analysis) return <StructuredAnalysis filing={filing} />;
   const summary = filing.summary;
   if (!summary) return <p className="sec-summary-pending">AI 解读正在后台生成。</p>;
@@ -244,7 +248,7 @@ function StructuredAnalysis({ filing }: { filing: PublicSecFiling }) {
               <dt>{formatSecMetricLabel(metric.metricKey)}</dt>
               <dd>
                 <strong>{formatSecMetricValue(metric.metricKey, metric.currentValue)}</strong>
-                <small>{metric.qoq ? `环比 ${metric.qoq}` : "环比暂无"}{metric.yoy ? ` · 同比 ${metric.yoy}` : " · 同比暂无"}</small>
+                {metric.yoy && <small>同比 {metric.yoy}</small>}
               </dd>
             </div>
           ))}
@@ -264,13 +268,10 @@ function StructuredAnalysis({ filing }: { filing: PublicSecFiling }) {
 
 function isPeriodicFiling(form: string): boolean { return /^(10-K|10-Q|20-F)(\/A)?$/.test(form); }
 function formDescription(form: string): string { return form.startsWith("10-K") || form.startsWith("20-F") ? "年度报告" : form.startsWith("10-Q") ? "季度报告" : "重大事项报告"; }
+/** Only the two most recent filings start expanded; the rest of the rail stays collapsed. */
+const TIMELINE_DEFAULT_OPEN = 2;
 function defaultOpenAccessions(filings: PublicSecFiling[]): string[] {
-  const currentYear = new Date().getFullYear();
-  const currentYearAccessions = filings
-    .filter((filing) => filing.filingDate.startsWith(`${currentYear}`))
-    .map((filing) => filing.accessionNumber);
-  if (currentYearAccessions.length > 0) return currentYearAccessions;
-  return filings[0] ? [filings[0].accessionNumber] : [];
+  return filings.slice(0, TIMELINE_DEFAULT_OPEN).map((filing) => filing.accessionNumber);
 }
 function formatMonthDay(value: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
