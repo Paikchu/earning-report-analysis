@@ -4,7 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { SEC_SUMMARY_VERSION, type SecEventCategory } from "@/lib/sec";
+import type { SecEventCategory } from "@/lib/sec";
 import { formatSecMetricLabel, formatSecMetricValue } from "@/lib/sec-metric-format";
 import type { PublicSecFiling } from "@/lib/sec-public-api";
 
@@ -151,6 +151,13 @@ function SecFilingCard({ filing, isLatestPeriodic, isOpen, onToggle }: { filing:
   const panelId = `sec-filing-${filing.accessionNumber.replace(/[^A-Za-z0-9]/g, "")}`;
   const duration = reduceMotion ? 0.01 : 0.38;
   const headline = filing.summary?.headline || filing.analysis?.headline || "";
+  // The report page renders whatever narrative is stored, so the entry point
+  // asks the same question it does. Requiring the current summary version made
+  // the link disappear for the whole regeneration window after a version bump,
+  // while the report it points at was still on file and still readable.
+  const fullReportHref = isLatestPeriodic && filing.summary?.report
+    ? `/stocks/${encodeURIComponent(filing.ticker)}/sec/${encodeURIComponent(filing.accessionNumber)}`
+    : null;
   return (
     <article className={isOpen ? "sec-filing-card is-open" : "sec-filing-card"}>
       <button aria-controls={panelId} aria-expanded={isOpen} onClick={onToggle} type="button">
@@ -186,8 +193,11 @@ function SecFilingCard({ filing, isLatestPeriodic, isOpen, onToggle }: { filing:
               initial={{ opacity: 0, y: reduceMotion ? 0 : -8 }}
               transition={{ duration: reduceMotion ? 0.01 : 0.28, ease: expandEase }}
             >
-              <FilingSummary filing={filing} isLatestPeriodic={isLatestPeriodic} />
-              <a href={filing.edgarUrl} rel="noopener noreferrer" target="_blank">查看 SEC EDGAR 原文 ↗</a>
+              <FilingSummary filing={filing} />
+              <div className="sec-filing-actions">
+                {fullReportHref && <Link className="sec-full-report-link" href={fullReportHref}>阅读完整报告 →</Link>}
+                <a href={filing.edgarUrl} rel="noopener noreferrer" target="_blank">查看 SEC EDGAR 原文 ↗</a>
+              </div>
             </motion.div>
           </motion.div>
         )}
@@ -196,10 +206,7 @@ function SecFilingCard({ filing, isLatestPeriodic, isOpen, onToggle }: { filing:
   );
 }
 
-function FilingSummary({ filing, isLatestPeriodic }: { filing: PublicSecFiling; isLatestPeriodic: boolean }) {
-  if (isLatestPeriodic && filing.summary?.version === SEC_SUMMARY_VERSION && filing.summary.report) {
-    return <div className="sec-summary sec-full-report-ready"><Link href={`/stocks/${encodeURIComponent(filing.ticker)}/sec/${encodeURIComponent(filing.accessionNumber)}`}>阅读完整报告 →</Link><small className="sec-ai-note">基于 SEC 原始申报 · {formatDateTime(filing.summary.generatedAt)}</small></div>;
-  }
+function FilingSummary({ filing }: { filing: PublicSecFiling }) {
   if (filing.analysis) return <StructuredAnalysis filing={filing} />;
   const summary = filing.summary;
   if (!summary) return <p className="sec-summary-pending">AI 解读正在后台生成。</p>;
