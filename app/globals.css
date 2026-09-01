@@ -1871,7 +1871,6 @@ td { font-size: 14px; }
 .ownership-meta,
 .ownership-note { margin: 12px 0 0; color: var(--ink-muted); font-size: 12px; line-height: 1.55; }
 .ownership-note { margin-top: 5px; }
-.sec-updated { color: var(--ink-muted); font-size: 12px; }
 .sec-state {
   margin: 18px 0 0;
   padding: 24px 0;
@@ -3170,7 +3169,6 @@ td { font-size: 14px; }
   border-bottom: 1px solid var(--ink);
 }
 .stock-analysis-filings .detail-section-heading h2 { margin: 0; font: 600 25px/1 var(--serif); letter-spacing: -.018em; }
-.stock-analysis-filings .sec-updated { color: var(--ink-muted); font: 500 11px/1 var(--serif); letter-spacing: .06em; text-transform: uppercase; }
 
 .stock-analysis-filings .sec-filing-scroll {
   flex: 1;

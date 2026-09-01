@@ -37,7 +37,7 @@ export default async function StockPage({
           <div className="stock-analysis-primary">
             <header className="stock-analysis-header">
               <h1>{security?.name ?? ticker}</h1>
-              <span>{ticker}{security?.exchange ? ` · ${security.exchange}` : ""}</span>
+              <span>{ticker}</span>
             </header>
             <BusinessOutlook ticker={ticker} />
             <FundamentalCharts

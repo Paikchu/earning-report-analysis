@@ -66,8 +66,9 @@ test("restores the default open filings when the stock page is shown again", asy
 
   assert.match(section, /addEventListener\("pageshow", restoreDefaultSummary\)/);
   assert.match(section, /setOpenAccessions\(new Set\(defaultOpenAccessions\(filingsRef\.current\)\)\)/);
-  // The default is every filing from the current year, falling back to the newest one.
-  assert.match(section, /return filings\[0\] \? \[filings\[0\]\.accessionNumber\] : \[\]/);
+  // Only the two newest filings start expanded.
+  assert.match(section, /const TIMELINE_DEFAULT_OPEN = 2;/);
+  assert.match(section, /filings\.slice\(0, TIMELINE_DEFAULT_OPEN\)\.map\(\(filing\) => filing\.accessionNumber\)/);
   assert.match(section, /removeEventListener\("pageshow", restoreDefaultSummary\)/);
 });
 
