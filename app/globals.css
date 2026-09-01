@@ -1888,15 +1888,24 @@ td { font-size: 14px; }
   font-size: 12px;
 }
 .sec-filing-list { margin-top: 16px; border-top: 1px solid var(--ink); }
-/* Timeline row: a right-aligned date column, the rail itself (drawn as the
+/* Timeline row: the date column, the rail itself (drawn as the
    card's ::before so it runs through the expanded panel too), then the entry.
    The three track widths derive from one pair of variables so the row, the
-   rail, the dot and the expanded panel can never drift apart. */
-.sec-filing-card {
-  --timeline-date: 86px;
-  --timeline-gap: 20px;
+   rail, the dot and the expanded panel can never drift apart. The tracks live
+   on the section, not the card, because the rail-status line sits outside the
+   card list and still has to hang off the same body indent.
+   The date reads left-aligned so it starts on the section heading's margin
+   rather than floating off the rail, and the track is sized to the widest date
+   it can hold (12月31日 measures ~55px at 13px, plus a few px so a fallback
+   font cannot ellipsize it) rather than to a round number: past that the track
+   only pushes the rail into the headline, which is the column's real content. */
+.sec-filings-section {
+  --timeline-date: 60px;
+  --timeline-gap: 13px;
   --timeline-rail: calc(var(--timeline-date) + var(--timeline-gap));
   --timeline-body: calc(var(--timeline-rail) + 1px + var(--timeline-gap));
+}
+.sec-filing-card {
   border-bottom: 1px solid var(--paper-deep);
 }
 .sec-filing-card > button {
@@ -1944,15 +1953,21 @@ td { font-size: 14px; }
 .sec-form-badge[data-form="11-K"] { background: #4a4a6e; }
 .sec-form-badge[data-form="13F-HR"],
 .sec-form-badge[data-form="13F"] { background: #4a6e6b; }
-.sec-filing-date { min-width: 0; display: grid; gap: 3px; text-align: right; }
-.sec-filing-date strong { overflow: hidden; font: 600 15px/1.2 var(--serif); font-variant-numeric: tabular-nums lining-nums; text-overflow: ellipsis; white-space: nowrap; }
-.sec-filing-date small { color: var(--ink-muted); font-size: 12px; }
+.sec-filing-date { min-width: 0; display: grid; gap: 2px; }
+.sec-filing-date strong { overflow: hidden; font: 600 13px/1.2 var(--serif); font-variant-numeric: tabular-nums lining-nums; text-overflow: ellipsis; white-space: nowrap; }
+.sec-filing-date small { color: var(--ink-muted); font-size: 11px; }
 .sec-filing-entry { min-width: 0; display: grid; gap: 6px; }
 .sec-filing-meta { min-width: 0; display: flex; align-items: baseline; gap: 10px; }
 .sec-filing-meta small { min-width: 0; overflow: hidden; color: var(--ink-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .sec-filing-meta .sec-disclosure { flex: 0 0 auto; margin-left: auto; align-self: center; }
 .sec-filing-headline { font: 600 16px/1.5 var(--serif); letter-spacing: -.01em; text-wrap: pretty; }
 .sec-filing-headline[data-pending="true"] { color: var(--ink-muted); font-weight: 500; }
+/* Sits after the date rules on purpose: the compact size has to outrank the
+   `font:` shorthand above, which would otherwise reset it back to 13px. */
+@media (max-width: 700px) {
+  .sec-filings-section { --timeline-date: 55px; --timeline-gap: 11px; }
+  .sec-filing-date strong { font-size: 12px; }
+}
 .sec-disclosure {
   position: relative;
   width: 14px;
@@ -1974,8 +1989,18 @@ td { font-size: 14px; }
 .sec-filing-card.is-open .sec-disclosure i:last-child { transform: translate(-50%, -50%) rotate(90deg) scaleX(0); }
 .sec-filing-panel { overflow: hidden; }
 .sec-filing-body { padding: 3px 4px 22px var(--timeline-body); }
-.sec-filing-body > a { min-height: 44px; display: inline-flex; align-items: center; color: var(--ink-muted); font-size: 12px; text-decoration: none; }
-.sec-filing-body > a:hover { color: var(--ink); }
+/* Entry points out of the row: the full report first, the raw filing second. */
+.sec-filing-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 24px; }
+.sec-filing-actions > a { min-height: 44px; display: inline-flex; align-items: center; color: var(--ink-muted); font-size: 12px; text-decoration: none; }
+.sec-filing-actions > a:hover { color: var(--ink); }
+.sec-filing-actions > a.sec-full-report-link {
+  color: var(--ink);
+  font: 650 13px/1.2 var(--sans);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+.sec-filing-actions > a.sec-full-report-link:hover { color: var(--color-loss); }
 .sec-summary { display: grid; gap: 14px; }
 .sec-summary-headline { margin: 0; max-width: 760px; font: 600 19px/1.4 var(--serif); }
 .sec-summary ul { margin: 0; padding: 0; display: grid; gap: 10px; list-style: none; }
@@ -2035,15 +2060,6 @@ td { font-size: 14px; }
 .sec-ai-note { padding-bottom: 3px; color: var(--ink-muted); font-size: 12px; }
 .sec-summary-pending,
 .sec-summary-error { margin: 0 0 14px; font-size: 14px; }
-.sec-full-report-ready > a {
-  width: fit-content;
-  padding-bottom: 3px;
-  color: var(--ink);
-  border-bottom: 1px solid var(--ink);
-  font: 650 13px/1.2 var(--sans);
-  text-decoration: none;
-}
-.sec-full-report-ready > a:hover { color: var(--color-loss); border-color: var(--color-loss); }
 
 .sec-report-shell {
   width: clamp(60vw, calc(5.8vw + 740px), calc(100% - 32px));
@@ -2545,8 +2561,6 @@ td { font-size: 14px; }
   .ownership-metrics { grid-template-columns: 1fr; gap: 0; }
   .ownership-metric { padding: 11px 0 11px 12px; border-bottom: 1px solid var(--paper-deep); }
   .ownership-metric:last-child { border-bottom: 0; }
-  .sec-filing-card { --timeline-date: 56px; --timeline-gap: 12px; }
-  .sec-filing-date strong { font-size: 13px; }
   .detail-section-heading { align-items: flex-start; flex-direction: column; gap: 9px; }
   .sec-analysis-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sec-report-shell { width: calc(100% - 24px); padding-top: 16px; }
@@ -2789,7 +2803,7 @@ td { font-size: 14px; }
 
 .stock-analysis-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 520px;
+  grid-template-columns: minmax(0, 1fr) clamp(540px, 40vw, 680px);
   gap: clamp(32px, 4vw, 72px);
   align-items: stretch;
 }
@@ -3144,10 +3158,8 @@ td { font-size: 14px; }
    scrolls inside itself, paging in earlier filings as the reader reaches the
    end. */
 .stock-analysis-filings {
-  --timeline-body: 127px;
   position: relative;
   min-height: 640px;
-  border-left: 1px solid var(--paper-deep);
 }
 /* Taking the rail out of flow is what makes "as tall as the left column" true:
    the grid row is then sized by the fundamentals column alone, and the rail
@@ -3159,7 +3171,6 @@ td { font-size: 14px; }
   display: flex;
   flex-direction: column;
   padding-top: 0;
-  padding-left: clamp(26px, 2.5vw, 40px);
 }
 .stock-analysis-filings .detail-section-heading {
   flex: none;
@@ -3237,13 +3248,16 @@ td { font-size: 14px; }
 
 .fundamentals-bottom-sheet { display: none; }
 
-@media (max-width: 1080px) {
+/* Stacks at 1200px, not 1080px: the fundamentals table's two snapshot columns
+   need 496px of fixed tracks, and below this the chart column can no longer
+   give them that beside the timeline — it overflowed instead of stacking. */
+@media (max-width: 1200px) {
   .stock-analysis-shell { width: min(1324px, 100%); }
   .stock-analysis-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
   /* Stacked: the rail no longer competes with the chart column, so let it grow
      with the page instead of filling and scrolling a fixed box. */
-  .stock-analysis-filings { position: static; min-height: 0; margin-top: 48px; border-left: 0; border-top: 1px solid var(--paper-deep); }
-  .stock-analysis-filings .sec-filings-section { position: static; padding-top: 32px; padding-left: 0; }
+  .stock-analysis-filings { position: static; min-height: 0; margin-top: 48px; border-top: 1px solid var(--paper-deep); }
+  .stock-analysis-filings .sec-filings-section { position: static; padding-top: 32px; }
   .stock-analysis-filings .sec-filing-scroll { overflow: visible; }
 }
 
@@ -3293,7 +3307,7 @@ td { font-size: 14px; }
   .fundamentals-workbench__table-col-head,
   .fundamentals-workbench__table-row { grid-template-columns: minmax(0, 1fr) 88px 58px; }
   .fundamentals-workbench__table-row dd:last-of-type { display: none; }
-  .stock-analysis-filings { --timeline-body: 81px; margin-top: 36px; padding-top: 26px; }
+  .stock-analysis-filings { margin-top: 36px; padding-top: 26px; }
   .stock-analysis-filings .detail-section-heading { min-height: 0; }
   .stock-analysis-filings .sec-filing-card:first-child .sec-filing-headline { font-size: 18px; }
   .fundamentals-bottom-sheet { position: fixed; z-index: 50; inset: 0; display: grid; align-items: end; }
@@ -3314,6 +3328,13 @@ td { font-size: 14px; }
   .fundamentals-bottom-sheet__dialog header h3 { margin: 5px 0 0; font: 600 25px/1 var(--serif); }
   .fundamentals-bottom-sheet__dialog header button { padding: 0 6px 0 18px; color: var(--color-loss); }
   .fundamentals-bottom-sheet .fundamental-metric-selector { margin-top: 10px; }
+}
+
+/* Below 620px the heading stacks into a column, where the baseline-matching
+   flex-end above stops meaning "share the h2's baseline" and starts meaning
+   "right-align" — which would push 披露时间线 off the margin the dates align to. */
+@media (max-width: 620px) {
+  .stock-analysis-filings .detail-section-heading { align-items: flex-start; }
 }
 
 @media (prefers-reduced-motion: no-preference) {
