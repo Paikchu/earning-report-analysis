@@ -303,27 +303,15 @@ export function FundamentalChartsView({
 
   return (
     <section className="fundamentals-workbench" aria-labelledby="fundamentals-heading">
-      {/* One header line carries the section name, the period being read and the
-          table/chart switch, so both views open on the same baseline instead of
-          each bringing its own toolbar. */}
+      {/* The header holds only what both views share — the section name, the
+          source note, the status chips and the table/chart switch. Nothing here
+          is conditional on viewMode: a control that mounts on one view only
+          would change this row's height and drag the heading with it, since the
+          header bottom-aligns its children. Per-view controls live in the frame
+          below, next to the view they belong to. */}
       <header className="fundamentals-workbench__header">
         <div className="fundamentals-workbench__title">
           <h2 id="fundamentals-heading">基本面</h2>
-          {viewMode === "table" && periodOptions.length > 0 ? (
-            <label className="fundamentals-workbench__period-select">
-              <span className="sr-only">报告期</span>
-              <select
-                className="fundamentals-workbench__quarter-select"
-                aria-label="选择报告期"
-                value={activePeriodEnd ?? ""}
-                onChange={(event) => setSelectedPeriodEnd(event.currentTarget.value)}
-              >
-                {periodOptions.map((period) => (
-                  <option value={period.periodEnd} key={period.periodEnd}>{formatFundamentalPeriod(period.periodEnd)}</option>
-                ))}
-              </select>
-            </label>
-          ) : null}
           <span className="fundamentals-workbench__eyebrow">Yahoo Finance · 季度数据</span>
         </div>
         <div className="fundamentals-workbench__header-actions">
@@ -340,16 +328,35 @@ export function FundamentalChartsView({
 
       <div className="fundamentals-workbench__frame">
       {viewMode === "table" ? (
-        <div className="fundamentals-workbench__table" role="table" aria-label="基本面快照">
-          <SnapshotColumn rows={snapshotRowsA} />
-          <SnapshotColumn rows={snapshotRowsB} />
-          {snapshotRowsA.length === 0 && snapshotRowsB.length === 0 && (
-            <p className="fundamentals-workbench__table-empty">暂无该报告期的基本面数据。</p>
-          )}
-        </div>
+        <>
+          <div className="fundamentals-workbench__toolbar" data-view="table" aria-label="表格显示设置">
+            <label className="fundamentals-workbench__period-control">
+              <span>报告期</span>
+              <select
+                aria-label="选择报告期"
+                value={activePeriodEnd ?? ""}
+                disabled={periodOptions.length === 0}
+                onChange={(event) => setSelectedPeriodEnd(event.currentTarget.value)}
+              >
+                {periodOptions.length === 0
+                  ? <option value="">暂无</option>
+                  : periodOptions.map((period) => (
+                    <option value={period.periodEnd} key={period.periodEnd}>{formatFundamentalPeriod(period.periodEnd)}</option>
+                  ))}
+              </select>
+            </label>
+          </div>
+          <div className="fundamentals-workbench__table" role="table" aria-label="基本面快照">
+            <SnapshotColumn rows={snapshotRowsA} />
+            <SnapshotColumn rows={snapshotRowsB} />
+            {snapshotRowsA.length === 0 && snapshotRowsB.length === 0 && (
+              <p className="fundamentals-workbench__table-empty">暂无该报告期的基本面数据。</p>
+            )}
+          </div>
+        </>
       ) : (
         <>
-          <div className="fundamentals-workbench__toolbar" aria-label="图表显示设置">
+          <div className="fundamentals-workbench__toolbar" data-view="chart" aria-label="图表显示设置">
             <div className="fundamentals-workbench__mode" role="radiogroup" aria-label="图表类型">
               {CHART_MODES.map((mode) => (
                 <button

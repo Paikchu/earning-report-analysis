@@ -2843,8 +2843,6 @@ td { font-size: 14px; }
   letter-spacing: -.018em;
 }
 
-.fundamentals-workbench__period-select { display: inline-flex; align-items: baseline; }
-
 /* Table and chart share one box so switching swaps the contents instead of
    moving everything below it. The app's chart panel is taller than the 430px
    the design mocks, so 430px is the floor rather than a hard clip. */
@@ -3052,21 +3050,10 @@ td { font-size: 14px; }
 .fundamentals-workbench__view-toggle button[aria-pressed="true"] { color: var(--paper); background: var(--ink); }
 .fundamentals-workbench__view-toggle button:focus-visible { outline: 2px solid var(--color-loss); outline-offset: 2px; }
 
-.fundamentals-workbench__quarter-select {
-  min-height: 28px;
-  padding: 0 18px 2px 2px;
-  color: var(--ink);
-  border: 0;
-  border-bottom: 1px solid var(--accent);
-  border-radius: 0;
-  background: transparent;
-  font: 600 13px/1 var(--serif);
-  cursor: pointer;
-}
-.fundamentals-workbench__quarter-select:focus-visible { outline: 2px solid var(--color-loss); outline-offset: 2px; }
-
+/* 342px + the 48px control strip above it keeps the table view the same 390px
+   block it was before the strip existed. */
 .fundamentals-workbench__table {
-  min-height: 390px;
+  min-height: 342px;
   padding-top: 4px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3225,7 +3212,7 @@ td { font-size: 14px; }
   .fundamentals-workbench__toolbar { flex-wrap: wrap; }
   .fundamentals-workbench__mode { flex: 1 1 auto; }
   .fundamentals-workbench__mode button { min-width: 0; }
-  .fundamentals-workbench__period-control > span { display: none; }
+  .fundamentals-workbench__toolbar[data-view="chart"] .fundamentals-workbench__period-control > span { display: none; }
   .fundamentals-workbench__mobile-selector-trigger {
     min-width: 72px;
     padding: 0 12px;
