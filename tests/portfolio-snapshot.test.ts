@@ -149,6 +149,25 @@ test("normalizes IBKR trades without treating order descriptions as contracts", 
   assert.equal(normalized.orderId, "1923609147");
 });
 
+test("keeps current-year trades when the snapshot is generated in a later year", () => {
+  const previous2026: PortfolioSnapshotV1 = {
+    ...previous,
+    generatedAt: "2026-12-31T23:30:00.000Z",
+    trades: [trade()],
+  };
+  const trade2027 = trade({ tradeId: "trade-2027", tradeTime: "2027-01-02T20:00:00.000Z" });
+  const next = buildPortfolioSnapshot(previous2026, {
+    generatedAt: "2027-01-02T23:30:00.000Z",
+    account: { netLiquidation: 68_000, cashBalance: 1_500 },
+    positions: previous2026.positions,
+    tradeSync: { status: "current", queryPeriod: "DAYS_7", trades: [trade2027] },
+  });
+
+  assert.equal(next.generatedAt, "2027-01-02T23:30:00.000Z");
+  assert.deepEqual(next.trades, [trade2027]);
+  assert.equal(next.tradeSync.lastSuccessfulTradeAt, trade2027.tradeTime);
+});
+
 test("keeps prior trades and watermark when the trade endpoint is delayed", () => {
   const next = buildPortfolioSnapshot(previous, {
     generatedAt: "2026-07-20T23:30:00.000Z",

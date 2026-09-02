@@ -175,6 +175,14 @@ export function realizedPnlByUnderlying(trades: PortfolioTrade[], year: number):
   return Object.fromEntries(Object.entries(totals).map(([symbol, value]) => [symbol, Math.round(value * 100) / 100]));
 }
 
+// Derive the trade-filter year (YTD semantics) from the snapshot generation time.
+// Falls back to the current UTC year only when generatedAt is missing or unparseable.
+function tradeFilterYear(generatedAt: string): number {
+  const generated = new Date(generatedAt);
+  if (Number.isNaN(generated.getTime())) return new Date().getUTCFullYear();
+  return generated.getUTCFullYear();
+}
+
 export function buildPortfolioSnapshot(previous: PortfolioSnapshotV1, input: SnapshotSyncInput): PortfolioSnapshotV1 {
   if (!Number.isFinite(input.account.netLiquidation) || input.account.netLiquidation <= 0) {
     throw new Error("Net liquidation must be a positive number");
@@ -201,7 +209,7 @@ export function buildPortfolioSnapshot(previous: PortfolioSnapshotV1, input: Sna
 
   const currentTradeSync = input.tradeSync.status === "current";
   const trades = input.tradeSync.status === "current"
-    ? mergeTrades(previous.trades, input.tradeSync.trades, 2026)
+    ? mergeTrades(previous.trades, input.tradeSync.trades, tradeFilterYear(input.generatedAt))
     : previous.trades;
   const lastSuccessfulTradeAt = currentTradeSync
     ? trades[0]?.tradeTime ?? previous.tradeSync.lastSuccessfulTradeAt
