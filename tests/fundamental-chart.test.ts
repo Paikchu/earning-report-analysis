@@ -64,6 +64,47 @@ test("computes margin change in percentage points", () => {
   assert.equal(model.series[0]?.label, "毛利率 · 环比变化");
 });
 
+test("matches YoY comparison by periodEnd when an excluded quarter leaves a hole", () => {
+  // 8 个季度中的第 5 个（2024-06-30）被 normalization 剔除，数组出现"空洞"。
+  // 旧实现按固定索引偏移（index-4）会把 2024-09 起的同比基准错指到更早的季度。
+  const periodEnds = [
+    "2023-06-30",
+    "2023-09-30",
+    "2023-12-31",
+    "2024-03-31",
+    // 2024-06-30 被剔除
+    "2024-09-30",
+    "2024-12-31",
+    "2025-03-31",
+  ];
+  const values = [100, 110, 120, 130, 150, 160, 170];
+  const series = {
+    ...makeChartSeries("total_revenue"),
+    points: periodEnds.map((periodEnd, index) => ({
+      periodEnd,
+      valueDecimal: String(values[index]),
+      revision: 1,
+    })),
+  };
+  const periods = periodEnds.map((periodEnd) => ({ periodType: "3M" as const, periodEnd, currency: "USD" }));
+  const model = buildFundamentalChartModel(periods, [series], [
+    { metricKey: "total_revenue", transform: "yoy_growth", mark: "line" },
+  ]);
+  const yoy = model.series[0]!;
+
+  // 空洞前的点与旧实现一致（序列不足一年，找不到去年同期 → null）。
+  assert.deepEqual(yoy.points.slice(0, 4).map((point) => point.value), [null, null, null, null]);
+  // 空洞后的点按 periodEnd 匹配真实去年同期（旧实现会错比 index-4 条目）：
+  // 2024-09 vs 2023-09 = (150/110 - 1) * 100 ≈ 36.36
+  // 2024-12 vs 2023-12 = (160/120 - 1) * 100 ≈ 33.33
+  // 2025-03 vs 2024-03 = (170/130 - 1) * 100 ≈ 30.77
+  assert.deepEqual(yoy.points.slice(4).map((point) => point.value), [
+    36.3636363636,
+    33.3333333333,
+    30.7692307692,
+  ]);
+});
+
 test("uses capital-expenditure magnitude for presentation while retaining the source decimal", () => {
   const data = makeChartResponse([makeChartSeries("capital_expenditure")]);
   const model = buildFundamentalChartModel(data.periods, data.series, [

@@ -414,14 +414,59 @@ function prepareSeries(
   };
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const YOY_MATCH_TOLERANCE_DAYS = 7;
+
+function parsePeriodEndDate(periodEnd: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(periodEnd);
+  if (!match) return null;
+  const ms = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function findYearAgoComparison(
+  points: readonly FundamentalChartPoint[],
+  index: number,
+): FundamentalChartPoint | undefined {
+  const dateMs = parsePeriodEndDate(points[index]!.periodEnd);
+  if (dateMs === null) return undefined;
+  const date = new Date(dateMs);
+  // 目标日期为"一年前的同一月日"。闰年 2/29 会被 Date 归一化到 3/1，
+  // ±7 天容差同时覆盖数据源季度末日期的漂移。
+  const targetMs = Date.UTC(date.getUTCFullYear() - 1, date.getUTCMonth(), date.getUTCDate());
+  let best: FundamentalChartPoint | undefined;
+  let bestDiff = Number.POSITIVE_INFINITY;
+  points.forEach((candidate, candidateIndex) => {
+    if (candidateIndex === index) return;
+    const candidateMs = parsePeriodEndDate(candidate.periodEnd);
+    if (candidateMs === null) return;
+    const diff = Math.abs(candidateMs - targetMs);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = candidate;
+    }
+  });
+  return bestDiff <= YOY_MATCH_TOLERANCE_DAYS * DAY_MS ? best : undefined;
+}
+
 function transformPoints(
   points: readonly FundamentalChartPoint[],
   transform: FundamentalTransform,
 ): FundamentalChartPoint[] {
   if (transform === "value") return points.map((point) => ({ ...point }));
-  const offset = transform === "yoy_growth" || transform === "yoy_change" ? 4 : 1;
   return points.map((point, index) => {
-    const comparison = points[index - offset];
+    // QoQ 用相邻条目（index-1）是安全的：points 继承 periods 按 periodEnd 的升序，
+    // 而 normalization 剔除缺营收季度后，相邻条目恰好就是排序意义上的前一个"可用"季度，
+    // 因此相邻条目语义与"前一个实际季度"一致，无需按日期匹配。
+    // YoY 不能沿用固定索引偏移（index-4）：剔除季度会在数组中留下"空洞"，
+    // 使 index-4 指向相隔 5+ 个季度的期间并静默产生错误增长率。因此改为按
+    // periodEnd 日期匹配一年前的同季度末；找不到（例如序列不足一年）则值为 null，
+    // 与"宁可显示空也不显示错值"的既有语义一致。
+    const comparison = transform === "yoy_growth" || transform === "yoy_change"
+      ? findYearAgoComparison(points, index)
+      : index > 0
+        ? points[index - 1]
+        : undefined;
     let value: number | null = null;
     if (point.value !== null && comparison?.value !== null && comparison?.value !== undefined) {
       if (transform === "qoq_growth" || transform === "yoy_growth") {
