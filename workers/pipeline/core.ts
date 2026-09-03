@@ -1,4 +1,5 @@
 import { isTrackedTicker, normalizeTrackedTicker, parseTrackedTickers } from "../../lib/sec-config.ts";
+import { serviceFetcher, type ServiceBinding } from "../../lib/service-binding.ts";
 
 export type SecWorkflowBinding<T = SecWorkflowParams> = {
   create(options: { id: string; params: T }): Promise<{ id: string }>;
@@ -21,6 +22,8 @@ export type SecCronEnv = {
   SEC_REFRESH_KEY: string;
   SEC_ANALYSIS_WORKFLOW: SecWorkflowBinding;
   SEC_MEMORY_WORKFLOW?: SecWorkflowBinding<SecMemoryWorkflowParams>;
+  /** Service Binding to the Web Worker. Its public hostname is unreachable from here. */
+  WEB?: ServiceBinding;
 };
 
 /**
@@ -32,7 +35,7 @@ export type SecCronEnv = {
  * Worker is unreachable — and every filing needs that same Worker for context, publication and job
  * state, so a run started from a stale list could not finish anyway.
  */
-export async function fetchTrackedTickers(env: SecCronEnv, fetcher: typeof fetch = fetch): Promise<string[]> {
+export async function fetchTrackedTickers(env: SecCronEnv, fetcher: typeof fetch = serviceFetcher(env.WEB)): Promise<string[]> {
   if (!env.WEB_APP_ORIGIN || !env.SEC_REFRESH_KEY) throw new Error("SEC watchlist environment is incomplete");
   const response = await fetcher(`${env.WEB_APP_ORIGIN.replace(/\/+$/, "")}/api/internal/sec/watchlist`, {
     headers: siteHeaders(env),
@@ -45,7 +48,7 @@ export async function fetchTrackedTickers(env: SecCronEnv, fetcher: typeof fetch
   return parseTrackedTickers(Array.isArray(body.tickers) ? body.tickers.join(",") : "");
 }
 
-export async function runSecRefresh(env: SecCronEnv, fetcher: typeof fetch = fetch, now = Date.now()) {
+export async function runSecRefresh(env: SecCronEnv, fetcher: typeof fetch = serviceFetcher(env.WEB), now = Date.now()) {
   if (!env.SEC_REFRESH_KEY || !env.SEC_ANALYSIS_WORKFLOW) {
     throw new Error("SEC cron environment is incomplete");
   }
@@ -70,7 +73,7 @@ export async function runSecRefresh(env: SecCronEnv, fetcher: typeof fetch = fet
   return { started, failed };
 }
 
-export async function runSecMemorySweep(env: SecCronEnv, fetcher: typeof fetch = fetch): Promise<{ started: string[] }> {
+export async function runSecMemorySweep(env: SecCronEnv, fetcher: typeof fetch = serviceFetcher(env.WEB)): Promise<{ started: string[] }> {
   if (!env.SEC_MEMORY_WORKFLOW) return { started: [] };
   const ownerToken = `sweeper:${crypto.randomUUID()}`;
   if (!env.WEB_APP_ORIGIN || !env.SEC_REFRESH_KEY) throw new Error("SEC memory environment is incomplete");
@@ -90,7 +93,7 @@ export async function runSecMemorySweep(env: SecCronEnv, fetcher: typeof fetch =
   return { started: [body.claim.jobId] };
 }
 
-export async function handleSecAnalysisRequest(request: Request, env: SecCronEnv, now = Date.now(), fetcher: typeof fetch = fetch): Promise<Response> {
+export async function handleSecAnalysisRequest(request: Request, env: SecCronEnv, now = Date.now(), fetcher: typeof fetch = serviceFetcher(env.WEB)): Promise<Response> {
   if (request.method !== "POST") return new Response("Not found", { status: 404 });
   if (!env.SEC_REFRESH_KEY || request.headers.get("x-sec-refresh-key") !== env.SEC_REFRESH_KEY) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });

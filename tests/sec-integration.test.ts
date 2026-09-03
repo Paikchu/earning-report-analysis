@@ -150,3 +150,31 @@ test("reports a failed scheduled run instead of finishing it as ok", async () =>
   // And a run that starts nothing has to be a failure, not an empty success.
   assert.match(core, /started no workflows/);
 });
+
+test("bridges the two Workers with Service Bindings instead of their public hostnames", async () => {
+  const [pipelineConfig, webConfig, core, operations, memoryWorkflow, runtime, adminRefresh] = await Promise.all([
+    readFile(new URL("../workers/pipeline/wrangler.jsonc", import.meta.url), "utf8"),
+    readFile(new URL("../workers/web/wrangler.jsonc", import.meta.url), "utf8"),
+    readFile(new URL("../workers/pipeline/core.ts", import.meta.url), "utf8"),
+    readFile(new URL("../workers/pipeline/operations.ts", import.meta.url), "utf8"),
+    readFile(new URL("../workers/pipeline/memory-workflow.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/sec-runtime.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/v1/admin/companies/[ticker]/refresh/route.ts", import.meta.url), "utf8"),
+  ]);
+
+  // Two Workers on one workers.dev subdomain cannot reach each other over their public hostnames:
+  // the edge answers the subrequest with a 404 that never reaches the target Worker at all.
+  assert.match(pipelineConfig, /"binding":\s*"WEB",\s*"service":\s*"earning-report-analysis-sec-web"/);
+  assert.match(webConfig, /"binding":\s*"PIPELINE",\s*"service":\s*"earning-report-analysis-sec-pipeline"/);
+  assert.match(core, /serviceFetcher\(env\.WEB\)/);
+  assert.match(operations, /siteFetch: typeof fetch = serviceFetcher\(env\.WEB, fetcher\)/);
+  assert.match(memoryWorkflow, /siteFetch: typeof fetch = serviceFetcher\(env\.WEB, fetcher\)/);
+  assert.match(runtime, /pipelineFetch: serviceFetcher\(asServiceBinding\(values\.PIPELINE\)\)/);
+  assert.match(adminRefresh, /fetcher: runtime\.pipelineFetch/);
+
+  // Only the bridge moves. SEC and the model API are the open internet and keep the plain fetcher.
+  assert.doesNotMatch(operations, /\(env, fetcher, "\/api\/internal\//);
+  assert.doesNotMatch(memoryWorkflow, /\(env, fetcher, "\/api\/internal\//);
+  assert.match(operations, /discoverSecTicker\(ticker, \{ userAgent: env\.SEC_USER_AGENT, fetcher \}\)/);
+  assert.match(operations, /callWorkerSecModel\(env, fetcher,/);
+});

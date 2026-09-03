@@ -1,4 +1,5 @@
 import type { SecMemoryJobClaim } from "../../lib/sec-d1.ts";
+import { serviceFetcher } from "../../lib/service-binding.ts";
 import { normalizeMemoryExtraction } from "../../lib/sec-memory.ts";
 import type { SecMemoryWorkflowParams } from "./core.ts";
 import { callWorkerSecModel, sitePost, type SecPipelineEnv } from "./operations.ts";
@@ -11,9 +12,10 @@ export async function executeSecMemoryWorkflow(
   step: WorkflowStepLike,
   env: SecPipelineEnv,
   fetcher: typeof fetch = fetch,
+  siteFetch: typeof fetch = serviceFetcher(env.WEB, fetcher),
 ) {
   const ownerToken = params.ownerToken || `${workflowInstanceId}:${crypto.randomUUID()}`;
-  const claimed = await step.do(`memory-claim:${params.jobId}`, () => sitePost<{ claim: SecMemoryJobClaim | null }>(env, fetcher, "/api/internal/sec/memory/claim", {
+  const claimed = await step.do(`memory-claim:${params.jobId}`, () => sitePost<{ claim: SecMemoryJobClaim | null }>(env, siteFetch, "/api/internal/sec/memory/claim", {
     jobId: params.jobId,
     ownerToken,
   }));
@@ -31,7 +33,7 @@ export async function executeSecMemoryWorkflow(
     const value = await callWorkerSecModel(env, fetcher, "memory-extract", memoryExtractionSystemPrompt(), compactMemorySource(source), execution.model);
     return normalizeMemoryExtraction(value, validEvidenceIds, priorMemoryIds);
   });
-  const committed = await step.do(`memory-commit:${params.jobId}`, () => sitePost<{ status: string; noOp: boolean; itemCount: number }>(env, fetcher, "/api/internal/sec/memory/commit", {
+  const committed = await step.do(`memory-commit:${params.jobId}`, () => sitePost<{ status: string; noOp: boolean; itemCount: number }>(env, siteFetch, "/api/internal/sec/memory/commit", {
     claim,
     extraction,
   }));
