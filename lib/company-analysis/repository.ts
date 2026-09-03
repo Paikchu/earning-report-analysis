@@ -94,7 +94,7 @@ export class D1CompanyAnalysisRepository {
     return Boolean(row);
   }
 
-  async listBackfillCandidates(tickers: string[], limit = 100): Promise<CompanyAnalysisBackfillCandidate[]> {
+  async listBackfillCandidates(tickers: string[], limit = 100, includeIncomplete = false): Promise<CompanyAnalysisBackfillCandidate[]> {
     const allowed = [...new Set(tickers.map((ticker) => ticker.trim().toUpperCase()).filter(Boolean))];
     if (!allowed.length) return [];
     const boundedLimit = Math.min(500, Math.max(1, Math.trunc(limit)));
@@ -118,7 +118,9 @@ export class D1CompanyAnalysisRepository {
       WHERE m.memoryRank = 1
         AND NOT EXISTS (
           SELECT 1 FROM company_analysis_runs r
-          WHERE r.trigger_ref = m.memoryJobId || ':' || CAST(t.version AS TEXT)
+          WHERE ${includeIncomplete
+            ? "r.ticker = m.ticker AND r.period_id = m.periodId AND r.memory_version = t.version AND r.status = 'ready'"
+            : "r.trigger_ref = m.memoryJobId || ':' || CAST(t.version AS TEXT)"}
         )
       ORDER BY m.ticker
       LIMIT ?

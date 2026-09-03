@@ -29,6 +29,7 @@ export type CompanyAnalysisWorkflowParams = {
 
 export type CompanyAnalysisBackfillParams = {
   requestedBy?: "manual" | "scheduled";
+  forceIncomplete?: boolean;
 };
 
 export type SecCronEnv = {
@@ -44,12 +45,13 @@ export type SecCronEnv = {
 export async function runCompanyAnalysisSweep(
   env: SecCronEnv,
   fetcher: typeof fetch = serviceFetcher(env.WEB),
+  options: { forceIncomplete?: boolean } = {},
 ): Promise<{ candidates: number; started: string[]; failed: string[] }> {
   if (!env.COMPANY_ANALYSIS_WORKFLOW) return { candidates: 0, started: [], failed: [] };
   const response = await fetcher(`${env.WEB_APP_ORIGIN.replace(/\/+$/, "")}/api/internal/company-analysis/backfill-candidates`, {
     method: "POST",
     headers: siteHeaders(env),
-    body: JSON.stringify({ limit: 100 }),
+    body: JSON.stringify({ limit: 100, includeIncomplete: options.forceIncomplete === true }),
     signal: AbortSignal.timeout(30_000),
   });
   if (!response.ok) throw new Error(`Company analysis candidates HTTP ${response.status}`);
@@ -61,9 +63,14 @@ export async function runCompanyAnalysisSweep(
     const ticker = normalizeTrackedTicker(candidate.ticker);
     if (!ticker || !candidate.triggerRef) continue;
     try {
+      const triggerRef = options.forceIncomplete
+        ? `${candidate.triggerRef}:recovery:${crypto.randomUUID()}`
+        : candidate.triggerRef;
       await env.COMPANY_ANALYSIS_WORKFLOW.create({
-        id: `company-${hashString(candidate.triggerRef)}`,
-        params: { ...candidate, ticker },
+        id: options.forceIncomplete
+          ? `company-${hashString(triggerRef)}-${crypto.randomUUID()}`
+          : `company-${hashString(candidate.triggerRef)}`,
+        params: { ...candidate, ticker, triggerRef },
       });
       started.push(ticker);
     } catch (error) {

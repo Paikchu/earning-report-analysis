@@ -61,6 +61,44 @@ test("starts one idempotent company analysis workflow for each backfill candidat
   assert.match(started[0]?.id ?? "", /^company-/);
 });
 
+test("force backfill requests incomplete candidates and creates a fresh workflow instance", async () => {
+  const ids: string[] = [];
+  const triggerRefs: string[] = [];
+  const requestBodies: string[] = [];
+  const candidates: typeof fetch = async (_input, init) => {
+    requestBodies.push(String(init?.body));
+    return Response.json({ candidates: [{
+      ticker: "MSFT",
+      memoryJobId: "memory-job-1",
+      memoryVersion: 4,
+      periodId: "MSFT:2026-06-30:quarter",
+      reportDate: "2026-06-30",
+      triggerRef: "memory-job-1:4",
+    }] });
+  };
+  const sweepEnv = {
+    ...env,
+    COMPANY_ANALYSIS_WORKFLOW: {
+      async create(options) {
+        ids.push(options.id);
+        triggerRefs.push(options.params.triggerRef);
+        return { id: options.id };
+      },
+    },
+  } as SecCronEnv;
+
+  await runCompanyAnalysisSweep(sweepEnv, candidates, { forceIncomplete: true });
+  await runCompanyAnalysisSweep(sweepEnv, candidates, { forceIncomplete: true });
+
+  assert.equal(new Set(ids).size, 2);
+  assert.equal(new Set(triggerRefs).size, 2);
+  assert.ok(triggerRefs.every((triggerRef) => triggerRef.startsWith("memory-job-1:4:recovery:")));
+  assert.deepEqual(requestBodies.map((body) => JSON.parse(body)), [
+    { limit: 100, includeIncomplete: true },
+    { limit: 100, includeIncomplete: true },
+  ]);
+});
+
 test("continues starting remaining workflows after one failure", async () => {
   const started: string[] = [];
   const binding: SecWorkflowBinding = {

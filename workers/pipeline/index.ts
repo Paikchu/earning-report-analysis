@@ -51,10 +51,14 @@ export class CompanyAnalysisWorkflow extends WorkflowEntrypoint<SecPipelineEnv, 
 }
 
 export class CompanyAnalysisBackfillWorkflow extends WorkflowEntrypoint<SecPipelineEnv, CompanyAnalysisBackfillParams> {
-  async run(_event: WorkflowEvent<CompanyAnalysisBackfillParams>, step: WorkflowStep) {
+  async run(event: WorkflowEvent<CompanyAnalysisBackfillParams>, step: WorkflowStep) {
     const durable = durableSteps(step);
     const sec = await durable.do("backfill-latest-sec", () => runSecRefresh(this.env));
-    const company = await durable.do("backfill-company-analysis", () => runCompanyAnalysisSweep(this.env));
+    const company = await durable.do("backfill-company-analysis", () => runCompanyAnalysisSweep(
+      this.env,
+      undefined,
+      { forceIncomplete: event.payload.forceIncomplete === true },
+    ));
     return { sec, company };
   }
 }

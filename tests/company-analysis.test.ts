@@ -146,6 +146,20 @@ test("backfill selects only the latest completed Memory version without an analy
       updatedAt: generatedAt,
     });
     assert.deepEqual(await repository.listBackfillCandidates(["AMZN"]), []);
+    assert.equal((await repository.listBackfillCandidates(["AMZN"], 100, true)).length, 1);
+
+    await repository.upsertRun({
+      analysisId: "company:AMZN:backfill",
+      ticker: "AMZN",
+      triggerRef: "memory-latest:7",
+      periodId: publication().periodId,
+      memoryVersion: 7,
+      status: "ready",
+      modelVersion: publication().modelVersion,
+      promptVersion: publication().promptVersion,
+      updatedAt: generatedAt,
+    });
+    assert.deepEqual(await repository.listBackfillCandidates(["AMZN"], 100, true), []);
   } finally {
     database.close();
   }
