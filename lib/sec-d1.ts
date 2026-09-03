@@ -217,15 +217,23 @@ export class D1SecRepository implements SecRepository {
     return isExpiredJobLease(row.status, row.updatedAt, now) ? "failed" : row.status;
   }
 
-  async getLatestAnalysisJobStatus(ticker: string, accessionNumber: string): Promise<SecAnalysisJobStatus | null> {
+  async getLatestAnalysisJobStatus(
+    ticker: string,
+    accessionNumber: string,
+    now = Date.now(),
+  ): Promise<SecAnalysisJobStatus | null> {
     const row = await this.database.prepare(`
-      SELECT status
+      SELECT status, updated_at AS updatedAt
       FROM sec_analysis_jobs
       WHERE ticker = ? AND accession_number = ?
       ORDER BY updated_at DESC
       LIMIT 1
-    `).bind(ticker, accessionNumber).first<{ status: SecAnalysisJobStatus }>();
-    return row?.status ?? null;
+    `).bind(ticker, accessionNumber).first<{ status: SecAnalysisJobStatus; updatedAt: string }>();
+    if (!row) return null;
+    // The read path has to expire the lease exactly like `getAnalysisJobStatus` does. A workflow
+    // that died mid-run leaves `running` as the newest row forever, and reporting that verbatim
+    // makes the public API claim a filing is still being analysed for the rest of time.
+    return isExpiredJobLease(row.status, row.updatedAt, now) ? "failed" : row.status;
   }
 
   async getPublishedReport(ticker: string, periodId: string): Promise<PublishedSecReport | null> {

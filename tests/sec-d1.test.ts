@@ -164,6 +164,32 @@ test("hands a filing back once a non-terminal job outlives its lease", async () 
   assert.equal(await read("running", "not a timestamp"), "running");
 });
 
+test("stops reporting a filing as processing once its job outlives the lease", async () => {
+  const jobRow = (row: unknown) => ({
+    prepare() {
+      return {
+        bind() {
+          return {
+            async first<T>() { return row as T; },
+          };
+        },
+      };
+    },
+  });
+  const now = Date.parse("2026-08-29T12:00:00.000Z");
+  const read = (row: unknown) =>
+    new D1SecRepository(asDatabase(jobRow(row))).getLatestAnalysisJobStatus("MSFT", "acc-1", now);
+
+  // The public API turns queued/running into "processing", so a workflow that died three days ago
+  // would otherwise advertise itself as in progress forever.
+  assert.equal(await read({ status: "running", updatedAt: "2026-08-26T15:30:13.000Z" }), "failed");
+  assert.equal(await read({ status: "queued", updatedAt: "2026-08-26T15:30:13.000Z" }), "failed");
+  // A run still inside its lease is genuinely processing.
+  assert.equal(await read({ status: "running", updatedAt: "2026-08-29T11:30:00.000Z" }), "running");
+  assert.equal(await read({ status: "complete", updatedAt: "2026-08-04T18:44:48.000Z" }), "complete");
+  assert.equal(await read(null), null);
+});
+
 test("does not publish an analysis artifact that failed verification", async () => {
   const sql: string[] = [];
   const database = {
