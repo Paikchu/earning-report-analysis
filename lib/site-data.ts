@@ -19,5 +19,5 @@ export function searchCompanyDirectory(
   limit = 8,
   types: readonly SecurityType[] = DEFAULT_SEARCH_TYPES,
 ): SymbolDirectoryEntry[] {
-  return searchSecurities(symbolSearchEntries, rawQuery, new Set(), limit, types).map(({ symbol, name, exchange, type }) => ({ symbol, name, exchange, type }));
+  return searchSecurities(symbolSearchEntries, rawQuery, limit, types).map(({ symbol, name, exchange, type }) => ({ symbol, name, exchange, type }));
 }
