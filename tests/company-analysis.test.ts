@@ -103,6 +103,52 @@ test("promotes the same in-progress analysis row to an immutable publication", a
   }
 });
 
+test("backfill selects only the latest completed Memory version without an analysis run", async () => {
+  const database = new SqliteD1Database();
+  try {
+    await applySqlMigration(database, "../../workers/web/migrations/0009_company_analysis.sql");
+    database.raw.exec(`
+      CREATE TABLE sec_periods (period_id TEXT PRIMARY KEY, ticker TEXT NOT NULL, end_date TEXT NOT NULL);
+      CREATE TABLE sec_memory_jobs (
+        job_id TEXT PRIMARY KEY, ticker TEXT NOT NULL, period_id TEXT NOT NULL,
+        status TEXT NOT NULL, completed_at TEXT
+      );
+      CREATE TABLE sec_company_memory_threads (ticker TEXT PRIMARY KEY, version INTEGER NOT NULL);
+      INSERT INTO sec_periods VALUES
+        ('AMZN:2025-12-31:quarter', 'AMZN', '2025-12-31'),
+        ('AMZN:2026-03-31:quarter', 'AMZN', '2026-03-31');
+      INSERT INTO sec_memory_jobs VALUES
+        ('memory-old', 'AMZN', 'AMZN:2025-12-31:quarter', 'complete', '2026-02-01T00:00:00Z'),
+        ('memory-latest', 'AMZN', 'AMZN:2026-03-31:quarter', 'complete', '2026-05-01T00:00:00Z');
+      INSERT INTO sec_company_memory_threads VALUES ('AMZN', 7);
+    `);
+    const repository = new D1CompanyAnalysisRepository(database);
+    assert.deepEqual(await repository.listBackfillCandidates(["AMZN"]), [{
+      ticker: "AMZN",
+      memoryJobId: "memory-latest",
+      memoryVersion: 7,
+      periodId: "AMZN:2026-03-31:quarter",
+      reportDate: "2026-03-31",
+      triggerRef: "memory-latest:7",
+    }]);
+
+    await repository.upsertRun({
+      analysisId: "company:AMZN:backfill",
+      ticker: "AMZN",
+      triggerRef: "memory-latest:7",
+      periodId: "AMZN:2026-03-31:quarter",
+      memoryVersion: 7,
+      status: "waiting_fundamentals",
+      modelVersion: "test-model",
+      promptVersion: "company-analysis-skill.v1",
+      updatedAt: generatedAt,
+    });
+    assert.deepEqual(await repository.listBackfillCandidates(["AMZN"]), []);
+  } finally {
+    database.close();
+  }
+});
+
 test("feature engine calculates trends only from Yahoo quarterly observations", () => {
   const periods = ["2025-03-31", "2025-06-30", "2025-09-30", "2025-12-31", "2026-03-31"];
   const observations = periods.flatMap((periodEnd, index) => [

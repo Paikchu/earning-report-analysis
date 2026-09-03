@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   handleSecAnalysisRequest,
+  runCompanyAnalysisSweep,
   runSecRefresh,
   type SecCronEnv,
   type SecWorkflowBinding,
@@ -32,6 +33,32 @@ test("loads the watchlist and starts one independent workflow per ticker", async
 
   assert.deepEqual(result, { started: ["MSFT", "NOK"], failed: [] });
   assert.deepEqual(started, ["MSFT", "NOK"]);
+});
+
+test("starts one idempotent company analysis workflow for each backfill candidate", async () => {
+  const started: Array<{ id: string; ticker: string; triggerRef: string }> = [];
+  const candidates: typeof fetch = async () => Response.json({ candidates: [{
+    ticker: "MSFT",
+    memoryJobId: "memory-job-1",
+    memoryVersion: 4,
+    periodId: "MSFT:2026-06-30:quarter",
+    reportDate: "2026-06-30",
+    triggerRef: "memory-job-1:4",
+  }] });
+  const result = await runCompanyAnalysisSweep({
+    ...env,
+    COMPANY_ANALYSIS_WORKFLOW: {
+      async create(options) {
+        started.push({ id: options.id, ticker: options.params.ticker, triggerRef: options.params.triggerRef });
+        return { id: options.id };
+      },
+    },
+  }, candidates);
+
+  assert.deepEqual(result, { candidates: 1, started: ["MSFT"], failed: [] });
+  assert.equal(started[0]?.ticker, "MSFT");
+  assert.equal(started[0]?.triggerRef, "memory-job-1:4");
+  assert.match(started[0]?.id ?? "", /^company-/);
 });
 
 test("continues starting remaining workflows after one failure", async () => {

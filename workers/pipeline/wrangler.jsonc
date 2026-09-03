@@ -27,6 +27,11 @@
       "name": "earning-report-analysis-company-analysis",
       "binding": "COMPANY_ANALYSIS_WORKFLOW",
       "class_name": "CompanyAnalysisWorkflow"
+    },
+    {
+      "name": "earning-report-analysis-company-analysis-backfill",
+      "binding": "COMPANY_ANALYSIS_BACKFILL_WORKFLOW",
+      "class_name": "CompanyAnalysisBackfillWorkflow"
     }
   ],
   "r2_buckets": [
@@ -78,6 +83,11 @@
           "name": "earning-report-analysis-company-analysis-staging",
           "binding": "COMPANY_ANALYSIS_WORKFLOW",
           "class_name": "CompanyAnalysisWorkflow"
+        },
+        {
+          "name": "earning-report-analysis-company-analysis-backfill-staging",
+          "binding": "COMPANY_ANALYSIS_BACKFILL_WORKFLOW",
+          "class_name": "CompanyAnalysisBackfillWorkflow"
         }
       ],
       "r2_buckets": [

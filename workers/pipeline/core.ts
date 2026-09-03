@@ -1,4 +1,5 @@
 import { isTrackedTicker, normalizeTrackedTicker, parseTrackedTickers } from "../../lib/sec-config.ts";
+import { hashString } from "../../lib/sec-analysis.ts";
 import { serviceFetcher, type ServiceBinding } from "../../lib/service-binding.ts";
 
 export type SecWorkflowBinding<T = SecWorkflowParams> = {
@@ -26,6 +27,10 @@ export type CompanyAnalysisWorkflowParams = {
   triggerRef: string;
 };
 
+export type CompanyAnalysisBackfillParams = {
+  requestedBy?: "manual" | "scheduled";
+};
+
 export type SecCronEnv = {
   WEB_APP_ORIGIN: string;
   SEC_REFRESH_KEY: string;
@@ -35,6 +40,42 @@ export type SecCronEnv = {
   /** Service Binding to the Web Worker. Its public hostname is unreachable from here. */
   WEB?: ServiceBinding;
 };
+
+export async function runCompanyAnalysisSweep(
+  env: SecCronEnv,
+  fetcher: typeof fetch = serviceFetcher(env.WEB),
+): Promise<{ candidates: number; started: string[]; failed: string[] }> {
+  if (!env.COMPANY_ANALYSIS_WORKFLOW) return { candidates: 0, started: [], failed: [] };
+  const response = await fetcher(`${env.WEB_APP_ORIGIN.replace(/\/+$/, "")}/api/internal/company-analysis/backfill-candidates`, {
+    method: "POST",
+    headers: siteHeaders(env),
+    body: JSON.stringify({ limit: 100 }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) throw new Error(`Company analysis candidates HTTP ${response.status}`);
+  const body = await response.json() as { candidates?: CompanyAnalysisWorkflowParams[] };
+  const candidates = Array.isArray(body.candidates) ? body.candidates : [];
+  const started: string[] = [];
+  const failed: string[] = [];
+  for (const candidate of candidates) {
+    const ticker = normalizeTrackedTicker(candidate.ticker);
+    if (!ticker || !candidate.triggerRef) continue;
+    try {
+      await env.COMPANY_ANALYSIS_WORKFLOW.create({
+        id: `company-${hashString(candidate.triggerRef)}`,
+        params: { ...candidate, ticker },
+      });
+      started.push(ticker);
+    } catch (error) {
+      if (/already exists|duplicate/i.test(String(error))) {
+        started.push(ticker);
+      } else {
+        failed.push(ticker);
+      }
+    }
+  }
+  return { candidates: candidates.length, started, failed };
+}
 
 /**
  * The whitelist lives on the Web Worker, which is also the side that rejects an untracked ticker on

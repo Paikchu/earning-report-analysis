@@ -140,7 +140,7 @@ test("reports a failed scheduled run instead of finishing it as ok", async () =>
 
   // `allSettled` cannot reject, so the handler has to await the work and rethrow for the Cron
   // invocation to record anything but `outcome: ok`. Handing it to `waitUntil` loses that.
-  assert.match(workerSource, /const results = await Promise\.allSettled\(\[runSecRefresh\(env\), runSecMemorySweep\(env\)\]\)/);
+  assert.match(workerSource, /const results = await Promise\.allSettled\(\[runSecRefresh\(env\), runSecMemorySweep\(env\), runCompanyAnalysisSweep\(env\)\]\)/);
   assert.match(workerSource, /console\.error\(payload\)/);
   // A rejection reason is an Error, and JSON.stringify renders those as `{}` — the log has to
   // unwrap the message or a reported failure says nothing about what failed.

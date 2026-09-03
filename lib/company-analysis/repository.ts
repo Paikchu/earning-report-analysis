@@ -32,6 +32,15 @@ export type CompanyAnalysisRunUpdate = {
   updatedAt: string;
 };
 
+export type CompanyAnalysisBackfillCandidate = {
+  ticker: string;
+  memoryJobId: string;
+  memoryVersion: number;
+  periodId: string;
+  reportDate: string;
+  triggerRef: string;
+};
+
 type PublicationRow = {
   analysisId: string;
   ticker: string;
@@ -83,6 +92,41 @@ export class D1CompanyAnalysisRepository {
       LIMIT 1
     `).bind(ticker, generatedAt).first<{ analysisId: string }>();
     return Boolean(row);
+  }
+
+  async listBackfillCandidates(tickers: string[], limit = 100): Promise<CompanyAnalysisBackfillCandidate[]> {
+    const allowed = [...new Set(tickers.map((ticker) => ticker.trim().toUpperCase()).filter(Boolean))];
+    if (!allowed.length) return [];
+    const boundedLimit = Math.min(500, Math.max(1, Math.trunc(limit)));
+    const placeholders = allowed.map(() => "?").join(", ");
+    const rows = await this.database.prepare(`
+      WITH ranked_memory AS (
+        SELECT j.job_id AS memoryJobId, j.ticker, j.period_id AS periodId,
+          p.end_date AS reportDate,
+          ROW_NUMBER() OVER (
+            PARTITION BY j.ticker
+            ORDER BY p.end_date DESC, j.completed_at DESC, j.job_id DESC
+          ) AS memoryRank
+        FROM sec_memory_jobs j
+        JOIN sec_periods p ON p.period_id = j.period_id AND p.ticker = j.ticker
+        WHERE j.status = 'complete' AND j.ticker IN (${placeholders})
+      )
+      SELECT m.ticker, m.memoryJobId, t.version AS memoryVersion,
+        m.periodId, m.reportDate
+      FROM ranked_memory m
+      JOIN sec_company_memory_threads t ON t.ticker = m.ticker
+      WHERE m.memoryRank = 1
+        AND NOT EXISTS (
+          SELECT 1 FROM company_analysis_runs r
+          WHERE r.trigger_ref = m.memoryJobId || ':' || CAST(t.version AS TEXT)
+        )
+      ORDER BY m.ticker
+      LIMIT ?
+    `).bind(...allowed, boundedLimit).all<Omit<CompanyAnalysisBackfillCandidate, "triggerRef">>();
+    return rows.results.map((row) => ({
+      ...row,
+      triggerRef: `${row.memoryJobId}:${row.memoryVersion}`,
+    }));
   }
 
   async upsertRun(update: CompanyAnalysisRunUpdate): Promise<void> {

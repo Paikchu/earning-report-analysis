@@ -1,6 +1,6 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 
-import { handleSecAnalysisRequest, runSecMemorySweep, runSecRefresh, type CompanyAnalysisWorkflowParams, type SecMemoryWorkflowParams, type SecWorkflowParams } from "./core.ts";
+import { handleSecAnalysisRequest, runCompanyAnalysisSweep, runSecMemorySweep, runSecRefresh, type CompanyAnalysisBackfillParams, type CompanyAnalysisWorkflowParams, type SecMemoryWorkflowParams, type SecWorkflowParams } from "./core.ts";
 import { executeCompanyAnalysisWorkflow } from "./company-analysis-workflow.ts";
 import { executeSecMemoryWorkflow } from "./memory-workflow.ts";
 import { createSecPipelineOperations, type SecPipelineEnv } from "./operations.ts";
@@ -50,6 +50,15 @@ export class CompanyAnalysisWorkflow extends WorkflowEntrypoint<SecPipelineEnv, 
   }
 }
 
+export class CompanyAnalysisBackfillWorkflow extends WorkflowEntrypoint<SecPipelineEnv, CompanyAnalysisBackfillParams> {
+  async run(_event: WorkflowEvent<CompanyAnalysisBackfillParams>, step: WorkflowStep) {
+    const durable = durableSteps(step);
+    const sec = await durable.do("backfill-latest-sec", () => runSecRefresh(this.env));
+    const company = await durable.do("backfill-company-analysis", () => runCompanyAnalysisSweep(this.env));
+    return { sec, company };
+  }
+}
+
 /**
  * `JSON.stringify` renders an Error as `{}`, so a rejection reason has to be read off it before it
  * reaches the log. The old handler logged the raw settled results and every failure it did report
@@ -70,9 +79,9 @@ const worker = {
   },
 
   async scheduled(_controller: ScheduledController, env: SecPipelineEnv) {
-    const results = await Promise.allSettled([runSecRefresh(env), runSecMemorySweep(env)]);
-    const [analysis, memory] = results.map(describeSettled);
-    const payload = JSON.stringify({ event: "sec-workflows", analysis, memory });
+    const results = await Promise.allSettled([runSecRefresh(env), runSecMemorySweep(env), runCompanyAnalysisSweep(env)]);
+    const [analysis, memory, companyAnalysis] = results.map(describeSettled);
+    const payload = JSON.stringify({ event: "sec-workflows", analysis, memory, companyAnalysis });
     const rejected = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
     if (!rejected.length) {
       console.log(payload);
