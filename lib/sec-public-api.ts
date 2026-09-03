@@ -40,17 +40,39 @@ export async function getPublicFilingPage(
   const ticker = normalizeTrackedTicker(rawTicker);
   if (!ticker) throw new Error("Invalid ticker");
   if (rawCursor && !decodePageCursor(rawCursor)) throw new Error("Invalid cursor");
-  const cachedFeed = typeof repository.getCache === "function" ? await getCachedSecFeed(repository, ticker) : null;
   const limit = Math.min(50, Math.max(1, Math.trunc(Number(rawLimit ?? 20)) || 20));
   const cursor = decodePageCursor(rawCursor);
-  const cachedFilings = cachedFeed?.filings.filter((filing) => !cursor || filing.filingDate < cursor.filingDate || (filing.filingDate === cursor.filingDate && filing.accessionNumber < cursor.accessionNumber)) ?? [];
-  const cachedPage = cachedFilings.slice(0, limit);
-  const page = cachedPage.length > 0 || cachedFeed
-    ? { filings: cachedPage, total: cachedFeed?.filings.length ?? 0, nextCursor: cachedFilings.length > limit ? encodePageCursor({ filingDate: cachedPage.at(-1)!.filingDate, accessionNumber: cachedPage.at(-1)!.accessionNumber }) : null }
-    : await repository.listPublicFilings(ticker, rawCursor, limit);
-  const company = cachedFeed?.company ?? (page.filings[0] ? companyFromFiling(page.filings[0]) : companyFromDirectory(ticker));
-  const filings = await Promise.all(page.filings.map(async (filing) => toPublicFiling(repository, filing, company?.name ?? ticker)));
-  return { ticker, company, filings, nextCursor: page.nextCursor, total: page.total, checkedAt: cachedFeed?.fetchedAt ?? null };
+  // 缓存只保留最近一轮抓取的滚动窗口，历史申报必须与 D1 累积表合并分页。
+  const [cachedFeed, storedPage] = await Promise.all([
+    typeof repository.getCache === "function" ? getCachedSecFeed(repository, ticker) : null,
+    repository.listPublicFilings(ticker, rawCursor, limit),
+  ]);
+  const afterCursor = (filing: SecFilingWithSummary) => !cursor
+    || filing.filingDate < cursor.filingDate
+    || (filing.filingDate === cursor.filingDate && filing.accessionNumber < cursor.accessionNumber);
+  const merged = new Map<string, SecFilingWithSummary>();
+  for (const filing of cachedFeed?.filings ?? []) {
+    if (afterCursor(filing)) merged.set(filing.accessionNumber, filing);
+  }
+  for (const filing of storedPage.filings) {
+    if (!merged.has(filing.accessionNumber)) merged.set(filing.accessionNumber, filing);
+  }
+  const candidates = [...merged.values()].sort((left, right) =>
+    right.filingDate.localeCompare(left.filingDate)
+    || right.accessionNumber.localeCompare(left.accessionNumber));
+  const pageFilings = candidates.slice(0, limit);
+  const last = pageFilings.at(-1);
+  const hasMore = candidates.length > limit || storedPage.nextCursor !== null;
+  const company = cachedFeed?.company ?? (pageFilings[0] ? companyFromFiling(pageFilings[0]) : companyFromDirectory(ticker));
+  const filings = await Promise.all(pageFilings.map(async (filing) => toPublicFiling(repository, filing, company?.name ?? ticker)));
+  return {
+    ticker,
+    company,
+    filings,
+    nextCursor: hasMore && last ? encodePageCursor({ filingDate: last.filingDate, accessionNumber: last.accessionNumber }) : null,
+    total: Math.max(storedPage.total, cachedFeed?.filings.length ?? 0),
+    checkedAt: cachedFeed?.fetchedAt ?? null,
+  };
 }
 
 export async function getPublicFiling(
