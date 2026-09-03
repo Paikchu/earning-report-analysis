@@ -119,12 +119,9 @@ export function FundamentalChartRenderer({
 
   return (
     <figure className={["fundamental-chart", className].filter(Boolean).join(" ")} data-chart-role="fundamental-chart">
-      <figcaption className="fundamental-chart__heading">
-        <div>
-          <h3 id={titleId}>{title}</h3>
-          {description ? <p id={descriptionId}>{description}</p> : null}
-        </div>
-        <ChartStatus data={data} />
+      <figcaption className="sr-only">
+        <h3 id={titleId}>{title}</h3>
+        {description ? <p id={descriptionId}>{description}</p> : null}
       </figcaption>
 
       <ChartLegend model={model} />
@@ -247,11 +244,9 @@ function ChartFrame({
 }) {
   return (
     <section className={["fundamental-chart", className].filter(Boolean).join(" ")} data-chart-role="fundamental-chart">
-      <header className="fundamental-chart__heading">
-        <div>
-          <h3>{title}</h3>
-          {description ? <p>{description}</p> : null}
-        </div>
+      <header className="sr-only">
+        <h3>{title}</h3>
+        {description ? <p>{description}</p> : null}
       </header>
       {children}
     </section>
@@ -263,16 +258,6 @@ function ChartMessage({ title, detail }: { title: string; detail: string }) {
     <div className="fundamental-chart__message" role="status" data-chart-role="message">
       <strong>{title}</strong>
       <p>{detail}</p>
-    </div>
-  );
-}
-
-function ChartStatus({ data }: { data: PublicFundamentalsResponse }) {
-  if (!data.stale && !data.partial) return null;
-  return (
-    <div className="fundamental-chart__status" aria-label="数据状态">
-      {data.stale ? <span data-status="stale">数据待更新</span> : null}
-      {data.partial ? <span data-status="partial">部分数据</span> : null}
     </div>
   );
 }
@@ -332,7 +317,7 @@ function FundamentalSvgChart({
     observer.observe(viewport);
     return () => observer.disconnect();
   }, []);
-  const chartHeight = chartWidth < 540 ? 340 : FUNDAMENTAL_CHART_HEIGHT;
+  const chartHeight = chartWidth < 540 ? 250 : FUNDAMENTAL_CHART_HEIGHT;
   const geometry = buildFundamentalChartGeometry(model, chartWidth, chartHeight);
   const { layout } = geometry;
   const leftAxis = model.axes.find((axis) => axis.side === "left");

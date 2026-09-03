@@ -17,7 +17,7 @@ const callbacks = {
   onRetry: () => undefined,
 };
 
-test("stock fundamentals workbench renders one chart, explicit controls, and the desktop selector", () => {
+test("stock fundamentals workbench renders one chart behind a single metric picker", () => {
   const html = renderToStaticMarkup(
     <FundamentalChartsView
       ticker="ACME"
@@ -32,15 +32,19 @@ test("stock fundamentals workbench renders one chart, explicit controls, and the
 
   assert.match(html, /id="fundamentals-heading"/);
   assert.equal((html.match(/data-chart-role="fundamental-chart"/g) ?? []).length, 1);
-  assert.equal((html.match(/data-chart-role="metric-selector"/g) ?? []).length, 1);
-  // The mark comes from each metric, so the page offers no chart-type switch.
+  // The mark comes from each metric, so the page offers no chart-type switch,
+  // and the fixed report range is no longer a control either.
   assert.doesNotMatch(html, /role="radiogroup"/);
   assert.doesNotMatch(html, /组合|柱状|折线/);
-  assert.match(html, /aria-haspopup="dialog"/);
-  assert.match(html, /指标 <span>2<\/span>/);
+  assert.doesNotMatch(html, /data-static="true"/);
+  assert.doesNotMatch(html, /aria-label="显示季度数"/);
+  // The metric list lives behind the picker and is not rendered until opened.
+  assert.match(html, /aria-haspopup="dialog"[^>]*aria-expanded="false"/);
+  assert.match(html, /叠加指标 <span>营收、毛利率<\/span>/);
+  assert.equal((html.match(/data-chart-role="metric-selector"/g) ?? []).length, 0);
+  assert.doesNotMatch(html, /role="dialog"/);
   assert.doesNotMatch(html, /已连接/);
   assert.doesNotMatch(html, /Yahoo Finance/);
-  assert.doesNotMatch(html, /role="dialog"/);
   // Chart and snapshot are one surface now, so nothing switches between them.
   assert.doesNotMatch(html, /aria-label="表格或图表视图"/);
   assert.match(html, /fundamentals-workbench__split/);
@@ -98,26 +102,6 @@ test("the snapshot lists operating and valuation measures for the picked quarter
   assert.match(html, /<dd>25.5x<\/dd>/);
   assert.match(html, /市盈率/);
   assert.match(html, /EV\/EBITDA/);
-});
-
-test("the report range is stated rather than offered as a setting", () => {
-  const html = renderToStaticMarkup(
-    <FundamentalChartsView
-      ticker="ACME"
-      companyName="ACME Industrial"
-      data={makeChartResponse()}
-      pageState={pageState}
-      requestState="ready"
-      error={null}
-      {...callbacks}
-    />,
-  );
-
-  // Yahoo publishes five quarters, so the range is a fact about the data rather
-  // than a choice; a picker here would only ever redraw the same chart.
-  assert.doesNotMatch(html, /aria-label="显示季度数"/);
-  assert.match(html, /data-static="true"/);
-  assert.match(html, /5 季度/);
 });
 
 test("request states remain local to the fundamentals surface", () => {
@@ -223,8 +207,8 @@ test("capital-intensive preset keeps capex on the single core chart without chan
   assert.equal((html.match(/data-chart-role="fundamental-chart"/g) ?? []).length, 1);
   assert.match(html, /data-presentation-source="preset"/);
   assert.match(html, /data-company-classification="capital_intensive"/);
-  assert.match(html, /增长、盈利质量与资本开支/);
   assert.match(html, /资本开支/);
-  assert.match(html, /自定义叠加（操作后接管）/);
-  assert.equal((html.match(/data-chart-role="metric-selector"/g) ?? []).length, 1);
+  // A preset still resolves to one chart; the picker stays closed either way.
+  assert.equal((html.match(/data-chart-role="fundamental-chart"/g) ?? []).length, 1);
+  assert.equal((html.match(/data-chart-role="metric-selector"/g) ?? []).length, 0);
 });

@@ -86,6 +86,8 @@ type FundamentalChartsViewProps = {
 };
 
 const FUNDAMENTALS_PENDING_POLL_DELAYS_MS = [1_000, 2_000, 4_000, 8_000] as const;
+/** Matches the width at which the metric picker becomes a full-screen sheet. */
+const FUNDAMENTALS_SHEET_LAYOUT_QUERY = "(max-width: 700px)";
 
 export function FundamentalCharts({
   ticker,
@@ -257,20 +259,27 @@ export function FundamentalChartsView({
 
   useEffect(() => {
     if (!selectorOpen) return;
+    const dialog = selectorDialogRef.current;
+    // The close button is the natural first stop, but it only exists in the
+    // sheet layout; anchored as a dropdown the first checkbox takes the focus.
+    const initialFocus = dialog?.querySelector<HTMLElement>("[data-bottom-sheet-initial-focus]");
+    (initialFocus?.offsetParent ? initialFocus : dialog?.querySelector<HTMLElement>("input:not([disabled])"))?.focus();
+
+    // Only the full-screen sheet layout takes the page's scroll; a dropdown
+    // anchored to its trigger scrolls inside itself.
+    if (!window.matchMedia(FUNDAMENTALS_SHEET_LAYOUT_QUERY).matches) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    selectorDialogRef.current?.querySelector<HTMLElement>("[data-bottom-sheet-initial-focus]")?.focus();
     return () => {
       document.body.style.overflow = previousOverflow;
     };
   }, [selectorOpen]);
 
   const closeSelector = () => {
+    // Focus moves back before React unmounts the panel; deferring it to a frame
+    // loses focus to the body whenever the page is not compositing.
+    selectorTriggerRef.current?.focus();
     setSelectorOpen(false);
-    window.requestAnimationFrame(() => {
-      selectorTriggerRef.current?.focus();
-      chartRef.current?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
-    });
   };
 
   const handleDialogKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -312,34 +321,57 @@ export function FundamentalChartsView({
 
       <div className="fundamentals-workbench__frame">
         <div className="fundamentals-workbench__toolbar" data-view="chart" aria-label="图表显示设置">
-          <p className="fundamentals-workbench__period-control" data-static="true">
-            <span>报告期</span>
-            <strong>{FUNDAMENTALS_DEFAULT_PERIOD_COUNT} 季度</strong>
-          </p>
-          <button
-            type="button"
-            className="fundamentals-workbench__mobile-selector-trigger"
-            ref={selectorTriggerRef}
-            aria-haspopup="dialog"
-            aria-expanded={selectorOpen}
-            onClick={() => setSelectorOpen(true)}
-          >
-            指标 <span>{pageState.metricKeys.length}</span>
-          </button>
+          {/* One control, not a wall of checkboxes: the picker names what is on
+              the chart and opens the full list on demand. */}
+          <div className="fundamentals-workbench__metric-picker">
+            <button
+              type="button"
+              className="fundamentals-workbench__metric-trigger"
+              ref={selectorTriggerRef}
+              aria-haspopup="dialog"
+              aria-expanded={selectorOpen}
+              onClick={() => (selectorOpen ? closeSelector() : setSelectorOpen(true))}
+            >
+              叠加指标 <span>{summariseMetricSelection(selectedSeries)}</span>
+            </button>
+            {selectorOpen ? (
+              <div className="fundamentals-bottom-sheet" data-state="open">
+                <button
+                  type="button"
+                  className="fundamentals-bottom-sheet__backdrop"
+                  aria-label="关闭指标选择"
+                  onClick={closeSelector}
+                />
+                <div
+                  className="fundamentals-bottom-sheet__dialog"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="fundamentals-selector-title"
+                  ref={selectorDialogRef}
+                  onKeyDown={handleDialogKeyDown}
+                >
+                  <header>
+                    <div>
+                      <span>图表设置</span>
+                      <h3 id="fundamentals-selector-title">叠加指标</h3>
+                    </div>
+                    <button type="button" data-bottom-sheet-initial-focus onClick={closeSelector}>完成</button>
+                  </header>
+                  {data?.series.length ? (
+                    <MetricSelector
+                      id="fundamental-metrics"
+                      availableSeries={data.series}
+                      selectedMetricKeys={pageState.metricKeys}
+                      onChange={onMetricKeysChange}
+                      minSelection={1}
+                      legend={selectorLegend}
+                    />
+                  ) : <SelectorPlaceholder />}
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
-
-        <aside className="fundamentals-workbench__selector" aria-label="基本面指标">
-          {data?.series.length ? (
-            <MetricSelector
-              id="desktop-fundamental-metrics"
-              availableSeries={data.series}
-              selectedMetricKeys={pageState.metricKeys}
-              onChange={onMetricKeysChange}
-              minSelection={1}
-              legend={selectorLegend}
-            />
-          ) : <SelectorPlaceholder />}
-        </aside>
 
         <div className="fundamentals-workbench__split">
           <div className="fundamentals-workbench__chart" ref={chartRef} tabIndex={-1}>
@@ -358,42 +390,6 @@ export function FundamentalChartsView({
         </div>
       </div>
 
-      {selectorOpen ? (
-        <div className="fundamentals-bottom-sheet" data-state="open">
-          <button
-            type="button"
-            className="fundamentals-bottom-sheet__backdrop"
-            aria-label="关闭指标选择"
-            onClick={closeSelector}
-          />
-          <div
-            className="fundamentals-bottom-sheet__dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="fundamentals-selector-title"
-            ref={selectorDialogRef}
-            onKeyDown={handleDialogKeyDown}
-          >
-            <header>
-              <div>
-                <span>图表设置</span>
-                <h3 id="fundamentals-selector-title">叠加指标</h3>
-              </div>
-              <button type="button" data-bottom-sheet-initial-focus onClick={closeSelector}>完成</button>
-            </header>
-            {data?.series.length ? (
-              <MetricSelector
-                id="mobile-fundamental-metrics"
-                availableSeries={data.series}
-                selectedMetricKeys={pageState.metricKeys}
-                onChange={onMetricKeysChange}
-                minSelection={1}
-                legend={selectorLegend}
-              />
-            ) : <SelectorPlaceholder />}
-          </div>
-        </div>
-      ) : null}
     </section>
   );
 }
@@ -614,6 +610,13 @@ function SelectorPlaceholder() {
   );
 }
 
+/** Names the selection when it is short enough to read, counts it when it is not. */
+function summariseMetricSelection(series: readonly { shortLabel: string }[]): string {
+  if (series.length === 0) return "未选择";
+  if (series.length <= 2) return series.map((item) => item.shortLabel).join("、");
+  return `${series[0]!.shortLabel} 等 ${series.length} 项`;
+}
+
 function sameMetricKeys(left: readonly FundamentalMetricKey[], right: readonly FundamentalMetricKey[]) {
   return left.length === right.length && left.every((metricKey, index) => metricKey === right[index]);
 }
@@ -636,6 +639,3 @@ function waitForFundamentalsPoll(milliseconds: number, signal: AbortSignal): Pro
   });
 }
 
-function prefersReducedMotion() {
-  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-}
