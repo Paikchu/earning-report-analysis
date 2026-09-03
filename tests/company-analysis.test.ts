@@ -11,6 +11,7 @@ import { resolveTargetPeriodEnd } from "../lib/company-analysis/packet.ts";
 import { D1CompanyAnalysisRepository } from "../lib/company-analysis/repository.ts";
 import type { FundamentalCurrentObservation } from "../lib/fundamentals-d1.ts";
 import { applySqlMigration, SqliteD1Database } from "./helpers/sqlite-d1.ts";
+import { COMPANY_AGENT_STEP_CONFIG } from "../workers/pipeline/company-analysis-workflow.ts";
 
 const generatedAt = "2026-09-03T08:00:00.000Z";
 
@@ -186,6 +187,17 @@ test("aligns 4-4-5 filing dates only to a nearby Yahoo revenue quarter", () => {
   ];
   assert.equal(resolveTargetPeriodEnd(observations, "2026-05-03"), "2026-04-30");
   assert.equal(resolveTargetPeriodEnd(observations, "2026-07-26"), null);
+});
+
+test("allows the multi-turn company Agent to finish inside one durable step", () => {
+  assert.deepEqual(COMPANY_AGENT_STEP_CONFIG, {
+    retries: {
+      limit: 3,
+      delay: "1 minute",
+      backoff: "exponential",
+    },
+    timeout: "30 minutes",
+  });
 });
 
 function observation(

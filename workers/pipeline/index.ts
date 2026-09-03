@@ -1,7 +1,7 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 
 import { handleSecAnalysisRequest, runCompanyAnalysisSweep, runSecMemorySweep, runSecRefresh, type CompanyAnalysisBackfillParams, type CompanyAnalysisWorkflowParams, type SecMemoryWorkflowParams, type SecWorkflowParams } from "./core.ts";
-import { executeCompanyAnalysisWorkflow } from "./company-analysis-workflow.ts";
+import { executeCompanyAnalysisWorkflow, type CompanyWorkflowStep } from "./company-analysis-workflow.ts";
 import { executeSecMemoryWorkflow } from "./memory-workflow.ts";
 import { createSecPipelineOperations, type SecPipelineEnv } from "./operations.ts";
 import { retryDelayForAttempt } from "./retry-policy.ts";
@@ -44,7 +44,7 @@ export class CompanyAnalysisWorkflow extends WorkflowEntrypoint<SecPipelineEnv, 
       event.payload,
       event.instanceId,
       event.timestamp,
-      step,
+      step as unknown as CompanyWorkflowStep,
       this.env,
     );
   }
