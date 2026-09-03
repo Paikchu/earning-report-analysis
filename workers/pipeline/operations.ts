@@ -16,6 +16,7 @@ import type { SecAnalysisArtifact } from "../../lib/sec-types.ts";
 import type { SecFilingSummary, SecNodePlan, SecNodeResult, SecNodeSpec } from "../../lib/sec.ts";
 import { SEC_ANALYSIS_SCHEMA_VERSION, type FilingBlock, type ManagerReview, type SecHistorySnapshot } from "../../lib/sec-analysis.ts";
 import { normalizeCompanyFacts } from "../../lib/sec-history.ts";
+import { serviceFetcher } from "../../lib/service-binding.ts";
 import { siteHeaders, type SecCronEnv } from "./core.ts";
 import type { SecModelExecution } from "./retry-policy.ts";
 import type { PreparedFilingReference, SecPipelineOperations } from "./workflow-core.ts";
@@ -46,7 +47,11 @@ export function modelForStage(env: SecPipelineEnv, stage: string, override?: str
   return REASONING_STAGE.test(stage) ? env.SEC_REASONING_MODEL || undefined : undefined;
 }
 
-export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof fetch = fetch): SecPipelineOperations {
+/**
+ * `fetcher` reaches the open internet (SEC, the model API). `siteFetch` reaches the Web Worker and
+ * has to go through the Service Binding — its public hostname 404s from inside a Worker.
+ */
+export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof fetch = fetch, siteFetch: typeof fetch = serviceFetcher(env.WEB, fetcher)): SecPipelineOperations {
   const modelFor = (execution?: SecModelExecution): SecModelCall => async (stage, system, payload) => {
     try {
       return await callWorkerSecModel(env, fetcher, stage, system, payload, modelForStage(env, stage, execution?.model));
@@ -58,10 +63,10 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
   };
   return {
     discover: (ticker) => discoverSecTicker(ticker, { userAgent: env.SEC_USER_AGENT, fetcher }),
-    publishFeed: (feed) => sitePost(env, fetcher, "/api/internal/sec/feed", { feed }).then(() => undefined),
+    publishFeed: (feed) => sitePost(env, siteFetch, "/api/internal/sec/feed", { feed }).then(() => undefined),
     shouldAnalyze: async (filing, requestedBy) => {
       if (requestedBy === "manual") return true;
-      const result = await sitePost<{ status: "queued" | "running" | "complete" | "failed" | null }>(env, fetcher, "/api/internal/sec/jobs", {
+      const result = await sitePost<{ status: "queued" | "running" | "complete" | "failed" | null }>(env, siteFetch, "/api/internal/sec/jobs", {
         lookup: {
           ticker: filing.ticker,
           accessionNumber: filing.accessionNumber,
@@ -72,7 +77,7 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
     },
     getContext: async (filing, reference) => {
       const history = reference ? await readHistory(env.SEC_FILINGS, reference) : EMPTY_HISTORY;
-      const response = await sitePost<{ context: Awaited<ReturnType<SecPipelineOperations["getContext"]>> }>(env, fetcher, "/api/internal/sec/context", { filing, history });
+      const response = await sitePost<{ context: Awaited<ReturnType<SecPipelineOperations["getContext"]>> }>(env, siteFetch, "/api/internal/sec/context", { filing, history });
       return { ...response.context, history: response.context.history ?? history };
     },
     prepare: async (filing) => {
@@ -132,9 +137,9 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       const citedBlockIds = collectReferencedBlockIds(artifact);
       const citedBlocks = prepared.blocks.filter((block) => citedBlockIds.has(block.blockId));
       for (const blocks of chunks(citedBlocks, PUBLISH_BLOCK_CHUNK_SIZE)) {
-        await sitePost(env, fetcher, "/api/internal/sec/publish", { filing: artifact.filing, blocks });
+        await sitePost(env, siteFetch, "/api/internal/sec/publish", { filing: artifact.filing, blocks });
       }
-      return sitePost<{ memoryJobId?: string }>(env, fetcher, "/api/internal/sec/publish", {
+      return sitePost<{ memoryJobId?: string }>(env, siteFetch, "/api/internal/sec/publish", {
         artifact: { ...artifact, blocks: [] } satisfies SecAnalysisArtifact,
         summary,
       });
@@ -143,8 +148,8 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       if (!env.SEC_MEMORY_WORKFLOW) return;
       await env.SEC_MEMORY_WORKFLOW.create({ id: `memory-${crypto.randomUUID()}`, params: { jobId, ticker } });
     },
-    publishEvent: async (summary) => sitePost(env, fetcher, "/api/internal/sec/publish", { filing: summaryIdentity(summary), summary }).then(() => undefined),
-    updateJob: (job) => sitePost(env, fetcher, "/api/internal/sec/jobs", { job }).then(() => undefined),
+    publishEvent: async (summary) => sitePost(env, siteFetch, "/api/internal/sec/publish", { filing: summaryIdentity(summary), summary }).then(() => undefined),
+    updateJob: (job) => sitePost(env, siteFetch, "/api/internal/sec/jobs", { job }).then(() => undefined),
   };
 }
 

@@ -15,6 +15,11 @@
       "migrations_dir": "migrations"
     }
   ],
+  // Same constraint in reverse: admin refresh and backfill call the Pipeline Worker, whose public
+  // hostname 404s from in here. vinext copies this binding into the generated deploy config.
+  "services": [
+    { "binding": "PIPELINE", "service": "earning-report-analysis-sec-pipeline" }
+  ],
   "observability": {
     "enabled": true
   }

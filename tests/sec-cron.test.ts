@@ -80,3 +80,36 @@ test("creates a distinct workflow for each manual force refresh", async () => {
 
   assert.equal(new Set(ids).size, 2);
 });
+
+test("fails the refresh when no workflow could be started at all", async () => {
+  const binding: SecWorkflowBinding = {
+    async create() {
+      throw new Error("workflow unavailable");
+    },
+  };
+
+  await assert.rejects(
+    runSecRefresh({ ...env, SEC_ANALYSIS_WORKFLOW: binding }, watchlist, 1_786_000_000_000),
+    /started no workflows \(watchlist: 2, failed: 2\)/,
+  );
+});
+
+test("routes the watchlist through the Service Binding rather than the Web Worker's hostname", async () => {
+  const seen: string[] = [];
+  const web: NonNullable<SecCronEnv["WEB"]> = {
+    fetch: async (input) => {
+      seen.push(String(input));
+      return Response.json({ tickers: ["MSFT"] });
+    },
+  };
+  const started: string[] = [];
+
+  // Called the way the Cron handler calls it, with no fetcher: the binding has to come off the env,
+  // because a plain fetch to that hostname is answered by the edge with a 404 that never lands.
+  assert.deepEqual(
+    await runSecRefresh({ ...env, WEB: web, SEC_ANALYSIS_WORKFLOW: workflowBinding(started) }),
+    { started: ["MSFT"], failed: [] },
+  );
+  assert.deepEqual(seen, ["https://web.example/api/internal/sec/watchlist"]);
+  assert.deepEqual(started, ["MSFT"]);
+});

@@ -9,5 +9,5 @@ export async function POST(request: Request, context: { params: Promise<{ ticker
   }
   const ticker = normalizeTrackedTicker((await context.params).ticker);
   if (!isTrackedTicker(ticker, runtime.trackedTickers)) return Response.json({ error: "Ticker is not tracked" }, { status: 403 });
-  return requestSecAnalysis({ ticker, pipelineOrigin: runtime.pipelineOrigin, refreshKey: runtime.refreshKey });
+  return requestSecAnalysis({ ticker, pipelineOrigin: runtime.pipelineOrigin, refreshKey: runtime.refreshKey, fetcher: runtime.pipelineFetch });
 }

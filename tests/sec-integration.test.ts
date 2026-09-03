@@ -131,3 +131,50 @@ test("ships SEC analysis as a bounded durable Cloudflare workflow with isolated 
   assert.doesNotMatch(runtime, /AI_API_KEY/);
   assert.doesNotMatch(runtime, /glm-5.3-flash/);
 });
+
+test("reports a failed scheduled run instead of finishing it as ok", async () => {
+  const [workerSource, core] = await Promise.all([
+    readFile(new URL("../workers/pipeline/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../workers/pipeline/core.ts", import.meta.url), "utf8"),
+  ]);
+
+  // `allSettled` cannot reject, so the handler has to await the work and rethrow for the Cron
+  // invocation to record anything but `outcome: ok`. Handing it to `waitUntil` loses that.
+  assert.match(workerSource, /const results = await Promise\.allSettled\(\[runSecRefresh\(env\), runSecMemorySweep\(env\)\]\)/);
+  assert.match(workerSource, /console\.error\(payload\)/);
+  // A rejection reason is an Error, and JSON.stringify renders those as `{}` — the log has to
+  // unwrap the message or a reported failure says nothing about what failed.
+  assert.match(workerSource, /result\.reason instanceof Error \? result\.reason\.message/);
+  assert.match(workerSource, /throw new AggregateError\(rejected\.map/);
+  assert.doesNotMatch(workerSource, /context\.waitUntil/);
+  // And a run that starts nothing has to be a failure, not an empty success.
+  assert.match(core, /started no workflows/);
+});
+
+test("bridges the two Workers with Service Bindings instead of their public hostnames", async () => {
+  const [pipelineConfig, webConfig, core, operations, memoryWorkflow, runtime, adminRefresh] = await Promise.all([
+    readFile(new URL("../workers/pipeline/wrangler.jsonc", import.meta.url), "utf8"),
+    readFile(new URL("../workers/web/wrangler.jsonc", import.meta.url), "utf8"),
+    readFile(new URL("../workers/pipeline/core.ts", import.meta.url), "utf8"),
+    readFile(new URL("../workers/pipeline/operations.ts", import.meta.url), "utf8"),
+    readFile(new URL("../workers/pipeline/memory-workflow.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/sec-runtime.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/v1/admin/companies/[ticker]/refresh/route.ts", import.meta.url), "utf8"),
+  ]);
+
+  // Two Workers on one workers.dev subdomain cannot reach each other over their public hostnames:
+  // the edge answers the subrequest with a 404 that never reaches the target Worker at all.
+  assert.match(pipelineConfig, /"binding":\s*"WEB",\s*"service":\s*"earning-report-analysis-sec-web"/);
+  assert.match(webConfig, /"binding":\s*"PIPELINE",\s*"service":\s*"earning-report-analysis-sec-pipeline"/);
+  assert.match(core, /serviceFetcher\(env\.WEB\)/);
+  assert.match(operations, /siteFetch: typeof fetch = serviceFetcher\(env\.WEB, fetcher\)/);
+  assert.match(memoryWorkflow, /siteFetch: typeof fetch = serviceFetcher\(env\.WEB, fetcher\)/);
+  assert.match(runtime, /pipelineFetch: serviceFetcher\(asServiceBinding\(values\.PIPELINE\)\)/);
+  assert.match(adminRefresh, /fetcher: runtime\.pipelineFetch/);
+
+  // Only the bridge moves. SEC and the model API are the open internet and keep the plain fetcher.
+  assert.doesNotMatch(operations, /\(env, fetcher, "\/api\/internal\//);
+  assert.doesNotMatch(memoryWorkflow, /\(env, fetcher, "\/api\/internal\//);
+  assert.match(operations, /discoverSecTicker\(ticker, \{ userAgent: env\.SEC_USER_AGENT, fetcher \}\)/);
+  assert.match(operations, /callWorkerSecModel\(env, fetcher,/);
+});
