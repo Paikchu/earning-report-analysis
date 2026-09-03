@@ -7,6 +7,7 @@ import {
   toPublicCompanyAnalysis,
 } from "../lib/company-analysis/contracts.ts";
 import { buildCompanyFeaturePack } from "../lib/company-analysis/feature-engine.ts";
+import { resolveTargetPeriodEnd } from "../lib/company-analysis/packet.ts";
 import { D1CompanyAnalysisRepository } from "../lib/company-analysis/repository.ts";
 import type { FundamentalCurrentObservation } from "../lib/fundamentals-d1.ts";
 import { applySqlMigration, SqliteD1Database } from "./helpers/sqlite-d1.ts";
@@ -176,6 +177,15 @@ test("feature engine calculates trends only from Yahoo quarterly observations", 
     targetPeriodEnd: "2026-03-31",
     observations,
   }), /only accepts Yahoo Finance/i);
+});
+
+test("aligns 4-4-5 filing dates only to a nearby Yahoo revenue quarter", () => {
+  const observations = [
+    observation("2026-04-30", "total_revenue", "100"),
+    observation("2026-01-31", "total_revenue", "90"),
+  ];
+  assert.equal(resolveTargetPeriodEnd(observations, "2026-05-03"), "2026-04-30");
+  assert.equal(resolveTargetPeriodEnd(observations, "2026-07-26"), null);
 });
 
 function observation(
