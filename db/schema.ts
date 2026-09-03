@@ -243,6 +243,33 @@ export const secAnalysisJobs = sqliteTable("sec_analysis_jobs", {
   completedAt: text("completed_at"),
 }, (table) => [index("sec_analysis_jobs_filing_version_idx").on(table.ticker, table.accessionNumber, table.analysisVersion)]);
 
+export const companyAnalysisRuns = sqliteTable("company_analysis_runs", {
+  analysisId: text("analysis_id").primaryKey(),
+  ticker: text("ticker").notNull(),
+  triggerRef: text("trigger_ref").notNull(),
+  periodId: text("period_id").notNull(),
+  periodEnd: text("period_end"),
+  reportLabel: text("report_label"),
+  inputHash: text("input_hash"),
+  memoryVersion: integer("memory_version").notNull(),
+  fundamentalsDataVersion: text("fundamentals_data_version"),
+  status: text("status").notNull(),
+  coverageStatus: text("coverage_status"),
+  overviewJson: text("overview_json"),
+  modelVersion: text("model_version").notNull(),
+  promptVersion: text("prompt_version").notNull(),
+  errorCode: text("error_code"),
+  errorDetail: text("error_detail"),
+  generatedAt: text("generated_at"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("company_analysis_runs_trigger_idx").on(table.triggerRef),
+  uniqueIndex("company_analysis_runs_input_idx").on(table.ticker, table.inputHash).where(sql`${table.inputHash} IS NOT NULL`),
+  index("company_analysis_runs_latest_idx").on(table.ticker, table.status, table.generatedAt),
+  index("company_analysis_runs_recovery_idx").on(table.status, table.updatedAt),
+]);
+
 export const secPublishedReports = sqliteTable("sec_published_reports", {
   ticker: text("ticker").notNull(),
   periodId: text("period_id").notNull(),

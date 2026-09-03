@@ -400,6 +400,7 @@ test("memory extraction still receives this filing's claims and prior memory ids
   };
   let modelPayload = "";
   let committed: Record<string, unknown> | null = null;
+  let createdCompanyAnalysis: Record<string, unknown> | null = null;
   const env = {
     WEB_APP_ORIGIN: "https://site.test",
     SEC_REFRESH_KEY: "refresh-key",
@@ -409,6 +410,12 @@ test("memory extraction still receives this filing's claims and prior memory ids
         return key === claim.sourceR2Key ? { async text() { return JSON.stringify(source); } } : null;
       },
       async put() { return {}; },
+    },
+    COMPANY_ANALYSIS_WORKFLOW: {
+      async create(options: Record<string, unknown>) {
+        createdCompanyAnalysis = options;
+        return { id: String(options.id) };
+      },
     },
   } as unknown as SecPipelineEnv;
   const fetcher: typeof fetch = async (input, init) => {
@@ -423,7 +430,15 @@ test("memory extraction still receives this filing's claims and prior memory ids
     }
     if (url.endsWith("/api/internal/sec/memory/commit")) {
       committed = JSON.parse(String(init?.body ?? "{}"));
-      return Response.json({ status: "committed", noOp: false, itemCount: 2 });
+      return Response.json({
+        status: "committed",
+        noOp: false,
+        itemCount: 2,
+        memoryVersion: 3,
+        periodId: claim.periodId,
+        filingId: claim.filingId,
+        reportDate: "2026-06-30",
+      });
     }
     throw new Error(`Unexpected request: ${url}`);
   };
@@ -444,4 +459,13 @@ test("memory extraction still receives this filing's claims and prior memory ids
   const candidates = (committed as unknown as { extraction: { candidates: Array<{ memoryId?: string }> } }).extraction.candidates;
   assert.equal(candidates[0].memoryId, "memory:guidance");
   assert.equal(candidates[1].memoryId, undefined);
+  assert.equal(result.companyAnalysisQueued, true);
+  assert.deepEqual((createdCompanyAnalysis as unknown as { params: Record<string, unknown> }).params, {
+    ticker: "MSFT",
+    memoryJobId: "job-1",
+    memoryVersion: 3,
+    periodId: "MSFT:2026-06-30:annual",
+    reportDate: "2026-06-30",
+    triggerRef: "job-1:3",
+  });
 });
