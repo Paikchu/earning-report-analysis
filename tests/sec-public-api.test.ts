@@ -36,10 +36,10 @@ type FakeFiling = {
   filingDate: string;
 };
 
-function makeStoredFiling(accessionNumber: string, filingDate: string) {
+function makeStoredFiling(accessionNumber: string, filingDate: string, form = "8-K", reportDate = filingDate) {
   return {
-    ticker: "MSFT", cik: "0000789019", cikNumber: 789019, companyName: "Microsoft", form: "8-K",
-    filingDate, reportDate: filingDate, accessionNumber,
+    ticker: "MSFT", cik: "0000789019", cikNumber: 789019, companyName: "Microsoft", form,
+    filingDate, reportDate, accessionNumber,
     primaryDocument: "doc.htm", description: "Current report", items: "",
     documentUrl: `https://sec.test/${accessionNumber}/doc`, indexUrl: `https://sec.test/${accessionNumber}/index`,
   };
@@ -138,4 +138,40 @@ test("surfaces an archive read failure when no cache can cover it", async () => 
 
   // 没有缓存时静默返回空页会把损坏的数据库伪装成"暂未收录"。
   await assert.rejects(() => getPublicFilingPage(fakeRepository as never, "msft", null, "20"), /no such table/);
+});
+
+test("shows one published report per period even when the page spans both sources", async () => {
+  const report = { reportVersion: "sec-report.v3", dataQuality: { verificationStatus: "verified" } };
+  // 修订件与原始 10-Q 同属 2025-12-31 这个报告期，落在缓存窗口的两侧。
+  const amendment = { ...makeStoredFiling("acc-002", "2026-02-10", "10-Q/A", "2025-12-31"), summary: null, analysis: report };
+  const original = { ...makeStoredFiling("acc-001", "2026-01-10", "10-Q", "2025-12-31"), summary: null, analysis: report };
+  const fakeRepository = {
+    async getCache() {
+      return {
+        payload: {
+          ticker: "MSFT",
+          company: { ticker: "MSFT", name: "Microsoft", cik: "0000789019" },
+          filings: [amendment],
+          fetchedAt: "2026-02-11T00:00:00.000Z",
+          status: "ready",
+        },
+        fetchedAt: "2026-02-11T00:00:00.000Z",
+      };
+    },
+    async getSummary() { return null; },
+    async getPublishedReport() { return report; },
+    async getLatestAnalysisJobStatus() { return null; },
+    async listPublicFilings() {
+      // D1 的 hydrate 会把同一篇研报挂到该报告期的每一份申报上。
+      return { filings: [amendment, original], nextCursor: null, total: 2 };
+    },
+  };
+
+  const page = await getPublicFilingPage(fakeRepository as never, "msft", null, "20");
+  assert.deepEqual(
+    page.filings.map((filing) => [filing.accessionNumber, filing.analysisStatus]),
+    [["acc-002", "complete"], ["acc-001", "not_collected"]],
+    "同一报告期只有最新的一份申报保留研报",
+  );
+  assert.equal(page.filings[1].analysis, null);
 });

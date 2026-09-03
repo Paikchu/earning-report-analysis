@@ -1,7 +1,7 @@
 import { cleanSecAccession, type SecFilingWithSummary } from "./sec.ts";
 import { decodePageCursor, encodePageCursor, normalizeTrackedTicker } from "./sec-config.ts";
 import { D1SecRepository } from "./sec-d1.ts";
-import { getCachedSecFeed } from "./sec-feed.ts";
+import { createPeriodReportGate, getCachedSecFeed } from "./sec-feed.ts";
 import { findSecurity } from "./site-data.ts";
 
 export type PublicAnalysisStatus = "complete" | "partial" | "processing" | "not_collected";
@@ -62,9 +62,14 @@ export async function getPublicFilingPage(
   for (const filing of storedPage?.filings ?? []) {
     if (!merged.has(filing.accessionNumber)) merged.set(filing.accessionNumber, filing);
   }
-  const candidates = [...merged.values()].sort((left, right) =>
-    right.filingDate.localeCompare(left.filingDate)
-    || right.accessionNumber.localeCompare(left.accessionNumber));
+  // D1 的 hydratePublicFiling 是逐条按 sec_filing_periods 挂研报的，缓存 feed 则每期只挂最新一份。
+  // 合并后一页里会同时出现两种，同一篇研报因此重复展示，这里按缓存的规则再收敛一次。
+  const claimPeriodReport = createPeriodReportGate(ticker);
+  const candidates = [...merged.values()]
+    .sort((left, right) =>
+      right.filingDate.localeCompare(left.filingDate)
+      || right.accessionNumber.localeCompare(left.accessionNumber))
+    .map((filing) => (claimPeriodReport(filing) ? filing : { ...filing, analysis: null }));
   const pageFilings = candidates.slice(0, limit);
   const last = pageFilings.at(-1);
   const hasMore = candidates.length > limit || Boolean(storedPage?.nextCursor);
