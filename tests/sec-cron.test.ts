@@ -80,3 +80,16 @@ test("creates a distinct workflow for each manual force refresh", async () => {
 
   assert.equal(new Set(ids).size, 2);
 });
+
+test("fails the refresh when no workflow could be started at all", async () => {
+  const binding: SecWorkflowBinding = {
+    async create() {
+      throw new Error("workflow unavailable");
+    },
+  };
+
+  await assert.rejects(
+    runSecRefresh({ ...env, SEC_ANALYSIS_WORKFLOW: binding }, watchlist, 1_786_000_000_000),
+    /started no workflows \(watchlist: 2, failed: 2\)/,
+  );
+});

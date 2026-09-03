@@ -131,3 +131,22 @@ test("ships SEC analysis as a bounded durable Cloudflare workflow with isolated 
   assert.doesNotMatch(runtime, /AI_API_KEY/);
   assert.doesNotMatch(runtime, /glm-5.3-flash/);
 });
+
+test("reports a failed scheduled run instead of finishing it as ok", async () => {
+  const [workerSource, core] = await Promise.all([
+    readFile(new URL("../workers/pipeline/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../workers/pipeline/core.ts", import.meta.url), "utf8"),
+  ]);
+
+  // `allSettled` cannot reject, so the handler has to await the work and rethrow for the Cron
+  // invocation to record anything but `outcome: ok`. Handing it to `waitUntil` loses that.
+  assert.match(workerSource, /const results = await Promise\.allSettled\(\[runSecRefresh\(env\), runSecMemorySweep\(env\)\]\)/);
+  assert.match(workerSource, /console\.error\(payload\)/);
+  // A rejection reason is an Error, and JSON.stringify renders those as `{}` — the log has to
+  // unwrap the message or a reported failure says nothing about what failed.
+  assert.match(workerSource, /result\.reason instanceof Error \? result\.reason\.message/);
+  assert.match(workerSource, /throw new AggregateError\(rejected\.map/);
+  assert.doesNotMatch(workerSource, /context\.waitUntil/);
+  // And a run that starts nothing has to be a failure, not an empty success.
+  assert.match(core, /started no workflows/);
+});

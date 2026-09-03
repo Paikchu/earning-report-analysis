@@ -49,10 +49,10 @@ export async function runSecRefresh(env: SecCronEnv, fetcher: typeof fetch = fet
   if (!env.SEC_REFRESH_KEY || !env.SEC_ANALYSIS_WORKFLOW) {
     throw new Error("SEC cron environment is incomplete");
   }
-  const tickers = await fetchTrackedTickers(env, fetcher);
+  const tickers = [...new Set(await fetchTrackedTickers(env, fetcher))];
   const started: string[] = [];
   const failed: string[] = [];
-  for (const ticker of [...new Set(tickers)]) {
+  for (const ticker of tickers) {
     try {
       await startWorkflow(env.SEC_ANALYSIS_WORKFLOW, ticker, "scheduled", now, false);
       started.push(ticker);
@@ -60,6 +60,13 @@ export async function runSecRefresh(env: SecCronEnv, fetcher: typeof fetch = fet
       failed.push(ticker);
     }
   }
+  /**
+   * A watchlist that yielded tickers but started nothing is a failure, not an empty success: it
+   * used to return the same shape a healthy run returns, so the Cron handler — the only reader
+   * there is — could not tell it apart from "there was nothing to do". An empty watchlist stays a
+   * no-op, because turning generation off entirely is a supported configuration.
+   */
+  if (tickers.length && !started.length) throw new Error(`SEC refresh started no workflows (watchlist: ${tickers.length}, failed: ${failed.length})`);
   return { started, failed };
 }
 

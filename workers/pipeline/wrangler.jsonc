@@ -30,10 +30,14 @@
       "bucket_name": "earning-report-analysis-sec-filings"
     }
   ],
+  // TEMPORARY, while the dead scheduled refresh is being diagnosed: every 10 minutes around the
+  // clock, so a failed run surfaces within minutes instead of at the next hourly slot. The market
+  // windows this replaces cover 09:00-23:00 ET Mon-Fri and must go back once the run is healthy:
+  //   "0 13-23 * * 1-5"
+  //   "0 0-3 * * 2-6"
   "triggers": {
     "crons": [
-      "0 13-23 * * 1-5",
-      "0 0-3 * * 2-6"
+      "*/10 * * * *"
     ]
   },
   "env": {
