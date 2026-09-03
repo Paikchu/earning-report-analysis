@@ -101,3 +101,41 @@ test("pages beyond the rolling cache window into D1 history", async () => {
   assert.equal(page2.nextCursor, null);
   assert.deepEqual(listPublicFilingsCalls, [null, page1.nextCursor], "每一页都必须回源 D1");
 });
+
+test("keeps serving the cache window when the archive table read fails", async () => {
+  const cached = [makeStoredFiling("acc-003", "2026-03-01"), makeStoredFiling("acc-002", "2026-02-01")];
+  const fakeRepository = {
+    async getCache() {
+      return {
+        payload: {
+          ticker: "MSFT",
+          company: { ticker: "MSFT", name: "Microsoft", cik: "0000789019" },
+          filings: cached,
+          fetchedAt: "2026-03-02T00:00:00.000Z",
+          status: "ready",
+        },
+        fetchedAt: "2026-03-02T00:00:00.000Z",
+      };
+    },
+    async getSummary() { return null; },
+    async getLatestAnalysisJobStatus() { return null; },
+    async listPublicFilings(): Promise<never> { throw new Error("D1_ERROR: no such table: sec_filings"); },
+  };
+
+  const page = await getPublicFilingPage(fakeRepository as never, "msft", null, "20");
+  assert.deepEqual(page.filings.map((filing) => filing.accessionNumber), ["acc-003", "acc-002"]);
+  assert.equal(page.total, 2, "归档计数不可用时退回缓存条数");
+  assert.equal(page.nextCursor, null);
+});
+
+test("surfaces an archive read failure when no cache can cover it", async () => {
+  const fakeRepository = {
+    async getCache() { return null; },
+    async getSummary() { return null; },
+    async getLatestAnalysisJobStatus() { return null; },
+    async listPublicFilings(): Promise<never> { throw new Error("D1_ERROR: no such table: sec_filings"); },
+  };
+
+  // 没有缓存时静默返回空页会把损坏的数据库伪装成"暂未收录"。
+  await assert.rejects(() => getPublicFilingPage(fakeRepository as never, "msft", null, "20"), /no such table/);
+});

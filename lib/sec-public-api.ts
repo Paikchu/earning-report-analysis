@@ -43,10 +43,15 @@ export async function getPublicFilingPage(
   const limit = Math.min(50, Math.max(1, Math.trunc(Number(rawLimit ?? 20)) || 20));
   const cursor = decodePageCursor(rawCursor);
   // 缓存只保留最近一轮抓取的滚动窗口，历史申报必须与 D1 累积表合并分页。
+  const storedPageRequest = repository.listPublicFilings(ticker, rawCursor, limit);
   const [cachedFeed, storedPage] = await Promise.all([
     typeof repository.getCache === "function" ? getCachedSecFeed(repository, ticker) : null,
-    repository.listPublicFilings(ticker, rawCursor, limit),
+    // 归档表读失败时不能连带打掉缓存本来就能提供的那一页，降级成缓存窗口即可。
+    storedPageRequest.catch(() => null),
   ]);
+  // 但没有缓存兜底时错误必须冒出去，否则一张坏掉的 sec_filings 会伪装成"暂未收录"。
+  // getCachedSecFeed 在缓存缺失时返回的是 pending 空 feed 而不是 null，所以这里看的是有没有申报可发。
+  if (!storedPage && !cachedFeed?.filings.length) await storedPageRequest;
   const afterCursor = (filing: SecFilingWithSummary) => !cursor
     || filing.filingDate < cursor.filingDate
     || (filing.filingDate === cursor.filingDate && filing.accessionNumber < cursor.accessionNumber);
@@ -54,7 +59,7 @@ export async function getPublicFilingPage(
   for (const filing of cachedFeed?.filings ?? []) {
     if (afterCursor(filing)) merged.set(filing.accessionNumber, filing);
   }
-  for (const filing of storedPage.filings) {
+  for (const filing of storedPage?.filings ?? []) {
     if (!merged.has(filing.accessionNumber)) merged.set(filing.accessionNumber, filing);
   }
   const candidates = [...merged.values()].sort((left, right) =>
@@ -62,7 +67,7 @@ export async function getPublicFilingPage(
     || right.accessionNumber.localeCompare(left.accessionNumber));
   const pageFilings = candidates.slice(0, limit);
   const last = pageFilings.at(-1);
-  const hasMore = candidates.length > limit || storedPage.nextCursor !== null;
+  const hasMore = candidates.length > limit || Boolean(storedPage?.nextCursor);
   const company = cachedFeed?.company ?? (pageFilings[0] ? companyFromFiling(pageFilings[0]) : companyFromDirectory(ticker));
   const filings = await Promise.all(pageFilings.map(async (filing) => toPublicFiling(repository, filing, company?.name ?? ticker)));
   return {
@@ -70,7 +75,8 @@ export async function getPublicFilingPage(
     company,
     filings,
     nextCursor: hasMore && last ? encodePageCursor({ filingDate: last.filingDate, accessionNumber: last.accessionNumber }) : null,
-    total: Math.max(storedPage.total, cachedFeed?.filings.length ?? 0),
+    // 缓存可能比 D1 领先一轮抓取，取两者较大值才不会少报历史条数。
+    total: Math.max(storedPage?.total ?? 0, cachedFeed?.filings.length ?? 0),
     checkedAt: cachedFeed?.fetchedAt ?? null,
   };
 }
