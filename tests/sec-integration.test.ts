@@ -119,6 +119,7 @@ test("ships SEC analysis as a bounded durable Cloudflare workflow with isolated 
   assert.match(workerConfig, /"compatibility_flags": \["nodejs_compat"\]/);
   assert.match(workerConfig, /"workflows"/);
   assert.equal(workerConfig.match(/"concurrency":\s*\{\s*"limit": 4\s*\}/g)?.length, 2);
+  assert.equal(workerConfig.match(/"concurrency":\s*\{\s*"limit": 2\s*\}/g)?.length, 2);
   assert.match(workerConfig, /"r2_buckets"/);
   assert.match(workflowCore, /const SEC_NODE_CONCURRENCY = 2;/);
   assert.match(workflowCore, /mapWithConcurrency\(plan\.nodes, SEC_NODE_CONCURRENCY,/);

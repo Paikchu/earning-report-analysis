@@ -53,7 +53,11 @@ export class CompanyAnalysisWorkflow extends WorkflowEntrypoint<SecPipelineEnv, 
 export class CompanyAnalysisBackfillWorkflow extends WorkflowEntrypoint<SecPipelineEnv, CompanyAnalysisBackfillParams> {
   async run(event: WorkflowEvent<CompanyAnalysisBackfillParams>, step: WorkflowStep) {
     const durable = durableSteps(step);
-    const sec = await durable.do("backfill-latest-sec", () => runSecRefresh(this.env));
+    // Recovery reuses the latest completed Memory and Yahoo snapshot. Starting every SEC workflow
+    // again would add unrelated model traffic precisely while recovering rate-limited Agent runs.
+    const sec = event.payload.forceIncomplete === true
+      ? { started: [], failed: [], skipped: true }
+      : await durable.do("backfill-latest-sec", () => runSecRefresh(this.env));
     const company = await durable.do("backfill-company-analysis", () => runCompanyAnalysisSweep(
       this.env,
       undefined,
