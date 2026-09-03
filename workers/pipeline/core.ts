@@ -19,6 +19,7 @@ export type SecMemoryWorkflowParams = {
 };
 
 export type CompanyAnalysisWorkflowParams = {
+  analysisId?: string;
   ticker: string;
   memoryJobId: string;
   memoryVersion: number;
@@ -63,14 +64,11 @@ export async function runCompanyAnalysisSweep(
     const ticker = normalizeTrackedTicker(candidate.ticker);
     if (!ticker || !candidate.triggerRef) continue;
     try {
-      const triggerRef = options.forceIncomplete
-        ? `${candidate.triggerRef}:recovery:${crypto.randomUUID()}`
-        : candidate.triggerRef;
       await env.COMPANY_ANALYSIS_WORKFLOW.create({
         id: options.forceIncomplete
-          ? `company-${hashString(triggerRef)}-${crypto.randomUUID()}`
+          ? `company-${hashString(candidate.triggerRef)}-${crypto.randomUUID()}`
           : `company-${hashString(candidate.triggerRef)}`,
-        params: { ...candidate, ticker, triggerRef },
+        params: { ...candidate, ticker },
       });
       started.push(ticker);
     } catch (error) {

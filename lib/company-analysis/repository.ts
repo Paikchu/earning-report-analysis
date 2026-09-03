@@ -33,6 +33,7 @@ export type CompanyAnalysisRunUpdate = {
 };
 
 export type CompanyAnalysisBackfillCandidate = {
+  analysisId?: string;
   ticker: string;
   memoryJobId: string;
   memoryVersion: number;
@@ -112,7 +113,21 @@ export class D1CompanyAnalysisRepository {
         WHERE j.status = 'complete' AND j.ticker IN (${placeholders})
       )
       SELECT m.ticker, m.memoryJobId, t.version AS memoryVersion,
-        m.periodId, m.reportDate
+        m.periodId, m.reportDate,
+        ${includeIncomplete ? `(
+          SELECT r.analysis_id FROM company_analysis_runs r
+          WHERE r.ticker = m.ticker AND r.period_id = m.periodId AND r.memory_version = t.version
+            AND r.status <> 'ready'
+          ORDER BY r.updated_at DESC, r.analysis_id DESC
+          LIMIT 1
+        )` : "NULL"} AS analysisId,
+        ${includeIncomplete ? `(
+          SELECT r.trigger_ref FROM company_analysis_runs r
+          WHERE r.ticker = m.ticker AND r.period_id = m.periodId AND r.memory_version = t.version
+            AND r.status <> 'ready'
+          ORDER BY r.updated_at DESC, r.analysis_id DESC
+          LIMIT 1
+        )` : "NULL"} AS recoveryTriggerRef
       FROM ranked_memory m
       JOIN sec_company_memory_threads t ON t.ticker = m.ticker
       WHERE m.memoryRank = 1
@@ -124,11 +139,18 @@ export class D1CompanyAnalysisRepository {
         )
       ORDER BY m.ticker
       LIMIT ?
-    `).bind(...allowed, boundedLimit).all<Omit<CompanyAnalysisBackfillCandidate, "triggerRef">>();
-    return rows.results.map((row) => ({
-      ...row,
-      triggerRef: `${row.memoryJobId}:${row.memoryVersion}`,
-    }));
+    `).bind(...allowed, boundedLimit).all<Omit<CompanyAnalysisBackfillCandidate, "triggerRef"> & {
+      analysisId: string | null;
+      recoveryTriggerRef: string | null;
+    }>();
+    return rows.results.map((row) => {
+      const { recoveryTriggerRef, analysisId, ...candidate } = row;
+      return {
+        ...candidate,
+        ...(analysisId ? { analysisId } : {}),
+        triggerRef: recoveryTriggerRef || `${row.memoryJobId}:${row.memoryVersion}`,
+      };
+    });
   }
 
   async upsertRun(update: CompanyAnalysisRunUpdate): Promise<void> {

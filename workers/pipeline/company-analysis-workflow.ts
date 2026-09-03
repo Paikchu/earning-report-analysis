@@ -53,7 +53,7 @@ export async function executeCompanyAnalysisWorkflow(
   fetcher: typeof fetch = fetch,
   siteFetch: typeof fetch = serviceFetcher(env.WEB, fetcher),
 ) {
-  const analysisId = `company:${params.ticker}:${hashString(`${params.triggerRef}:${workflowInstanceId}`)}`;
+  const analysisId = params.analysisId || `company:${params.ticker}:${hashString(`${params.triggerRef}:${workflowInstanceId}`)}`;
   const modelVersion = env.SEC_REASONING_MODEL || env.SEC_ANALYSIS_MODEL || "glm-5.3-flash";
   const statusBase = {
     analysisId,

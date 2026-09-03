@@ -64,11 +64,13 @@ test("starts one idempotent company analysis workflow for each backfill candidat
 test("force backfill requests incomplete candidates and creates a fresh workflow instance", async () => {
   const ids: string[] = [];
   const triggerRefs: string[] = [];
+  const analysisIds: Array<string | undefined> = [];
   const requestBodies: string[] = [];
   const candidates: typeof fetch = async (_input, init) => {
     requestBodies.push(String(init?.body));
     return Response.json({ candidates: [{
       ticker: "MSFT",
+      analysisId: "company:MSFT:existing",
       memoryJobId: "memory-job-1",
       memoryVersion: 4,
       periodId: "MSFT:2026-06-30:quarter",
@@ -82,6 +84,7 @@ test("force backfill requests incomplete candidates and creates a fresh workflow
       async create(options) {
         ids.push(options.id);
         triggerRefs.push(options.params.triggerRef);
+        analysisIds.push(options.params.analysisId);
         return { id: options.id };
       },
     },
@@ -91,8 +94,8 @@ test("force backfill requests incomplete candidates and creates a fresh workflow
   await runCompanyAnalysisSweep(sweepEnv, candidates, { forceIncomplete: true });
 
   assert.equal(new Set(ids).size, 2);
-  assert.equal(new Set(triggerRefs).size, 2);
-  assert.ok(triggerRefs.every((triggerRef) => triggerRef.startsWith("memory-job-1:4:recovery:")));
+  assert.deepEqual(triggerRefs, ["memory-job-1:4", "memory-job-1:4"]);
+  assert.deepEqual(analysisIds, ["company:MSFT:existing", "company:MSFT:existing"]);
   assert.deepEqual(requestBodies.map((body) => JSON.parse(body)), [
     { limit: 100, includeIncomplete: true },
     { limit: 100, includeIncomplete: true },
