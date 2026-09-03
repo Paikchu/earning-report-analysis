@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { handlePublicFundamentalsRequest } from "../lib/fundamentals-api.ts";
+import { FUNDAMENTAL_METRIC_CATALOG_VERSION } from "../lib/fundamental-metrics.ts";
 import type {
   FundamentalLastGoodSnapshot,
   FundamentalsRepository,
@@ -24,7 +25,7 @@ function minimalSnapshot(fetchedAt: string): FundamentalLastGoodSnapshot {
     fetchedAt,
     qualityStatus: "complete",
     parserVersion: "parser.v1",
-    catalogVersion: "fundamental-metrics.v1",
+    catalogVersion: FUNDAMENTAL_METRIC_CATALOG_VERSION,
     payloadHash: "payload-1",
     issueCount: 0,
     observations: [{

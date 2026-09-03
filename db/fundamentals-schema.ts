@@ -70,7 +70,7 @@ export const fundamentalObservations = sqliteTable("fundamental_observations", {
   metricKey: text("metric_key").notNull(),
   sourceField: text("source_field"),
   valueDecimal: text("value_decimal").notNull(),
-  unitFamily: text("unit_family", { enum: ["currency", "percent", "per_share", "shares"] }).notNull(),
+  unitFamily: text("unit_family", { enum: ["currency", "percent", "per_share", "shares", "multiple"] }).notNull(),
   unit: text("unit").notNull(),
   currency: text("currency").notNull().default(""),
   basis: text("basis", { enum: ["reported", "derived"] }).notNull(),
@@ -83,7 +83,7 @@ export const fundamentalObservations = sqliteTable("fundamental_observations", {
 }, (table) => [
   check(
     "fundamental_observations_unit_family_check",
-    sql`${table.unitFamily} IN ('currency', 'percent', 'per_share', 'shares')`,
+    sql`${table.unitFamily} IN ('currency', 'percent', 'per_share', 'shares', 'multiple')`,
   ),
   check("fundamental_observations_basis_check", sql`${table.basis} IN ('reported', 'derived')`),
   check("fundamental_observations_revision_check", sql`${table.revision} >= 1`),

@@ -41,7 +41,13 @@ export type FundamentalChartRendererProps = {
   data: PublicFundamentalsResponse;
   series: readonly FundamentalChartSeriesSpec[];
   className?: string;
+  /** Period the reader picked; its marks are drawn in the highlight colour. */
+  selectedPeriodEnd?: string | null;
+  onSelectPeriod?(periodEnd: string): void;
 };
+
+/** Marks the picked period apart from every series colour in the palette. */
+const SELECTED_PERIOD_COLOR = "var(--chart-selected)";
 
 export type MetricSelectorProps = {
   availableSeries: readonly PublicFundamentalSeries[];
@@ -59,6 +65,8 @@ export function FundamentalChartRenderer({
   data,
   series,
   className,
+  selectedPeriodEnd = null,
+  onSelectPeriod,
 }: FundamentalChartRendererProps) {
   const titleId = useId();
   const descriptionId = useId();
@@ -88,7 +96,6 @@ export function FundamentalChartRenderer({
           title="财报趋势正在准备"
           detail="正在同步季度数据。数据可用后，图表会自动更新。"
         />
-        <ChartSource data={data} />
       </ChartFrame>
     );
   }
@@ -97,7 +104,6 @@ export function FundamentalChartRenderer({
     return (
       <ChartFrame className={className} title={title} description={description}>
         <ChartMessage title="这组指标暂时不能叠加" detail={modelResult.error ?? "请调整指标组合。"} />
-        <ChartSource data={data} />
       </ChartFrame>
     );
   }
@@ -107,7 +113,6 @@ export function FundamentalChartRenderer({
     return (
       <ChartFrame className={className} title={title} description={description}>
         <ChartMessage title="暂无可绘制数据" detail="所选指标在这些报告期内均为空。可更换指标或扩大报告期范围。" />
-        <ChartSource data={data} />
       </ChartFrame>
     );
   }
@@ -130,6 +135,8 @@ export function FundamentalChartRenderer({
         patternId={patternId}
         activePeriodIndex={activePeriodIndex}
         onActivePeriodChange={setActivePeriodIndex}
+        selectedPeriodIndex={model.periods.findIndex((period) => period.periodEnd === selectedPeriodEnd)}
+        onSelectPeriod={onSelectPeriod}
       />
 
       <p className="sr-only" aria-live="polite" data-chart-role="live-region">
@@ -137,7 +144,6 @@ export function FundamentalChartRenderer({
           ? "可使用 Tab 键依次查看每个报告期的数据。"
           : buildFundamentalChartTooltip(model, activePeriodIndex).accessibleLabel}
       </p>
-      <ChartSource data={data} />
     </figure>
   );
 }
@@ -303,6 +309,8 @@ function FundamentalSvgChart({
   patternId,
   activePeriodIndex,
   onActivePeriodChange,
+  selectedPeriodIndex,
+  onSelectPeriod,
 }: {
   model: FundamentalChartModel;
   titleId: string;
@@ -310,6 +318,8 @@ function FundamentalSvgChart({
   patternId: string;
   activePeriodIndex: number | null;
   onActivePeriodChange(index: number | null): void;
+  selectedPeriodIndex: number;
+  onSelectPeriod?(periodEnd: string): void;
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [chartWidth, setChartWidth] = useState(FUNDAMENTAL_CHART_WIDTH);
@@ -332,10 +342,21 @@ function FundamentalSvgChart({
     : buildFundamentalChartTooltip(model, activePeriodIndex);
   const activeX = activePeriodIndex === null ? null : layout.periodCenters[activePeriodIndex] ?? null;
 
+  const selectPeriod = (index: number) => {
+    const period = model.periods[index];
+    if (period) onSelectPeriod?.(period.periodEnd);
+  };
+
   const handlePeriodKeyDown = (event: KeyboardEvent<SVGRectElement>, index: number) => {
     if (event.key === "Escape") {
       onActivePeriodChange(null);
       event.currentTarget.blur();
+      return;
+    }
+    // A rect is not a button, so Enter and Space have to be wired by hand.
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      selectPeriod(index);
       return;
     }
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
@@ -343,6 +364,9 @@ function FundamentalSvgChart({
     const delta = event.key === "ArrowLeft" ? -1 : 1;
     const nextIndex = Math.max(0, Math.min(model.periods.length - 1, index + delta));
     onActivePeriodChange(nextIndex);
+    // Arrow keys are a deliberate move, so they carry the selection with them
+    // and the detail panel stays in step with the focused period.
+    selectPeriod(nextIndex);
     document.getElementById(periodTargetId(patternId, nextIndex))?.focus();
   };
 
@@ -370,6 +394,10 @@ function FundamentalSvgChart({
         {geometry.bars.map((bar) => {
           const visual = getFundamentalSeriesVisual(bar.seriesIndex);
           const series = model.series[bar.seriesIndex]!;
+          // A selected bar drops its pattern for solid highlight fill; the
+          // pattern encodes which series it is, which the position already says
+          // once the whole period is picked out.
+          const selected = bar.periodIndex === selectedPeriodIndex;
           return (
             <rect
               key={`${bar.seriesId}:${bar.periodIndex}`}
@@ -379,10 +407,11 @@ function FundamentalSvgChart({
               width={bar.width}
               height={bar.height}
               rx="1.5"
-              fill={barFill(visual, patternId, bar.seriesIndex)}
-              stroke={visual.color}
+              fill={selected ? SELECTED_PERIOD_COLOR : barFill(visual, patternId, bar.seriesIndex)}
+              stroke={selected ? SELECTED_PERIOD_COLOR : visual.color}
               data-series-id={series.id}
               data-period-index={bar.periodIndex}
+              data-selected={selected ? "true" : undefined}
             />
           );
         })}
@@ -405,16 +434,20 @@ function FundamentalSvgChart({
                   strokeDasharray={visual.dashArray}
                 />
               ))}
-              {line.segments.flatMap((segment) => segment).map((point) => (
-                <PointShape
-                  key={point.periodIndex}
-                  shape={visual.pointShape}
-                  x={point.x}
-                  y={point.y}
-                  color={visual.color}
-                  size={4}
-                />
-              ))}
+              {line.segments.flatMap((segment) => segment).map((point) => {
+                const selected = point.periodIndex === selectedPeriodIndex;
+                return (
+                  <PointShape
+                    key={point.periodIndex}
+                    shape={visual.pointShape}
+                    x={point.x}
+                    y={point.y}
+                    color={selected ? SELECTED_PERIOD_COLOR : visual.color}
+                    size={selected ? 5.5 : 4}
+                    selected={selected}
+                  />
+                );
+              })}
             </g>
           );
         })}
@@ -429,7 +462,7 @@ function FundamentalSvgChart({
           />
         ) : null}
 
-        <XAxis model={model} layout={layout} />
+        <XAxis model={model} layout={layout} selectedPeriodIndex={selectedPeriodIndex} />
 
         <g data-chart-role="period-targets">
           {model.periods.map((period, index) => {
@@ -448,7 +481,7 @@ function FundamentalSvgChart({
                 tabIndex={0}
                 role="button"
                 aria-label={tooltip.accessibleLabel}
-                aria-pressed={activePeriodIndex === index}
+                aria-pressed={selectedPeriodIndex === index}
                 data-period-end={period.periodEnd}
                 onFocus={() => onActivePeriodChange(index)}
                 onBlur={(event) => {
@@ -457,7 +490,10 @@ function FundamentalSvgChart({
                   }
                 }}
                 onPointerEnter={() => onActivePeriodChange(index)}
-                onClick={() => onActivePeriodChange(index)}
+                onClick={() => {
+                  onActivePeriodChange(index);
+                  selectPeriod(index);
+                }}
                 onKeyDown={(event) => handlePeriodKeyDown(event, index)}
               />
             );
@@ -546,13 +582,18 @@ function YAxis({
 function XAxis({
   model,
   layout,
+  selectedPeriodIndex,
 }: {
   model: FundamentalChartModel;
   layout: ReturnType<typeof buildFundamentalChartGeometry>["layout"];
+  selectedPeriodIndex: number;
 }) {
   const visibleTickIndexes = new Set(
     selectFundamentalPeriodTickIndexes(model.periods.length, layout.plotWidth),
   );
+  // Thinning may have dropped the selected label, and that is the one label the
+  // reader is looking for, so it is put back regardless of density.
+  if (selectedPeriodIndex >= 0) visibleTickIndexes.add(selectedPeriodIndex);
   return (
     <g className="fundamental-chart__axis fundamental-chart__axis--x" aria-hidden="true">
       <line x1={layout.plotLeft} x2={layout.plotRight} y1={layout.plotBottom} y2={layout.plotBottom} />
@@ -562,6 +603,7 @@ function XAxis({
           x={layout.periodCenters[index]}
           y={layout.plotBottom + 28}
           textAnchor="middle"
+          data-selected={index === selectedPeriodIndex ? "true" : undefined}
         >
           {formatPeriodTick(period.periodEnd)}
         </text>
@@ -605,16 +647,6 @@ function ChartTooltip({
   );
 }
 
-function ChartSource({ data }: { data: PublicFundamentalsResponse }) {
-  return (
-    <footer className="fundamental-chart__source">
-      <span>来源：Yahoo Finance</span>
-      {data.fetchedAt ? <span>更新：{formatFetchedAt(data.fetchedAt)}</span> : <span>等待首次同步</span>}
-      {data.issueCount > 0 ? <span>数据提示：{data.issueCount}</span> : null}
-    </footer>
-  );
-}
-
 function ChartPatterns({ patternId }: { patternId: string }) {
   return (
     <defs>
@@ -640,23 +672,28 @@ function PointShape({
   y,
   color,
   size,
+  selected = false,
 }: {
   shape: FundamentalSeriesVisual["pointShape"];
   x: number;
   y: number;
   color: string;
   size: number;
+  selected?: boolean;
 }) {
+  // A selected point is filled rather than hollow, so it still reads as picked
+  // where colour alone would not carry — print, or a colour-vision difference.
+  const fill = selected ? color : "var(--paper)";
   if (shape === "square") {
-    return <rect x={x - size} y={y - size} width={size * 2} height={size * 2} fill="var(--paper)" stroke={color} strokeWidth="2" />;
+    return <rect x={x - size} y={y - size} width={size * 2} height={size * 2} fill={fill} stroke={color} strokeWidth="2" />;
   }
   if (shape === "diamond") {
-    return <path d={`M${x},${y - size - 0.5} L${x + size + 0.5},${y} L${x},${y + size + 0.5} L${x - size - 0.5},${y} Z`} fill="var(--paper)" stroke={color} strokeWidth="2" />;
+    return <path d={`M${x},${y - size - 0.5} L${x + size + 0.5},${y} L${x},${y + size + 0.5} L${x - size - 0.5},${y} Z`} fill={fill} stroke={color} strokeWidth="2" />;
   }
   if (shape === "triangle") {
-    return <path d={`M${x},${y - size - 1} L${x + size + 1},${y + size} L${x - size - 1},${y + size} Z`} fill="var(--paper)" stroke={color} strokeWidth="2" />;
+    return <path d={`M${x},${y - size - 1} L${x + size + 1},${y + size} L${x - size - 1},${y + size} Z`} fill={fill} stroke={color} strokeWidth="2" />;
   }
-  return <circle cx={x} cy={y} r={size} fill="var(--paper)" stroke={color} strokeWidth="2" />;
+  return <circle cx={x} cy={y} r={size} fill={fill} stroke={color} strokeWidth="2" />;
 }
 
 function BarLegendSwatch({ visual }: { visual: FundamentalSeriesVisual }) {
@@ -700,10 +737,6 @@ function periodTargetId(patternId: string, index: number): string {
 function formatPeriodTick(periodEnd: string): string {
   const match = /^(\d{4})-(\d{2})/.exec(periodEnd);
   return match ? `${match[1]}.${Number(match[2])}` : periodEnd;
-}
-
-function formatFetchedAt(value: string): string {
-  return `${value.replace("T", " ").slice(0, 16)} UTC`;
 }
 
 function truncate(value: string, maxLength: number): string {

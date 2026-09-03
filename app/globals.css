@@ -17,6 +17,9 @@
   --accent: #0088b0;
   --flag: #d6006c;
   --hairline: #d7d3d3;
+  /* The picked quarter in the fundamentals chart. Warm enough to separate from
+     every series colour in the palette, dark enough to hold on paper stock. */
+  --chart-selected: #c2560f;
   --hairline-soft: #e0dcdc;
   --serif: "Source Serif 4", "Noto Serif SC", "Iowan Old Style", Baskerville, "Songti SC", serif;
   --sans: "Source Serif 4", "Noto Serif SC", "Iowan Old Style", Baskerville, "Songti SC", serif;
@@ -152,6 +155,9 @@
 
 .fundamental-chart__axis--x line { stroke: rgb(32 30 29 / 38%); }
 .fundamental-chart__axis--x text { font-size: 10px; }
+/* The picked quarter's label is what the reader scans for, so it carries the
+   same colour as the marks above it. */
+.fundamental-chart__axis--x text[data-selected="true"] { fill: var(--chart-selected); font-weight: 700; }
 .fundamental-chart__bar { shape-rendering: geometricPrecision; }
 .fundamental-chart__line { vector-effect: non-scaling-stroke; }
 
@@ -162,7 +168,7 @@
   stroke-dasharray: 3 3;
 }
 
-.fundamental-chart__hit-target { cursor: crosshair; outline: none; }
+.fundamental-chart__hit-target { cursor: pointer; outline: none; }
 .fundamental-chart__hit-target:focus-visible {
   stroke: var(--ink);
   stroke-width: 2;
@@ -186,17 +192,6 @@
 .fundamental-chart__tooltip .fundamental-chart__tooltip-period {
   font-family: var(--serif);
   font-size: 12px;
-}
-
-.fundamental-chart__source {
-  margin-top: 10px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px 16px;
-  color: var(--ink-muted);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: .025em;
 }
 
 .fundamental-chart__message {
@@ -291,7 +286,6 @@
   .fundamental-chart__viewport svg { min-height: 340px; }
   .fundamental-chart__axis text { font-size: 9.5px; }
   .fundamental-chart__axis--x text { font-size: 9px; }
-  .fundamental-chart__source { display: grid; gap: 3px; }
   .fundamental-metric-selector__options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
@@ -2813,7 +2807,11 @@ td { font-size: 14px; }
 .fundamentals-workbench,
 .stock-analysis-filings { min-width: 0; }
 
-.fundamentals-workbench { padding-top: 34px; scroll-margin-top: 20px; }
+.fundamentals-workbench {
+  padding-top: 34px;
+  scroll-margin-top: 20px;
+  container: fundamentals / inline-size;
+}
 
 .fundamentals-workbench__header {
   min-height: 56px;
@@ -2827,15 +2825,6 @@ td { font-size: 14px; }
 
 .fundamentals-workbench__title { min-width: 0; display: flex; align-items: baseline; gap: 14px; }
 .fundamentals-workbench__header-actions { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 14px; }
-
-.fundamentals-workbench__eyebrow {
-  color: var(--ink-muted);
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: .11em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
 
 .fundamentals-workbench__header h2 {
   margin: 0;
@@ -2862,26 +2851,7 @@ td { font-size: 14px; }
   white-space: nowrap;
 }
 
-.fundamentals-workbench__request-status[data-tone="ready"] { color: var(--color-profit); }
 .fundamentals-workbench__request-status[data-tone="warning"] { color: #8a4c20; }
-
-.fundamentals-workbench__status-group {
-  display: grid;
-  justify-items: end;
-  gap: 6px;
-}
-
-.fundamentals-workbench__presentation-status {
-  color: var(--ink-muted);
-  font-size: 9px;
-  font-weight: 750;
-  letter-spacing: .06em;
-  white-space: nowrap;
-  text-transform: uppercase;
-}
-
-.fundamentals-workbench__presentation-status[data-source="ai"] { color: #65507f; }
-.fundamentals-workbench__presentation-status[data-tone="warning"] { color: #8a4c20; }
 
 .fundamentals-workbench__toolbar {
   min-height: 48px;
@@ -2893,13 +2863,6 @@ td { font-size: 14px; }
   border-bottom: 1px solid var(--paper-deep);
 }
 
-.fundamentals-workbench__mode {
-  display: inline-grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border: 1px solid var(--paper-deep);
-}
-
-.fundamentals-workbench__mode button,
 .fundamentals-workbench__mobile-selector-trigger,
 .fundamentals-bottom-sheet__dialog header button,
 .fundamentals-workbench__request-message button {
@@ -2911,15 +2874,6 @@ td { font-size: 14px; }
   cursor: pointer;
 }
 
-.fundamentals-workbench__mode button {
-  min-width: 56px;
-  padding: 0 12px;
-  border-right: 1px solid var(--paper-deep);
-}
-
-.fundamentals-workbench__mode button:last-child { border-right: 0; }
-.fundamentals-workbench__mode button[data-active="true"] { color: var(--paper); background: var(--ink); }
-.fundamentals-workbench__mode button:focus-visible,
 .fundamentals-workbench__mobile-selector-trigger:focus-visible,
 .fundamentals-bottom-sheet button:focus-visible,
 .fundamentals-workbench__period-control select:focus-visible,
@@ -2935,6 +2889,9 @@ td { font-size: 14px; }
   font-weight: 700;
 }
 
+.fundamentals-workbench__period-control[data-static="true"] { margin: 0; gap: 6px; }
+.fundamentals-workbench__period-control strong { color: var(--ink); font: 700 11px/1 var(--sans); }
+
 .fundamentals-workbench__period-control select {
   min-height: 36px;
   padding: 0 26px 0 9px;
@@ -2947,19 +2904,55 @@ td { font-size: 14px; }
 
 .fundamentals-workbench__mobile-selector-trigger { display: none; }
 
-/* The overlay picker reads as one strip above the chart, the way the redesign
-   shows it, instead of a full-height sidebar that trebled the section height. */
-.fundamentals-workbench__grid {
+/* Chart on the left, the picked quarter spelled out on the right. The section
+   is its own container so the pair splits on the width it actually gets, which
+   is a fraction of the page: the filings rail takes the rest. Below that the
+   two stack, chart first, rather than squeezing the plot to nothing. */
+.fundamentals-workbench__split {
+  margin-top: 10px;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: "selector" "chart";
-  gap: 6px;
+  gap: 26px;
   align-items: start;
 }
 
-.fundamentals-workbench__chart { min-width: 0; grid-area: chart; scroll-margin-top: 16px; outline: none; }
+.fundamentals-workbench__snapshot { min-width: 0; }
+
+@container fundamentals (min-width: 620px) {
+  .fundamentals-workbench__split {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 292px);
+    gap: 0 26px;
+  }
+  .fundamentals-workbench__snapshot {
+    padding-left: 26px;
+    border-left: 1px solid var(--paper-deep);
+  }
+}
+
+.fundamentals-workbench__snapshot-head {
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.fundamentals-workbench__snapshot-head h3 {
+  margin: 0;
+  color: var(--chart-selected);
+  font: 600 18px/1.2 var(--serif);
+  letter-spacing: -.01em;
+}
+
+.fundamentals-workbench__snapshot-head p {
+  margin: 4px 0 0;
+  color: var(--ink-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+/* The overlay picker reads as one strip above the chart, the way the redesign
+   shows it, instead of a full-height sidebar that trebled the section height. */
+.fundamentals-workbench__chart { min-width: 0; scroll-margin-top: 16px; outline: none; }
 .fundamentals-workbench__chart-stack { min-width: 0; display: grid; gap: 34px; }
-.fundamentals-workbench__selector { min-width: 0; padding-top: 12px; grid-area: selector; }
+.fundamentals-workbench__selector { min-width: 0; padding-top: 12px; }
 .fundamentals-workbench__selector .fundamental-metric-selector { padding-top: 0; border-top: 0; }
 .fundamentals-workbench__selector .fundamental-metric-selector legend { font: 600 12px/1 var(--serif); }
 .fundamentals-workbench__selector .fundamental-metric-selector__help { display: inline; margin-left: 8px; }
@@ -3050,20 +3043,17 @@ td { font-size: 14px; }
 .fundamentals-workbench__view-toggle button[aria-pressed="true"] { color: var(--paper); background: var(--ink); }
 .fundamentals-workbench__view-toggle button:focus-visible { outline: 2px solid var(--color-loss); outline-offset: 2px; }
 
-/* 342px + the 48px control strip above it keeps the table view the same 390px
-   block it was before the strip existed. */
 .fundamentals-workbench__table {
-  min-height: 342px;
   padding-top: 4px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 40px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
   font-variant-numeric: tabular-nums;
 }
 .fundamentals-workbench__table-col { min-width: 0; display: flex; flex-direction: column; }
 .fundamentals-workbench__table-col-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 104px 62px 62px;
+  grid-template-columns: minmax(0, 1fr) 96px 42px 42px;
   padding: 7px 0 5px;
   color: var(--ink-muted);
   font-size: 10px;
@@ -3072,16 +3062,19 @@ td { font-size: 14px; }
   text-transform: uppercase;
 }
 .fundamentals-workbench__table-col-head span:not(:first-child) { text-align: right; }
+/* The first cell names the group, so it reads as a heading rather than a
+   column label like the three beside it. */
+.fundamentals-workbench__table-col-head span:first-child { color: var(--ink); letter-spacing: .06em; }
 .fundamentals-workbench__table-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 104px 62px 62px;
+  grid-template-columns: minmax(0, 1fr) 96px 42px 42px;
   padding: 7px 0;
   border-top: 1px solid var(--paper-deep);
 }
-.fundamentals-workbench__table-row dt { overflow: hidden; font: 500 13px/1.3 var(--serif); text-overflow: ellipsis; white-space: nowrap; }
+.fundamentals-workbench__table-row dt { overflow: hidden; font: 500 12.5px/1.3 var(--serif); text-overflow: ellipsis; white-space: nowrap; }
 .fundamentals-workbench__table-row dd { margin: 0; overflow: hidden; text-align: right; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.fundamentals-workbench__table-row dd:first-of-type { font: 600 14px/1.2 var(--serif); }
-.fundamentals-workbench__table-row dd:not(:first-of-type) { color: var(--color-profit); font: 500 12px/1.2 var(--serif); }
+.fundamentals-workbench__table-row dd:first-of-type { font: 600 13.5px/1.2 var(--serif); }
+.fundamentals-workbench__table-row dd:not(:first-of-type) { color: var(--color-profit); font: 500 11.5px/1.2 var(--serif); }
 .fundamentals-workbench__table-row dd[data-delta="down"] { color: var(--color-loss); }
 .fundamentals-workbench__table-empty { grid-column: 1 / -1; padding: 40px 0; color: var(--ink-muted); font-size: 13px; text-align: center; }
 
@@ -3207,11 +3200,8 @@ td { font-size: 14px; }
   .fundamentals-workbench__title { flex: 1 1 100%; }
   .fundamentals-workbench__header-actions { flex: 1 1 100%; align-items: center; justify-content: space-between; }
   .fundamentals-workbench__header h2 { font-size: 25px; }
-  .fundamentals-workbench__status-group { justify-items: start; }
   .fundamentals-workbench__request-status { width: fit-content; }
   .fundamentals-workbench__toolbar { flex-wrap: wrap; }
-  .fundamentals-workbench__mode { flex: 1 1 auto; }
-  .fundamentals-workbench__mode button { min-width: 0; }
   .fundamentals-workbench__toolbar[data-view="chart"] .fundamentals-workbench__period-control > span { display: none; }
   .fundamentals-workbench__mobile-selector-trigger {
     min-width: 72px;

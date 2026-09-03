@@ -9,17 +9,13 @@ import {
 } from "react";
 
 import {
-  FundamentalBarChart,
   FundamentalComboChart,
-  FundamentalLineChart,
   MetricSelector,
 } from "@/components/fundamentals/FundamentalChart";
 import {
-  FUNDAMENTAL_PAGE_PERIOD_OPTIONS,
   limitFundamentalMetricAxes,
   reconcileFundamentalMetricSelection,
   writeFundamentalPageState,
-  type FundamentalChartMode,
   type FundamentalPageState,
 } from "@/lib/fundamental-page-state";
 import {
@@ -33,19 +29,38 @@ import {
   formatFundamentalPeriod,
 } from "@/lib/fundamental-chart";
 import type { FundamentalMetricKey, FundamentalTransform } from "@/lib/fundamental-metrics";
-import type { PublicFundamentalsResponse } from "@/lib/fundamentals-api";
+import { FUNDAMENTALS_DEFAULT_PERIOD_COUNT, type PublicFundamentalsResponse } from "@/lib/fundamentals-api";
 
-const SNAPSHOT_METRICS_A: readonly FundamentalMetricKey[] = [
-  "total_revenue",
-  "gross_profit",
-  "gross_margin",
-  "operating_income",
-];
-const SNAPSHOT_METRICS_B: readonly FundamentalMetricKey[] = [
-  "operating_margin",
-  "net_income",
-  "operating_cash_flow",
-  "diluted_eps",
+// The panel reads as two questions: how the quarter went, and what the market
+// paid for it. Grouping keeps seventeen rows scannable in a narrow column.
+const SNAPSHOT_GROUPS: readonly { title: string; metricKeys: readonly FundamentalMetricKey[] }[] = [
+  {
+    title: "经营",
+    metricKeys: [
+      "total_revenue",
+      "gross_profit",
+      "gross_margin",
+      "operating_income",
+      "operating_margin",
+      "net_income",
+      "operating_cash_flow",
+      "diluted_eps",
+    ],
+  },
+  {
+    title: "估值",
+    metricKeys: [
+      "market_cap",
+      "enterprise_value",
+      "pe_ratio",
+      "forward_pe_ratio",
+      "peg_ratio",
+      "price_to_sales",
+      "price_to_book",
+      "ev_to_revenue",
+      "ev_to_ebitda",
+    ],
+  },
 ];
 
 export type FundamentalsRequestState = "loading" | "ready" | "refreshing" | "error";
@@ -67,16 +82,8 @@ type FundamentalChartsViewProps = {
   error: string | null;
   presentation?: ResolvedFundamentalPresentation | null;
   onMetricKeysChange(metricKeys: FundamentalMetricKey[]): void;
-  onChartChange(chart: FundamentalChartMode): void;
-  onPeriodCountChange(periodCount: number): void;
   onRetry(): void;
 };
-
-const CHART_MODES: readonly { value: FundamentalChartMode; label: string }[] = [
-  { value: "combo", label: "组合" },
-  { value: "bar", label: "柱状" },
-  { value: "line", label: "折线" },
-];
 
 const FUNDAMENTALS_PENDING_POLL_DELAYS_MS = [1_000, 2_000, 4_000, 8_000] as const;
 
@@ -100,8 +107,7 @@ export function FundamentalCharts({
     if (!data || data.status !== "ready") return null;
     const override = {
       metricKeys: pageState.metricKeys,
-      chart: pageState.chart,
-      periodCount: pageState.periodCount,
+      periodCount: FUNDAMENTALS_DEFAULT_PERIOD_COUNT,
     };
     return resolveFundamentalPresentation({
       data,
@@ -119,7 +125,7 @@ export function FundamentalCharts({
     void (async () => {
       for (let attempt = 0; ; attempt += 1) {
         const response = await fetch(
-          `/api/v1/companies/${encodeURIComponent(ticker)}/fundamentals?periodCount=${pageState.periodCount}`,
+          `/api/v1/companies/${encodeURIComponent(ticker)}/fundamentals?periodCount=${FUNDAMENTALS_DEFAULT_PERIOD_COUNT}`,
           { signal: controller.signal },
         );
         const payload = await response.json() as PublicFundamentalsResponse | { error?: string };
@@ -159,7 +165,7 @@ export function FundamentalCharts({
       });
 
     return () => controller.abort();
-  }, [pageState.periodCount, retryVersion, ticker]);
+  }, [retryVersion, ticker]);
 
   useEffect(() => {
     if (!overrideSource) return;
@@ -183,14 +189,6 @@ export function FundamentalCharts({
           setPageState((current) => ({ ...current, metricKeys }));
         }
       }}
-      onChartChange={(chart) => {
-        setOverrideSource("user");
-        setPageState((current) => ({ ...current, chart }));
-      }}
-      onPeriodCountChange={(periodCount) => {
-        setOverrideSource("user");
-        setPageState((current) => ({ ...current, periodCount }));
-      }}
       onRetry={() => setRetryVersion((version) => version + 1)}
     />
   );
@@ -205,11 +203,8 @@ export function FundamentalChartsView({
   error,
   presentation,
   onMetricKeysChange,
-  onChartChange,
-  onPeriodCountChange,
   onRetry,
 }: FundamentalChartsViewProps) {
-  const [viewMode, setViewMode] = useState<"chart" | "table">("chart");
   const [selectedPeriodEnd, setSelectedPeriodEnd] = useState<string | null>(null);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const selectorTriggerRef = useRef<HTMLButtonElement>(null);
@@ -230,8 +225,7 @@ export function FundamentalChartsView({
         data,
         urlOverride: {
           metricKeys: pageState.metricKeys,
-          chart: pageState.chart,
-          periodCount: pageState.periodCount,
+          periodCount: FUNDAMENTALS_DEFAULT_PERIOD_COUNT,
         },
       });
     } catch {
@@ -252,12 +246,12 @@ export function FundamentalChartsView({
     }
     return periodOptions[0]?.periodEnd ?? null;
   }, [periodOptions, selectedPeriodEnd]);
-  const snapshotRowsA = useMemo(
-    () => (data && data.status === "ready" && activePeriodEnd ? buildSnapshotRows(data, activePeriodEnd, SNAPSHOT_METRICS_A) : []),
-    [data, activePeriodEnd],
-  );
-  const snapshotRowsB = useMemo(
-    () => (data && data.status === "ready" && activePeriodEnd ? buildSnapshotRows(data, activePeriodEnd, SNAPSHOT_METRICS_B) : []),
+  const snapshotGroups = useMemo(
+    () => (data && data.status === "ready" && activePeriodEnd
+      ? SNAPSHOT_GROUPS
+        .map((group) => ({ title: group.title, rows: buildSnapshotRows(data, activePeriodEnd, group.metricKeys) }))
+        .filter((group) => group.rows.length > 0)
+      : []),
     [data, activePeriodEnd],
   );
 
@@ -303,125 +297,65 @@ export function FundamentalChartsView({
 
   return (
     <section className="fundamentals-workbench" aria-labelledby="fundamentals-heading">
-      {/* The header holds only what both views share — the section name, the
-          source note, the status chips and the table/chart switch. Nothing here
-          is conditional on viewMode: a control that mounts on one view only
-          would change this row's height and drag the heading with it, since the
-          header bottom-aligns its children. Per-view controls live in the frame
-          below, next to the view they belong to. */}
+      {/* Chart and snapshot sit side by side and read as one instrument: the
+          chart picks a quarter, the panel beside it spells that quarter out.
+          Nothing alternates any more, so the header carries only the section
+          name and the request state. */}
       <header className="fundamentals-workbench__header">
         <div className="fundamentals-workbench__title">
           <h2 id="fundamentals-heading">基本面</h2>
-          <span className="fundamentals-workbench__eyebrow">Yahoo Finance · 季度数据</span>
         </div>
         <div className="fundamentals-workbench__header-actions">
-          <div className="fundamentals-workbench__status-group">
-            <PresentationStatus presentation={effectivePresentation} />
-            <RequestStatus requestState={requestState} data={data} error={error} />
-          </div>
-          <div className="fundamentals-workbench__view-toggle" role="group" aria-label="表格或图表视图">
-            <button type="button" aria-pressed={viewMode === "table"} onClick={() => setViewMode("table")}>表格</button>
-            <button type="button" aria-pressed={viewMode === "chart"} onClick={() => setViewMode("chart")}>图表</button>
-          </div>
+          <RequestStatus requestState={requestState} data={data} error={error} />
         </div>
       </header>
 
       <div className="fundamentals-workbench__frame">
-      {viewMode === "table" ? (
-        <>
-          <div className="fundamentals-workbench__toolbar" data-view="table" aria-label="表格显示设置">
-            <label className="fundamentals-workbench__period-control">
-              <span>报告期</span>
-              <select
-                aria-label="选择报告期"
-                value={activePeriodEnd ?? ""}
-                disabled={periodOptions.length === 0}
-                onChange={(event) => setSelectedPeriodEnd(event.currentTarget.value)}
-              >
-                {periodOptions.length === 0
-                  ? <option value="">暂无</option>
-                  : periodOptions.map((period) => (
-                    <option value={period.periodEnd} key={period.periodEnd}>{formatFundamentalPeriod(period.periodEnd)}</option>
-                  ))}
-              </select>
-            </label>
-          </div>
-          <div className="fundamentals-workbench__table" role="table" aria-label="基本面快照">
-            <SnapshotColumn rows={snapshotRowsA} />
-            <SnapshotColumn rows={snapshotRowsB} />
-            {snapshotRowsA.length === 0 && snapshotRowsB.length === 0 && (
-              <p className="fundamentals-workbench__table-empty">暂无该报告期的基本面数据。</p>
-            )}
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="fundamentals-workbench__toolbar" data-view="chart" aria-label="图表显示设置">
-            <div className="fundamentals-workbench__mode" role="radiogroup" aria-label="图表类型">
-              {CHART_MODES.map((mode) => (
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={pageState.chart === mode.value}
-                  data-active={pageState.chart === mode.value ? "true" : "false"}
-                  key={mode.value}
-                  onClick={() => onChartChange(mode.value)}
-                >
-                  {mode.label}
-                </button>
-              ))}
-            </div>
-            <label className="fundamentals-workbench__period-control">
-              <span>报告期</span>
-              <select
-                aria-label="显示季度数"
-                value={pageState.periodCount}
-                onChange={(event) => onPeriodCountChange(Number(event.currentTarget.value))}
-              >
-                {FUNDAMENTAL_PAGE_PERIOD_OPTIONS.map((periodCount) => (
-                  <option value={periodCount} key={periodCount}>{periodCount} 季度</option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              className="fundamentals-workbench__mobile-selector-trigger"
-              ref={selectorTriggerRef}
-              aria-haspopup="dialog"
-              aria-expanded={selectorOpen}
-              onClick={() => setSelectorOpen(true)}
-            >
-              指标 <span>{pageState.metricKeys.length}</span>
-            </button>
-          </div>
+        <div className="fundamentals-workbench__toolbar" data-view="chart" aria-label="图表显示设置">
+          <p className="fundamentals-workbench__period-control" data-static="true">
+            <span>报告期</span>
+            <strong>{FUNDAMENTALS_DEFAULT_PERIOD_COUNT} 季度</strong>
+          </p>
+          <button
+            type="button"
+            className="fundamentals-workbench__mobile-selector-trigger"
+            ref={selectorTriggerRef}
+            aria-haspopup="dialog"
+            aria-expanded={selectorOpen}
+            onClick={() => setSelectorOpen(true)}
+          >
+            指标 <span>{pageState.metricKeys.length}</span>
+          </button>
+        </div>
 
-          <div className="fundamentals-workbench__grid">
-            <aside className="fundamentals-workbench__selector" aria-label="基本面指标">
-              {data?.series.length ? (
-                <MetricSelector
-                  id="desktop-fundamental-metrics"
-                  availableSeries={data.series}
-                  selectedMetricKeys={pageState.metricKeys}
-                  onChange={onMetricKeysChange}
-                  minSelection={1}
-                  legend={selectorLegend}
-                />
-              ) : <SelectorPlaceholder />}
-            </aside>
-            <div className="fundamentals-workbench__chart" ref={chartRef} tabIndex={-1}>
-              <ChartPanel
-                data={data}
-                error={error}
-                requestState={requestState}
-                chart={pageState.chart}
-                seriesSpecs={seriesSpecs}
-                presentation={effectivePresentation}
-                onRetry={onRetry}
-              />
-            </div>
+        <aside className="fundamentals-workbench__selector" aria-label="基本面指标">
+          {data?.series.length ? (
+            <MetricSelector
+              id="desktop-fundamental-metrics"
+              availableSeries={data.series}
+              selectedMetricKeys={pageState.metricKeys}
+              onChange={onMetricKeysChange}
+              minSelection={1}
+              legend={selectorLegend}
+            />
+          ) : <SelectorPlaceholder />}
+        </aside>
+
+        <div className="fundamentals-workbench__split">
+          <div className="fundamentals-workbench__chart" ref={chartRef} tabIndex={-1}>
+            <ChartPanel
+              data={data}
+              error={error}
+              requestState={requestState}
+              seriesSpecs={seriesSpecs}
+              presentation={effectivePresentation}
+              selectedPeriodEnd={activePeriodEnd}
+              onSelectPeriod={setSelectedPeriodEnd}
+              onRetry={onRetry}
+            />
           </div>
-        </>
-      )}
+          <SnapshotPanel periodEnd={activePeriodEnd} groups={snapshotGroups} />
+        </div>
       </div>
 
       {selectorOpen ? (
@@ -474,22 +408,44 @@ type SnapshotRow = {
   yoyDown: boolean;
 };
 
-function SnapshotColumn({ rows }: { rows: SnapshotRow[] }) {
-  if (rows.length === 0) return null;
+/**
+ * The quarter the chart has picked, spelled out. Its heading names the period
+ * so the panel still says what it is once the reader scrolls the chart away on
+ * a narrow screen, where the two stack instead of sitting side by side.
+ */
+function SnapshotPanel({
+  periodEnd,
+  groups,
+}: {
+  periodEnd: string | null;
+  groups: { title: string; rows: SnapshotRow[] }[];
+}) {
   return (
-    <div className="fundamentals-workbench__table-col">
-      <div className="fundamentals-workbench__table-col-head">
-        <span>指标</span><span>本期</span><span>环比</span><span>同比</span>
+    <section className="fundamentals-workbench__snapshot" aria-labelledby="fundamentals-snapshot-heading">
+      <header className="fundamentals-workbench__snapshot-head">
+        <h3 id="fundamentals-snapshot-heading">{periodEnd ? formatFundamentalPeriod(periodEnd) : "季度快照"}</h3>
+        <p>点击图中任一季度可切换</p>
+      </header>
+      <div className="fundamentals-workbench__table" role="table" aria-label="基本面快照">
+        {groups.length === 0
+          ? <p className="fundamentals-workbench__table-empty">暂无该报告期的基本面数据。</p>
+          : groups.map((group) => (
+            <div className="fundamentals-workbench__table-col" key={group.title}>
+              <div className="fundamentals-workbench__table-col-head">
+                <span>{group.title}</span><span>本期</span><span>环比</span><span>同比</span>
+              </div>
+              {group.rows.map((row) => (
+                <dl className="fundamentals-workbench__table-row" key={row.key}>
+                  <dt>{row.label}</dt>
+                  <dd>{row.value}</dd>
+                  <dd data-delta={row.qoqDown ? "down" : undefined}>{row.qoq}</dd>
+                  <dd data-delta={row.yoyDown ? "down" : undefined}>{row.yoy}</dd>
+                </dl>
+              ))}
+            </div>
+          ))}
       </div>
-      {rows.map((row) => (
-        <dl className="fundamentals-workbench__table-row" key={row.key}>
-          <dt>{row.label}</dt>
-          <dd>{row.value}</dd>
-          <dd data-delta={row.qoqDown ? "down" : undefined}>{row.qoq}</dd>
-          <dd data-delta={row.yoyDown ? "down" : undefined}>{row.yoy}</dd>
-        </dl>
-      ))}
-    </div>
+    </section>
   );
 }
 
@@ -543,17 +499,19 @@ function ChartPanel({
   data,
   error,
   requestState,
-  chart,
   seriesSpecs,
   presentation,
+  selectedPeriodEnd,
+  onSelectPeriod,
   onRetry,
 }: {
   data: PublicFundamentalsResponse | null;
   error: string | null;
   requestState: FundamentalsRequestState;
-  chart: FundamentalChartMode;
   seriesSpecs: { metricKey: FundamentalMetricKey }[];
   presentation: ResolvedFundamentalPresentation | null;
+  selectedPeriodEnd: string | null;
+  onSelectPeriod(periodEnd: string): void;
   onRetry(): void;
 }) {
   if (!data && requestState === "error") {
@@ -591,44 +549,24 @@ function ChartPanel({
           description={plannedChart.insight}
           data={sliceFundamentalsForChart(data, plannedChart.periodCount)}
           series={plannedChart.series}
+          selectedPeriodEnd={selectedPeriodEnd}
+          onSelectPeriod={onSelectPeriod}
         />
       </div>
     );
   }
 
-  const props = {
-    title: "季度基本面叠加图",
-    description: "按报告期末对齐；不同颜色代表不同指标，单位不兼容时自动使用左右双轴。",
-    data,
-    series: seriesSpecs,
-  };
-  if (chart === "bar") return <FundamentalBarChart {...props} />;
-  if (chart === "line") return <FundamentalLineChart {...props} />;
-  return <FundamentalComboChart {...props} />;
-}
-
-function PresentationStatus({
-  presentation,
-}: {
-  presentation: ResolvedFundamentalPresentation | null;
-}) {
-  if (!presentation) return null;
-  const labels: Record<ResolvedFundamentalPresentation["source"], string> = {
-    preset: "规则预设",
-    ai: "AI 方案",
-    url: "链接视图",
-    user: "自定义",
-  };
-  const rejectedAi = presentation.rejectedAiIssues.length > 0;
+  // Every series draws with the mark its metric declares in the catalog, so the
+  // fallback path is the same combo renderer the planned charts use.
   return (
-    <span
-      className="fundamentals-workbench__presentation-status"
-      data-source={presentation.source}
-      data-tone={rejectedAi ? "warning" : undefined}
-      title={rejectedAi ? `AI 方案未通过校验：${presentation.rejectedAiIssues[0]?.message ?? "未知原因"}` : undefined}
-    >
-      {rejectedAi ? "AI 已回退 · " : ""}{labels[presentation.source]} · {presentation.plan.charts.length} 图
-    </span>
+    <FundamentalComboChart
+      title="季度基本面叠加图"
+      description="按报告期末对齐；不同颜色代表不同指标，单位不兼容时自动使用左右双轴。"
+      data={data}
+      series={seriesSpecs}
+      selectedPeriodEnd={selectedPeriodEnd}
+      onSelectPeriod={onSelectPeriod}
+    />
   );
 }
 
@@ -649,7 +587,8 @@ function RequestStatus({
   if (error && data?.status === "ready") return <span className="fundamentals-workbench__request-status" data-tone="warning">刷新失败 · 显示上次结果</span>;
   if (requestState === "error") return <span className="fundamentals-workbench__request-status" data-tone="warning">获取失败</span>;
   if (data?.status === "pending") return <span className="fundamentals-workbench__request-status">同步中</span>;
-  return <span className="fundamentals-workbench__request-status" data-tone="ready">已连接</span>;
+  // A settled, healthy request says nothing: the chart itself is the evidence.
+  return null;
 }
 
 function ChartSkeleton() {

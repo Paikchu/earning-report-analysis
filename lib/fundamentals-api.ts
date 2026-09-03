@@ -321,6 +321,7 @@ function currencyForPeriod(observations: FundamentalCurrentObservation[], period
 function defaultUnit(unitFamily: FundamentalUnitFamily): string {
   if (unitFamily === "percent") return "%";
   if (unitFamily === "shares") return "shares";
+  if (unitFamily === "multiple") return "x";
   return "";
 }
 

@@ -95,7 +95,6 @@ export type FundamentalChartPlanValidation =
 
 export type FundamentalChartOverride = {
   metricKeys: readonly FundamentalMetricKey[];
-  chart: "combo" | "bar" | "line";
   periodCount: number;
 };
 
@@ -545,7 +544,9 @@ function buildOverridePlan(
     if (!source) return [];
     return [{
       metricKey,
-      mark: override.chart === "combo" ? source.defaultMark : override.chart,
+      // The mark is a property of the metric, not a user setting: currency
+      // amounts read as bars and ratios as lines, so the catalog decides.
+      mark: source.defaultMark,
       transform: "value" as const,
     }];
   }).slice(0, FUNDAMENTAL_CHART_MAX_SERIES);

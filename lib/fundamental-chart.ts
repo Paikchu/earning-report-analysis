@@ -313,6 +313,8 @@ export function formatFundamentalChartValue(
     return `${formatDecimal(value, 1)} 个百分点`;
   }
   if (seriesOrAxis.unitFamily === "percent") return `${formatDecimal(value, 1)}%`;
+  // A multiple reads as "42.6x"; compact notation would round it to nothing.
+  if (seriesOrAxis.unitFamily === "multiple") return `${formatDecimal(value, 2)}x`;
   if (seriesOrAxis.unitFamily === "per_share") {
     return `${seriesOrAxis.currency || seriesOrAxis.unit} ${formatDecimal(value, 2)}`.trim();
   }

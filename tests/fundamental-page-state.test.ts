@@ -15,36 +15,32 @@ import { makeChartSeries } from "./fixtures/fundamental-chart.ts";
 
 test("page state parser keeps valid ordered metrics and clamps malformed values to defaults", () => {
   const parsed = parseFundamentalPageState(new URLSearchParams(
-    "metrics=free_cash_flow,total_revenue,total_revenue,not_real,gross_margin,operating_income,net_income&chart=line&periods=8",
+    "metrics=free_cash_flow,total_revenue,total_revenue,not_real,gross_margin,operating_income,net_income",
   ));
   assert.deepEqual(parsed, {
     metricKeys: ["free_cash_flow", "total_revenue", "gross_margin", "operating_income"],
-    chart: "line",
-    periodCount: 8,
   });
 
   assert.deepEqual(
-    parseFundamentalPageState(new URLSearchParams("metrics=unknown&chart=pie&periods=7")),
+    parseFundamentalPageState(new URLSearchParams("metrics=unknown")),
     DEFAULT_FUNDAMENTAL_PAGE_STATE,
   );
 });
 
 test("page state writer preserves unrelated query parameters and produces a stable explicit codec", () => {
-  const original = new URLSearchParams("view=compact&metrics=old&chart=line&periods=12");
+  const original = new URLSearchParams("view=compact&metrics=old&periods=12");
   const written = writeFundamentalPageState(original, {
     metricKeys: ["gross_margin", "total_revenue"],
-    chart: "bar",
-    periodCount: 5,
   });
 
   assert.equal(written.get("view"), "compact");
   assert.equal(written.get("metrics"), "gross_margin,total_revenue");
-  assert.equal(written.get("chart"), "bar");
-  assert.equal(written.get("periods"), "5");
+  // The chart type and the report range are no longer reader settings, so a
+  // legacy value for either is dropped rather than carried along.
+  assert.equal(written.has("chart"), false);
+  assert.equal(written.has("periods"), false);
   assert.deepEqual(parseFundamentalPageState(written), {
     metricKeys: ["gross_margin", "total_revenue"],
-    chart: "bar",
-    periodCount: 5,
   });
 });
 
@@ -62,8 +58,8 @@ test("server search params adapter retains repeated and scalar values", () => {
 test("only fundamentals query keys opt the page out of the deterministic preset", () => {
   assert.equal(hasExplicitFundamentalPageState(new URLSearchParams("view=compact")), false);
   assert.equal(hasExplicitFundamentalPageState(new URLSearchParams("metrics=total_revenue")), true);
-  assert.equal(hasExplicitFundamentalPageState(new URLSearchParams("chart=line")), true);
-  assert.equal(hasExplicitFundamentalPageState(new URLSearchParams("periods=8")), true);
+  assert.equal(hasExplicitFundamentalPageState(new URLSearchParams("chart=line")), false);
+  assert.equal(hasExplicitFundamentalPageState(new URLSearchParams("periods=8")), false);
 });
 
 test("selection reconciliation retains available choices then falls back to priority metrics", () => {
@@ -84,11 +80,9 @@ test("selection reconciliation retains available choices then falls back to prio
   assert.deepEqual(reconcileFundamentalMetricSelection(["diluted_eps"], []), []);
 });
 
-test("normalization rejects empty selections and invalid period counts", () => {
-  assert.deepEqual(normalizeFundamentalPageState({ metricKeys: [], chart: "combo", periodCount: 1 }), {
+test("normalization rejects empty selections", () => {
+  assert.deepEqual(normalizeFundamentalPageState({ metricKeys: [] }), {
     metricKeys: ["total_revenue", "gross_margin"],
-    chart: "combo",
-    periodCount: 5,
   });
 });
 

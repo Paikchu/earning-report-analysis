@@ -43,7 +43,7 @@ test("combo chart renders semantic SVG, redundant encodings, keyboard targets, a
   assert.doesNotMatch(html, /data-chart-role="data-table"/);
   assert.match(html, /数据待更新/);
   assert.match(html, /部分数据/);
-  assert.match(html, /来源：Yahoo Finance/);
+  assert.doesNotMatch(html, /来源：Yahoo Finance/);
   assert.match(html, /暂无数据/);
 });
 

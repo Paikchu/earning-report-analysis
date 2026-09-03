@@ -10,7 +10,7 @@ import {
 } from "../lib/fundamental-metrics.ts";
 
 test("registers each Yahoo field exactly once under a versioned metric catalog", () => {
-  assert.equal(FUNDAMENTAL_METRIC_CATALOG_VERSION, "fundamental-metrics.v1");
+  assert.equal(FUNDAMENTAL_METRIC_CATALOG_VERSION, "fundamental-metrics.v2");
   assert.equal(new Set(YAHOO_QUARTERLY_FUNDAMENTAL_FIELDS).size, YAHOO_QUARTERLY_FUNDAMENTAL_FIELDS.length);
   assert.ok(YAHOO_QUARTERLY_FUNDAMENTAL_FIELDS.length >= 19);
   assert.ok(YAHOO_QUARTERLY_FUNDAMENTAL_FIELDS.every((field) => field.startsWith("quarterly")));
