@@ -175,3 +175,50 @@ test("shows one published report per period even when the page spans both source
   );
   assert.equal(page.filings[1].analysis, null);
 });
+
+test("pages through same-day filings without dropping any", async () => {
+  // SEC 返回的同日顺序不是 accession 降序，游标却按 accession 比较。
+  const sameDay = ["acc-0005", "acc-0001", "acc-0004", "acc-0002", "acc-0003"]
+    .map((accessionNumber) => makeStoredFiling(accessionNumber, "2026-03-01"));
+  const byCursor = (cursor: ReturnType<typeof decodePageCursor>) => [...sameDay]
+    .sort((left, right) =>
+      right.filingDate.localeCompare(left.filingDate)
+      || right.accessionNumber.localeCompare(left.accessionNumber))
+    .filter((filing) => !cursor
+      || filing.filingDate < cursor.filingDate
+      || (filing.filingDate === cursor.filingDate && filing.accessionNumber < cursor.accessionNumber));
+  const fakeRepository = {
+    async getCache() {
+      return {
+        payload: { ticker: "MSFT", company: null, filings: sameDay, fetchedAt: "2026-03-02T00:00:00.000Z", status: "ready" },
+        fetchedAt: "2026-03-02T00:00:00.000Z",
+      };
+    },
+    async getSummary() { return null; },
+    async getLatestAnalysisJobStatus() { return null; },
+    async listPublicFilings(_ticker: string, rawCursor: string | null, limit: number) {
+      const remaining = byCursor(decodePageCursor(rawCursor));
+      const pageRows = remaining.slice(0, limit).map((filing) => ({ ...filing, summary: null, analysis: null }));
+      const last = pageRows.at(-1);
+      return {
+        filings: pageRows,
+        nextCursor: remaining.length > limit && last
+          ? encodePageCursor({ filingDate: last.filingDate, accessionNumber: last.accessionNumber })
+          : null,
+        total: sameDay.length,
+      };
+    },
+  };
+
+  const seen: string[] = [];
+  let cursor: string | null = null;
+  for (let request = 0; request < 10; request += 1) {
+    const page = await getPublicFilingPage(fakeRepository as never, "msft", cursor, "2");
+    seen.push(...page.filings.map((filing) => filing.accessionNumber));
+    if (!page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+
+  assert.deepEqual(seen, ["acc-0005", "acc-0004", "acc-0003", "acc-0002", "acc-0001"]);
+  assert.equal(new Set(seen).size, sameDay.length, "同日申报不能被跳过或重复");
+});
