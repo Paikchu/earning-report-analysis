@@ -7,6 +7,7 @@ interface __BaseEnv_Env {
 	SEC_ANALYSIS_MODEL: "glm-5.3-flash";
 	SEC_ANALYSIS_WORKFLOW: Workflow<Parameters<import("./index").SecAnalysisWorkflow['run']>[0]['payload']>;
 	SEC_MEMORY_WORKFLOW: Workflow<Parameters<import("./index").SecMemoryWorkflow['run']>[0]['payload']>;
+	COMPANY_ANALYSIS_WORKFLOW: Workflow<Parameters<import("./index").CompanyAnalysisWorkflow['run']>[0]['payload']>;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {
@@ -19,6 +20,7 @@ declare namespace Cloudflare {
 		SEC_ANALYSIS_MODEL: "glm-5.3-flash";
 		SEC_ANALYSIS_WORKFLOW: Workflow<Parameters<import("./index").SecAnalysisWorkflow['run']>[0]['payload']>;
 		SEC_MEMORY_WORKFLOW: Workflow<Parameters<import("./index").SecMemoryWorkflow['run']>[0]['payload']>;
+		COMPANY_ANALYSIS_WORKFLOW: Workflow<Parameters<import("./index").CompanyAnalysisWorkflow['run']>[0]['payload']>;
 	}
 	interface Env extends __BaseEnv_Env {}
 }

@@ -90,6 +90,12 @@ export type SecMemoryExtractionPayload = {
   candidates: MemoryCandidateV2[];
 };
 
+export type SecMemoryCommitResult = {
+  noOp: boolean;
+  itemCount: number;
+  memoryVersion: number;
+};
+
 export class D1SecRepository implements SecRepository {
   private readonly database: D1Like;
 
@@ -636,14 +642,25 @@ export class D1SecRepository implements SecRepository {
     return claimed ?? null;
   }
 
-  async commitMemoryJob(claim: SecMemoryJobClaim, extraction: SecMemoryExtractionPayload): Promise<{ noOp: boolean; itemCount: number }> {
+  async commitMemoryJob(claim: SecMemoryJobClaim, extraction: SecMemoryExtractionPayload): Promise<SecMemoryCommitResult> {
     if (!this.database.batch) throw new Error("D1 batch is required for memory commit");
     const ownership = await this.database.prepare(`
-      SELECT j.status, j.owner_token AS ownerToken, t.lease_owner AS threadOwner
-      FROM sec_memory_jobs j JOIN sec_company_memory_threads t ON t.ticker = j.ticker
+      SELECT j.status, j.owner_token AS ownerToken, t.lease_owner AS threadOwner,
+        t.version AS memoryVersion
+      FROM sec_memory_jobs j
+      JOIN sec_company_memory_threads t ON t.ticker = j.ticker
       WHERE j.job_id = ?
-    `).bind(claim.jobId).first<{ status: string; ownerToken: string | null; threadOwner: string | null }>();
-    if (ownership?.status === "complete") return { noOp: true, itemCount: 0 };
+    `).bind(claim.jobId).first<{
+      status: string;
+      ownerToken: string | null;
+      threadOwner: string | null;
+      memoryVersion: number;
+    }>();
+    if (ownership?.status === "complete") return {
+      noOp: true,
+      itemCount: 0,
+      memoryVersion: ownership.memoryVersion,
+    };
     if (!ownership || ownership.ownerToken !== claim.ownerToken || ownership.threadOwner !== claim.ownerToken) throw new Error("Memory lease ownership changed");
     const rows = await this.database.prepare(`
       SELECT memory_id AS memoryId, ticker, kind, topic_key AS topicKey, statement, status,
@@ -733,10 +750,21 @@ export class D1SecRepository implements SecRepository {
     `).bind(now, now, claim.jobId, claim.ownerToken, claim.ticker));
     await this.database.batch(statements);
     const completion = await this.database.prepare(`
-      SELECT status, owner_token AS ownerToken FROM sec_memory_jobs WHERE job_id = ?
-    `).bind(claim.jobId).first<{ status: string; ownerToken: string | null }>();
+      SELECT j.status, j.owner_token AS ownerToken, t.version AS memoryVersion
+      FROM sec_memory_jobs j
+      JOIN sec_company_memory_threads t ON t.ticker = j.ticker
+      WHERE j.job_id = ?
+    `).bind(claim.jobId).first<{
+      status: string;
+      ownerToken: string | null;
+      memoryVersion: number;
+    }>();
     if (completion?.status !== "complete") throw new Error("Memory lease ownership changed before commit");
-    return { noOp: consolidated.noOp, itemCount: consolidated.items.length };
+    return {
+      noOp: consolidated.noOp,
+      itemCount: consolidated.items.length,
+      memoryVersion: completion.memoryVersion,
+    };
   }
 
   private async saveHistoricalObservation(filing: SecFiling, observation: HistoricalObservation): Promise<void> {

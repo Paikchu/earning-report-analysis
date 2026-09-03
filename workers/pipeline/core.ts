@@ -17,11 +17,21 @@ export type SecMemoryWorkflowParams = {
   ownerToken?: string;
 };
 
+export type CompanyAnalysisWorkflowParams = {
+  ticker: string;
+  memoryJobId: string;
+  memoryVersion: number;
+  periodId: string;
+  reportDate: string;
+  triggerRef: string;
+};
+
 export type SecCronEnv = {
   WEB_APP_ORIGIN: string;
   SEC_REFRESH_KEY: string;
   SEC_ANALYSIS_WORKFLOW: SecWorkflowBinding;
   SEC_MEMORY_WORKFLOW?: SecWorkflowBinding<SecMemoryWorkflowParams>;
+  COMPANY_ANALYSIS_WORKFLOW?: SecWorkflowBinding<CompanyAnalysisWorkflowParams>;
   /** Service Binding to the Web Worker. Its public hostname is unreachable from here. */
   WEB?: ServiceBinding;
 };

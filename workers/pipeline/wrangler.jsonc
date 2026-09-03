@@ -22,6 +22,11 @@
       "name": "earning-report-analysis-sec-memory",
       "binding": "SEC_MEMORY_WORKFLOW",
       "class_name": "SecMemoryWorkflow"
+    },
+    {
+      "name": "earning-report-analysis-company-analysis",
+      "binding": "COMPANY_ANALYSIS_WORKFLOW",
+      "class_name": "CompanyAnalysisWorkflow"
     }
   ],
   "r2_buckets": [
@@ -68,6 +73,11 @@
           "name": "earning-report-analysis-sec-memory-staging",
           "binding": "SEC_MEMORY_WORKFLOW",
           "class_name": "SecMemoryWorkflow"
+        },
+        {
+          "name": "earning-report-analysis-company-analysis-staging",
+          "binding": "COMPANY_ANALYSIS_WORKFLOW",
+          "class_name": "CompanyAnalysisWorkflow"
         }
       ],
       "r2_buckets": [
