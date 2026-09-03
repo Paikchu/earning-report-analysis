@@ -1,7 +1,7 @@
 import { cleanSecAccession, type SecFilingWithSummary } from "./sec.ts";
 import { decodePageCursor, encodePageCursor, normalizeTrackedTicker } from "./sec-config.ts";
 import { D1SecRepository } from "./sec-d1.ts";
-import { getCachedSecFeed } from "./sec-feed.ts";
+import { createPeriodReportGate, getCachedSecFeed } from "./sec-feed.ts";
 import { findSecurity } from "./site-data.ts";
 
 export type PublicAnalysisStatus = "complete" | "partial" | "processing" | "not_collected";
@@ -40,17 +40,50 @@ export async function getPublicFilingPage(
   const ticker = normalizeTrackedTicker(rawTicker);
   if (!ticker) throw new Error("Invalid ticker");
   if (rawCursor && !decodePageCursor(rawCursor)) throw new Error("Invalid cursor");
-  const cachedFeed = typeof repository.getCache === "function" ? await getCachedSecFeed(repository, ticker) : null;
   const limit = Math.min(50, Math.max(1, Math.trunc(Number(rawLimit ?? 20)) || 20));
   const cursor = decodePageCursor(rawCursor);
-  const cachedFilings = cachedFeed?.filings.filter((filing) => !cursor || filing.filingDate < cursor.filingDate || (filing.filingDate === cursor.filingDate && filing.accessionNumber < cursor.accessionNumber)) ?? [];
-  const cachedPage = cachedFilings.slice(0, limit);
-  const page = cachedPage.length > 0 || cachedFeed
-    ? { filings: cachedPage, total: cachedFeed?.filings.length ?? 0, nextCursor: cachedFilings.length > limit ? encodePageCursor({ filingDate: cachedPage.at(-1)!.filingDate, accessionNumber: cachedPage.at(-1)!.accessionNumber }) : null }
-    : await repository.listPublicFilings(ticker, rawCursor, limit);
-  const company = cachedFeed?.company ?? (page.filings[0] ? companyFromFiling(page.filings[0]) : companyFromDirectory(ticker));
-  const filings = await Promise.all(page.filings.map(async (filing) => toPublicFiling(repository, filing, company?.name ?? ticker)));
-  return { ticker, company, filings, nextCursor: page.nextCursor, total: page.total, checkedAt: cachedFeed?.fetchedAt ?? null };
+  // 缓存只保留最近一轮抓取的滚动窗口，历史申报必须与 D1 累积表合并分页。
+  const storedPageRequest = repository.listPublicFilings(ticker, rawCursor, limit);
+  const [cachedFeed, storedPage] = await Promise.all([
+    typeof repository.getCache === "function" ? getCachedSecFeed(repository, ticker) : null,
+    // 归档表读失败时不能连带打掉缓存本来就能提供的那一页，降级成缓存窗口即可。
+    storedPageRequest.catch(() => null),
+  ]);
+  // 但没有缓存兜底时错误必须冒出去，否则一张坏掉的 sec_filings 会伪装成"暂未收录"。
+  // getCachedSecFeed 在缓存缺失时返回的是 pending 空 feed 而不是 null，所以这里看的是有没有申报可发。
+  if (!storedPage && !cachedFeed?.filings.length) await storedPageRequest;
+  const afterCursor = (filing: SecFilingWithSummary) => !cursor
+    || filing.filingDate < cursor.filingDate
+    || (filing.filingDate === cursor.filingDate && filing.accessionNumber < cursor.accessionNumber);
+  const merged = new Map<string, SecFilingWithSummary>();
+  for (const filing of cachedFeed?.filings ?? []) {
+    if (afterCursor(filing)) merged.set(filing.accessionNumber, filing);
+  }
+  for (const filing of storedPage?.filings ?? []) {
+    if (!merged.has(filing.accessionNumber)) merged.set(filing.accessionNumber, filing);
+  }
+  // D1 的 hydratePublicFiling 是逐条按 sec_filing_periods 挂研报的，缓存 feed 则每期只挂最新一份。
+  // 合并后一页里会同时出现两种，同一篇研报因此重复展示，这里按缓存的规则再收敛一次。
+  const claimPeriodReport = createPeriodReportGate(ticker);
+  const candidates = [...merged.values()]
+    .sort((left, right) =>
+      right.filingDate.localeCompare(left.filingDate)
+      || right.accessionNumber.localeCompare(left.accessionNumber))
+    .map((filing) => (claimPeriodReport(filing) ? filing : { ...filing, analysis: null }));
+  const pageFilings = candidates.slice(0, limit);
+  const last = pageFilings.at(-1);
+  const hasMore = candidates.length > limit || Boolean(storedPage?.nextCursor);
+  const company = cachedFeed?.company ?? (pageFilings[0] ? companyFromFiling(pageFilings[0]) : companyFromDirectory(ticker));
+  const filings = await Promise.all(pageFilings.map(async (filing) => toPublicFiling(repository, filing, company?.name ?? ticker)));
+  return {
+    ticker,
+    company,
+    filings,
+    nextCursor: hasMore && last ? encodePageCursor({ filingDate: last.filingDate, accessionNumber: last.accessionNumber }) : null,
+    // 缓存可能比 D1 领先一轮抓取，取两者较大值才不会少报历史条数。
+    total: Math.max(storedPage?.total ?? 0, cachedFeed?.filings.length ?? 0),
+    checkedAt: cachedFeed?.fetchedAt ?? null,
+  };
 }
 
 export async function getPublicFiling(
