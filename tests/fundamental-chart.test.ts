@@ -105,6 +105,39 @@ test("matches YoY comparison by periodEnd when an excluded quarter leaves a hole
   ]);
 });
 
+test("leaves QoQ growth undefined when the previous period is negative instead of inverting the sign", () => {
+  // 净利润在盈亏之间来回：100 → 150（正增长）→ -100（转亏）→ -150（亏损扩大）
+  // → 50（扭亏为盈）→ 120。后三段的基数为负，(cur / base - 1) 会把符号整体翻转：
+  // 扭亏为盈会被算成 -133%，亏损扩大反而算成 +50%。这些数字没有数学意义，必须置空。
+  const series = makeChartSeries("net_income", [100, 150, -100, -150, 50, 120]);
+  const data = makeChartResponse([series]);
+  const qoq = buildFundamentalChartModel(data.periods, data.series, [
+    { metricKey: "net_income", transform: "qoq_growth" },
+  ]).series[0]!;
+
+  // 正基数照常计算（含正基数转亏），负基数一律为空。
+  assert.deepEqual(qoq.points.map((point) => point.value), [null, 50, -166.666666667, null, null, 140]);
+
+  // 差值型变换（百分点）与基数符号无关，跨零仍然成立，不能被这次修复误伤。
+  const margin = makeChartSeries("gross_margin", [10, 15, -10, -15, 5, 12]);
+  const change = buildFundamentalChartModel(makeChartResponse([margin]).periods, [margin], [
+    { metricKey: "gross_margin", transform: "qoq_change" },
+  ]).series[0]!;
+  assert.deepEqual(change.points.map((point) => point.value), [null, 5, -25, -5, 20, 7]);
+});
+
+test("leaves YoY growth undefined when the year-ago period is negative", () => {
+  // 2024-03 亏损 -100，2025-03 转正 50：同比增速不存在，页面应显示「—」而不是 -150%。
+  // 2025-06 的基数（150）为正，仍照常计算。
+  const series = makeChartSeries("net_income", [-100, 150, 200, 300, 50, 120]);
+  const data = makeChartResponse([series]);
+  const yoy = buildFundamentalChartModel(data.periods, data.series, [
+    { metricKey: "net_income", transform: "yoy_growth" },
+  ]).series[0]!;
+
+  assert.deepEqual(yoy.points.map((point) => point.value), [null, null, null, null, null, -20]);
+});
+
 test("uses capital-expenditure magnitude for presentation while retaining the source decimal", () => {
   const data = makeChartResponse([makeChartSeries("capital_expenditure")]);
   const model = buildFundamentalChartModel(data.periods, data.series, [

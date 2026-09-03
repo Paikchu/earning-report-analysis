@@ -470,9 +470,15 @@ function transformPoints(
     let value: number | null = null;
     if (point.value !== null && comparison?.value !== null && comparison?.value !== undefined) {
       if (transform === "qoq_growth" || transform === "yoy_growth") {
-        value = comparison.value === 0
-          ? null
-          : normalizeComputedValue(((point.value / comparison.value) - 1) * 100);
+        // 分母为 0 时增长率无定义；分母为负时同样无定义——(cur / base - 1) 会把符号
+        // 整体翻转：净利润 -100 → 50（扭亏为盈）算成 -150%，
+        // -100 → -150（亏损扩大）反而算成 +50%，-100 → -50（亏损收窄）算成 -50%。
+        // 三个方向都是页面上直接可见的错数字，因此统一置空，由 UI 显示「—」，
+        // 延续"宁可显示空也不显示错值"的既有语义。base > 0 时保持原公式不变，
+        // 因此正基数转亏（100 → -50 = -150%）这类有定义的结果仍照常输出。
+        value = comparison.value > 0
+          ? normalizeComputedValue(((point.value / comparison.value) - 1) * 100)
+          : null;
       } else {
         value = normalizeComputedValue(point.value - comparison.value);
       }
