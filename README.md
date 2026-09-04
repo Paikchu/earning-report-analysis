@@ -23,7 +23,7 @@ npm run test:sec
 - Web Worker（[`workers/web/`](workers/web/)）：Vinext SSR、`/api/v1` 公开读取接口、管理接口和 D1；D1 migrations 也只放在这个目录。
 - Pipeline Worker（[`workers/pipeline/`](workers/pipeline/)）：Cron、`SecAnalysisWorkflow`、`SecMemoryWorkflow`、模型调用和 R2。两个 Worker 通过 `SEC_REFRESH_KEY` 调用短内部桥接接口。
 - 两个 Worker 都使用 `nodejs_compat`。Pipeline 的 `AI_API_KEY` 只配置为 Worker Secret，不进入 Web Worker。
-- `npm run web:deploy` 会检查真实 `SEC_WEB_D1_DATABASE_ID` 后部署 Web Worker；Pipeline 使用 `npm run worker:pipeline:deploy`。不要直接部署带占位 D1 id 的生成配置——手工调用 `wrangler deploy` 前先跑 `npm run worker:web:check`，它会拦下占位 id、缺失的 `nodejs_compat`，以及和 Pipeline 漂移的兼容性日期。
+- `npm run web:deploy` 会检查真实 `SEC_WEB_D1_DATABASE_ID` 后部署 Web Worker；Pipeline 使用 `npm run worker:pipeline:deploy`。不要直接部署带占位 D1 id 的生成配置——手工调用 `wrangler deploy` 前先跑 `npm run worker:web:check`，它会拦下占位 id、缺失的 `nodejs_compat`，以及和 Pipeline 漂移的兼容性日期；再跑 `npm run worker:web:check:migrations`，它会拒绝把本次构建的 migration 还没 apply 的 D1 当作部署目标。
 - 完整的部署序列、密钥写入和回滚见 [`docs/deploy.md`](docs/deploy.md)。
 
 ## API

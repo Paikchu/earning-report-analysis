@@ -9,7 +9,8 @@
 受版本控制的源配置是 `workers/web/wrangler.jsonc`。`vinext build` 根据它生成
 `dist/server/wrangler.json`；`worker:web:prepare` 负责填入真实 D1 id，
 `worker:web:check` 会拦下占位 id、丢失的 migrations、缺失的 `nodejs_compat`，以及和
-Pipeline 漂移的兼容性日期。
+Pipeline 漂移的兼容性日期；`worker:web:check:migrations` 再向远端 D1 读一次
+`d1_migrations`，本次构建带的 migration 只要有一条没 apply 就拒绝部署。
 
 ```bash
 export SEC_WEB_D1_DATABASE_ID="<real-d1-id>"
@@ -20,17 +21,23 @@ npm run web:deploy
 ```
 
 `web:deploy` 等价于 build → `worker:web:prepare` → `worker:web:check` →
-`wrangler deploy --keep-vars`。需要手工分步（例如先跑 D1 迁移）时：
+`worker:web:check:migrations` → `wrangler deploy --keep-vars`。需要手工分步（例如先跑
+D1 迁移）时：
 
 ```bash
 npm run build
 npm run worker:web:prepare
 npm run worker:web:check
 npx wrangler d1 migrations apply "$SEC_WEB_D1_DATABASE_NAME" --remote --config dist/server/wrangler.json
+npm run worker:web:check:migrations
 npx wrangler deploy --config dist/server/wrangler.json --keep-vars
 ```
 
-绕过 `web:deploy` 直接 `wrangler deploy` 之前一定要跑 `worker:web:check`——生成配置里的 D1 id 默认是占位值。D1 migrations 的唯一源目录是 `workers/web/migrations/`。
+绕过 `web:deploy` 直接 `wrangler deploy` 之前一定要跑 `worker:web:check` 和
+`worker:web:check:migrations`——生成配置里的 D1 id 默认是占位值，而只部署 Worker、漏掉
+migration 会让新代码撞上旧 schema：catalog v2 的 `multiple` 单位族撞 `unit_family` CHECK
+约束，就曾让每一次基本面同步失败整整一天。D1 migrations 的唯一源目录是
+`workers/web/migrations/`。
 
 密钥：
 

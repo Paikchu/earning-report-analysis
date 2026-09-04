@@ -18,4 +18,5 @@ non-production branch deploy 命令必须使用根目录 `package.json` 中的
 `--config` 的默认 Wrangler 命令。
 
 源配置中的 D1 id 故意使用不可部署的占位值。`prepare-config.ts` 只从 Build variable
-`SEC_WEB_D1_DATABASE_ID` 注入真实 id，`check-config.ts` 会在部署前拒绝占位值或配置漂移。
+`SEC_WEB_D1_DATABASE_ID` 注入真实 id，`check-config.ts` 会在部署前拒绝占位值或配置漂移，
+`check-migrations.ts` 会拒绝 migration 落后于本次构建的 D1。
