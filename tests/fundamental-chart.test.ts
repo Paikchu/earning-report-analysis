@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  FUNDAMENTAL_NOT_MEANINGFUL_HINT,
   FundamentalChartSpecError,
   buildFundamentalChartGeometry,
   buildFundamentalChartModel,
@@ -44,6 +45,15 @@ test("computes QoQ and YoY growth without inventing values across missing or zer
 
   assert.deepEqual(qoq.points.map((point) => point.value), [null, 20, -25, null, null, 20]);
   assert.deepEqual(yoy.points.map((point) => point.value), [null, null, null, null, 50, 50]);
+  // 空着的格子都源于缺数据：首期没有上一期，2024-12 缺营收又拖累它自己和下一期。
+  assert.deepEqual(qoq.points.map((point) => point.unavailableReason), [
+    "missing",
+    null,
+    null,
+    "missing",
+    "missing",
+    null,
+  ]);
 
   const zeroBase = makeChartSeries("total_revenue", [0, 20, 30, 40, 50, 60]);
   const zeroData = makeChartResponse([zeroBase]);
@@ -51,6 +61,8 @@ test("computes QoQ and YoY growth without inventing values across missing or zer
     { metricKey: "total_revenue", transform: "qoq_growth" },
   ]);
   assert.equal(zeroModel.series[0]?.points[1]?.value, null);
+  // 基数为 0 不是缺数据：两期都有数，只是这个比值没有意义。
+  assert.equal(zeroModel.series[0]?.points[1]?.unavailableReason, "not_meaningful");
 });
 
 test("computes margin change in percentage points", () => {
@@ -117,6 +129,16 @@ test("leaves QoQ growth undefined when the previous period is negative instead o
 
   // 正基数照常计算（含正基数转亏），负基数一律为空。
   assert.deepEqual(qoq.points.map((point) => point.value), [null, 50, -166.666666667, null, null, 140]);
+  // 三个空格分成两类：首期是没有上一期可比，后两个是基数为负——页面据此分别显示
+  // 「—」和「NM」，扭亏为盈不再和缺数据同形。
+  assert.deepEqual(qoq.points.map((point) => point.unavailableReason), [
+    "missing",
+    null,
+    null,
+    "not_meaningful",
+    "not_meaningful",
+    null,
+  ]);
 
   // 差值型变换（百分点）与基数符号无关，跨零仍然成立，不能被这次修复误伤。
   const margin = makeChartSeries("gross_margin", [10, 15, -10, -15, 5, 12]);
@@ -136,6 +158,40 @@ test("leaves YoY growth undefined when the year-ago period is negative", () => {
   ]).series[0]!;
 
   assert.deepEqual(yoy.points.map((point) => point.value), [null, null, null, null, null, -20]);
+  // 前四期是序列不足一年（缺数据），2025-03 才是去年同期为负的那一格。
+  assert.deepEqual(yoy.points.map((point) => point.unavailableReason), [
+    "missing",
+    "missing",
+    "missing",
+    "missing",
+    "not_meaningful",
+    null,
+  ]);
+});
+
+test("tooltip separates a meaningless growth rate from missing data", () => {
+  const series = makeChartSeries("net_income", [100, 150, -100, -150, 50, 120]);
+  const data = makeChartResponse([series]);
+  const model = buildFundamentalChartModel(data.periods, data.series, [
+    { metricKey: "net_income", transform: "qoq_growth" },
+  ]);
+
+  // 2024-12 的基数是 -100：有数据，但这个增速没有意义。
+  const notMeaningful = buildFundamentalChartTooltip(model, 3);
+  assert.equal(notMeaningful.rows[0]?.unavailableReason, "not_meaningful");
+  assert.equal(notMeaningful.rows[0]?.formattedValue, "NM");
+  // 缩写只在窄处出现；朗读的那份把它展开，否则读屏只会念出两个字母。
+  assert.match(notMeaningful.accessibleLabel, new RegExp(FUNDAMENTAL_NOT_MEANINGFUL_HINT));
+
+  // 首期没有上一期可比，仍然是「暂无数据」。
+  const missing = buildFundamentalChartTooltip(model, 0);
+  assert.equal(missing.rows[0]?.unavailableReason, "missing");
+  assert.equal(missing.rows[0]?.formattedValue, "暂无数据");
+
+  // 有数字的一格不带任何原因，不能被当成缺失。
+  const present = buildFundamentalChartTooltip(model, 1);
+  assert.equal(present.rows[0]?.unavailableReason, null);
+  assert.equal(present.rows[0]?.formattedValue, "50%");
 });
 
 test("uses capital-expenditure magnitude for presentation while retaining the source decimal", () => {

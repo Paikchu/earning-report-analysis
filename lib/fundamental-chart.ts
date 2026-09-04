@@ -15,6 +15,13 @@ export const FUNDAMENTAL_CHART_MAX_AXES = 2;
 export const FUNDAMENTAL_CHART_WIDTH = 760;
 export const FUNDAMENTAL_CHART_HEIGHT = 280;
 
+/**
+ * 无意义增速的标注，以及展开说明它的那句话。基数为零或为负时增速在数学上无定义，
+ * 业内惯例记作 NM（not meaningful），而不是把它和「这期没有数据」写成同一个破折号。
+ */
+export const FUNDAMENTAL_NOT_MEANINGFUL_LABEL = "NM";
+export const FUNDAMENTAL_NOT_MEANINGFUL_HINT = "not meaningful：基数为零或为负，增速没有数学意义";
+
 export type FundamentalChartAxisSide = "left" | "right";
 
 export type FundamentalChartSeriesSpec = {
@@ -31,9 +38,18 @@ export type FundamentalChartSpec = {
   series: readonly FundamentalChartSeriesSpec[];
 };
 
+/**
+ * 一个点为什么空着。"missing" 是这一期没有数据；"not_meaningful" 是数据齐全，
+ * 但基数为零或为负，增速没有数学意义（扭亏为盈、亏损扩大等）。两者都以 value:
+ * null 出现，只有这个字段能把它们分开，页面据此决定显示「—」还是「NM」。
+ */
+export type FundamentalChartUnavailableReason = "missing" | "not_meaningful";
+
 export type FundamentalChartPoint = {
   periodEnd: string;
   value: number | null;
+  // value 为数时是 null，为 null 时必有原因。
+  unavailableReason: FundamentalChartUnavailableReason | null;
   sourceValueDecimal: string | null;
 };
 
@@ -119,6 +135,7 @@ export type FundamentalChartTooltipRow = {
   seriesId: string;
   label: string;
   value: number | null;
+  unavailableReason: FundamentalChartUnavailableReason | null;
   formattedValue: string;
 };
 
@@ -287,21 +304,37 @@ export function buildFundamentalChartTooltip(
   const period = model.periods[periodIndex];
   if (!period) throw new RangeError("Period index is outside the chart model.");
   const rows = model.series.map((series) => {
-    const value = series.points[periodIndex]?.value ?? null;
+    const point = series.points[periodIndex] ?? null;
     return {
       seriesId: series.id,
       label: series.label,
-      value,
-      formattedValue: formatFundamentalChartValue(value, series),
+      value: point?.value ?? null,
+      // ?? 会把"有值"的 null 也当成缺失，所以这里显式区分"没有这个点"和"点上没有原因"。
+      unavailableReason: point === null ? "missing" : point.unavailableReason,
+      formattedValue: formatFundamentalChartPoint(point, series),
     };
   });
   const periodLabel = formatFundamentalPeriod(period.periodEnd);
+  // 读屏把 "NM" 念成两个字母，所以朗读的那份把它展开成整句；视觉上的窄列仍然只放缩写。
+  const spoken = (row: FundamentalChartTooltipRow) =>
+    (row.unavailableReason === "not_meaningful" ? FUNDAMENTAL_NOT_MEANINGFUL_HINT : row.formattedValue);
   return {
     periodEnd: period.periodEnd,
     periodLabel,
     rows,
-    accessibleLabel: `${periodLabel}，${rows.map((row) => `${row.label} ${row.formattedValue}`).join("，")}`,
+    accessibleLabel: `${periodLabel}，${rows.map((row) => `${row.label} ${spoken(row)}`).join("，")}`,
   };
+}
+
+/**
+ * 和 formatFundamentalChartValue 的区别只在空值：拿得到整个点，就能说出它为什么空。
+ */
+export function formatFundamentalChartPoint(
+  point: Pick<FundamentalChartPoint, "value" | "unavailableReason"> | null | undefined,
+  seriesOrAxis: Pick<PreparedFundamentalSeries | FundamentalChartAxis, "unitFamily" | "unit" | "currency">,
+): string {
+  if (point?.unavailableReason === "not_meaningful") return FUNDAMENTAL_NOT_MEANINGFUL_LABEL;
+  return formatFundamentalChartValue(point?.value ?? null, seriesOrAxis);
 }
 
 export function formatFundamentalChartValue(
@@ -393,9 +426,14 @@ function prepareSeries(
   const sourcePoints = periods.map((period) => {
     const sourcePoint = valuesByPeriod.get(period.periodEnd);
     const parsedValue = parseChartNumber(sourcePoint?.valueDecimal ?? null);
+    const value = parsedValue === null || source.displaySign === "as_reported"
+      ? parsedValue
+      : Math.abs(parsedValue);
     return {
       periodEnd: period.periodEnd,
-      value: parsedValue === null || source.displaySign === "as_reported" ? parsedValue : Math.abs(parsedValue),
+      value,
+      // 未经变换的原值只会因为缺数据而为空。
+      unavailableReason: value === null ? ("missing" as const) : null,
       sourceValueDecimal: sourcePoint?.valueDecimal ?? null,
     };
   });
@@ -470,22 +508,36 @@ function transformPoints(
         ? points[index - 1]
         : undefined;
     let value: number | null = null;
+    // 缺了当期或缺了比较期都是「没有数据」；只有算得出比较、结果却没有意义的情况
+    // 才改写成 not_meaningful。
+    let unavailableReason: FundamentalChartUnavailableReason | null = "missing";
     if (point.value !== null && comparison?.value !== null && comparison?.value !== undefined) {
       if (transform === "qoq_growth" || transform === "yoy_growth") {
         // 分母为 0 时增长率无定义；分母为负时同样无定义——(cur / base - 1) 会把符号
         // 整体翻转：净利润 -100 → 50（扭亏为盈）算成 -150%，
         // -100 → -150（亏损扩大）反而算成 +50%，-100 → -50（亏损收窄）算成 -50%。
-        // 三个方向都是页面上直接可见的错数字，因此统一置空，由 UI 显示「—」，
-        // 延续"宁可显示空也不显示错值"的既有语义。base > 0 时保持原公式不变，
-        // 因此正基数转亏（100 → -50 = -150%）这类有定义的结果仍照常输出。
-        value = comparison.value > 0
-          ? normalizeComputedValue(((point.value / comparison.value) - 1) * 100)
-          : null;
+        // 三个方向都是页面上直接可见的错数字，因此统一不出数字。但这不是"没有数据"：
+        // 数据齐全，只是这个比值没有意义，页面据 not_meaningful 标 NM 而不是「—」。
+        // base > 0 时保持原公式不变，因此正基数转亏（100 → -50 = -150%）这类有定义
+        // 的结果仍照常输出。
+        if (comparison.value > 0) {
+          value = normalizeComputedValue(((point.value / comparison.value) - 1) * 100);
+          unavailableReason = null;
+        } else {
+          unavailableReason = "not_meaningful";
+        }
       } else {
+        // 差值型变换（百分点）与基数符号无关，跨零仍然成立。
         value = normalizeComputedValue(point.value - comparison.value);
+        unavailableReason = null;
       }
     }
-    return { periodEnd: point.periodEnd, value, sourceValueDecimal: point.sourceValueDecimal };
+    return {
+      periodEnd: point.periodEnd,
+      value,
+      unavailableReason,
+      sourceValueDecimal: point.sourceValueDecimal,
+    };
   });
 }
 
