@@ -50,20 +50,37 @@ export async function getPublicFilingPage(
     .filter((filing) => isBeforeCursor(filing, cursor))
     .sort(byCursorOrder) ?? [];
   const cachedPage = cachedFilings.slice(0, limit);
-  const total = cursor ? null : await repository.countPublicFilings(ticker);
+  // Losing the archive must not lose a page the cache can still serve, so a failed count is carried
+  // as a state rather than thrown: it leaves `total` unknown and hands the page to the cache.
+  const counted = cursor
+    ? { reachable: true as const, total: null }
+    : await repository.countPublicFilings(ticker).then(
+      (total) => ({ reachable: true as const, total }),
+      () => ({ reachable: false as const, total: null }),
+    );
+  const total = counted.total;
   const last = cachedPage.at(-1);
   // The cache answers a page only when it can also say what follows it: either it still holds older
   // filings, or the count says there are none. Otherwise D1 — which keeps the whole history — does,
-  // so the cursor chain runs past the window instead of ending at it.
-  const cacheAnswersPage = cachedFilings.length > limit || (total !== null && total <= cachedPage.length);
+  // so the cursor chain runs past the window instead of ending at it. An unreachable archive is the
+  // exception: nothing else can answer, so the cache serves whatever window it holds.
+  const cacheAnswersPage = !counted.reachable
+    || cachedFilings.length > limit
+    || (total !== null && total <= cachedPage.length);
+  const cachePage = async () => ({
+    filings: await hydrateCachedFilings(repository, ticker, cachedPage),
+    nextCursor: cachedFilings.length > limit && last
+      ? encodePageCursor({ filingDate: last.filingDate, accessionNumber: last.accessionNumber })
+      : null,
+  });
   const page = last && cacheAnswersPage
-    ? {
-      filings: await hydrateCachedFilings(repository, ticker, cachedPage),
-      nextCursor: cachedFilings.length > limit
-        ? encodePageCursor({ filingDate: last.filingDate, accessionNumber: last.accessionNumber })
-        : null,
-    }
-    : await repository.listPublicFilings(ticker, rawCursor, limit);
+    ? await cachePage()
+    : await repository.listPublicFilings(ticker, rawCursor, limit).catch((error: unknown) => {
+      // Only a request the cache cannot cover at all reports the failure; masking it there would
+      // dress a broken sec_filings table up as an empty filing history.
+      if (!last) throw error;
+      return cachePage();
+    });
   const company = cachedFeed?.company ?? (page.filings[0] ? companyFromFiling(page.filings[0]) : companyFromDirectory(ticker));
   const filings = await Promise.all(page.filings.map(async (filing) => toPublicFiling(repository, filing, company?.name ?? ticker)));
   return { ticker, company, filings, nextCursor: page.nextCursor, total, checkedAt: cachedFeed?.fetchedAt ?? null };

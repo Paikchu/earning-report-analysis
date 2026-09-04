@@ -125,3 +125,44 @@ test("pages through same-day filings without dropping any", async () => {
   ]);
   assert.equal(new Set(seen).size, sameDayFilings.length);
 });
+
+test("serves the cache window when the archive count is unreachable", async () => {
+  const listed: (string | null)[] = [];
+  const fakeRepository = {
+    async getCache() {
+      return {
+        payload: {
+          ticker: "MSFT",
+          company: { ticker: "MSFT", name: "Microsoft", cik: "0000789019" },
+          filings: sameDayFilings.slice(0, 2),
+          fetchedAt: "2026-03-02T00:00:00Z",
+          status: "ready",
+        },
+        fetchedAt: "2026-03-02T00:00:00Z",
+      };
+    },
+    async getSummary() { return null; },
+    async countPublicFilings(): Promise<never> { throw new Error("D1_ERROR: no such table: sec_filings"); },
+    async listPublicFilings(_ticker: string, cursor: string | null) { listed.push(cursor); return { filings: [], nextCursor: null }; },
+    async getLatestAnalysisJobStatus() { return null; },
+  };
+
+  const page = await getPublicFilingPage(fakeRepository as never, "msft", null, "20");
+  assert.deepEqual(page.filings.map((filing) => filing.accessionNumber), ["0001-26-000005", "0001-26-000001"]);
+  assert.equal(page.total, null, "计数不可用时不能编一个数字出来");
+  assert.equal(page.nextCursor, null);
+  assert.deepEqual(listed, [], "归档已经不可用，不必再去问它要一页");
+});
+
+test("reports an archive failure the cache cannot cover", async () => {
+  const fakeRepository = {
+    async getCache() { return null; },
+    async getSummary() { return null; },
+    async countPublicFilings(): Promise<never> { throw new Error("D1_ERROR: no such table: sec_filings"); },
+    async listPublicFilings(): Promise<never> { throw new Error("D1_ERROR: no such table: sec_filings"); },
+    async getLatestAnalysisJobStatus() { return null; },
+  };
+
+  // 静默返回空页会把一张坏掉的表伪装成「暂未收录」。
+  await assert.rejects(() => getPublicFilingPage(fakeRepository as never, "msft", null, "20"), /no such table/);
+});
