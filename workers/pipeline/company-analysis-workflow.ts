@@ -29,19 +29,14 @@ type CompanyWorkflowStepConfig = {
   timeout: string;
 };
 
-/**
- * One Agent run intentionally contains several sequential model turns: the isolated current-quarter
- * diagnostic, up to four evidence-inspection rounds, and the final editorial pass. Keep those turns
- * in one durable step so a retry restarts the coherent Agent session, but give the step enough wall
- * time for the provider's per-call timeout budget. Cloudflare caps an explicit step timeout at 30m.
- */
-export const COMPANY_AGENT_STEP_CONFIG = {
+/** Each model turn is a durable checkpoint; one logical Agent session can exceed a single step. */
+export const COMPANY_AGENT_MODEL_STEP_CONFIG = {
   retries: {
     limit: 3,
     delay: "1 minute",
     backoff: "exponential",
   },
-  timeout: "30 minutes",
+  timeout: "5 minutes",
 } as const satisfies CompanyWorkflowStepConfig;
 
 export async function executeCompanyAnalysisWorkflow(
@@ -109,14 +104,15 @@ export async function executeCompanyAnalysisWorkflow(
       fundamentalsDataVersion: currentPacket!.fundamentalsDataVersion!,
       status: "analyzing",
     }));
-    const output = await step.do("company-agent", COMPANY_AGENT_STEP_CONFIG, () => runCompanyAnalysisAgent({
+    const output = await runCompanyAnalysisAgent({
       env,
       fetcher,
       currentPacket: currentPacket!,
       crossPeriodPacket,
       analysisId,
       generatedAt,
-    }));
+      runStage: (stage, callback) => step.do(`company-agent-${stage}`, COMPANY_AGENT_MODEL_STEP_CONFIG, callback),
+    });
     await step.do("company-run-validating", () => updateStatus(env, siteFetch, {
       ...statusBase,
       analysisId,

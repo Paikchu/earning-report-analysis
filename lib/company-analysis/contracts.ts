@@ -1,7 +1,7 @@
 import { normalizeTrackedTicker } from "../sec-config.ts";
 
 export const COMPANY_ANALYSIS_SCHEMA_VERSION = "company-analysis.v1";
-export const COMPANY_ANALYSIS_PROMPT_VERSION = "company-analysis-skill.v1";
+export const COMPANY_ANALYSIS_PROMPT_VERSION = "company-analysis-skill.v2";
 
 export type CompanyAnalysisCoverageStatus = "complete" | "partial";
 export type CompanyAnalysisRunStatus =

@@ -7,11 +7,13 @@ import {
   toPublicCompanyAnalysis,
 } from "../lib/company-analysis/contracts.ts";
 import { buildCompanyFeaturePack } from "../lib/company-analysis/feature-engine.ts";
-import { resolveTargetPeriodEnd } from "../lib/company-analysis/packet.ts";
+import { resolveTargetPeriodEnd, type CompanyAnalysisPacket } from "../lib/company-analysis/packet.ts";
 import { D1CompanyAnalysisRepository } from "../lib/company-analysis/repository.ts";
 import type { FundamentalCurrentObservation } from "../lib/fundamentals-d1.ts";
 import { applySqlMigration, SqliteD1Database } from "./helpers/sqlite-d1.ts";
-import { COMPANY_AGENT_STEP_CONFIG } from "../workers/pipeline/company-analysis-workflow.ts";
+import { COMPANY_AGENT_MODEL_STEP_CONFIG } from "../workers/pipeline/company-analysis-workflow.ts";
+import { runCompanyAnalysisAgent } from "../workers/pipeline/company-analysis-agent.ts";
+import type { SecPipelineEnv } from "../workers/pipeline/operations.ts";
 
 const generatedAt = "2026-09-03T08:00:00.000Z";
 
@@ -211,15 +213,69 @@ test("aligns 4-4-5 filing dates only to a nearby Yahoo revenue quarter", () => {
   assert.equal(resolveTargetPeriodEnd(observations, "2026-07-26"), null);
 });
 
-test("allows the multi-turn company Agent to finish inside one durable step", () => {
-  assert.deepEqual(COMPANY_AGENT_STEP_CONFIG, {
+test("bounds each company Agent model turn independently", () => {
+  assert.deepEqual(COMPANY_AGENT_MODEL_STEP_CONFIG, {
     retries: {
       limit: 3,
       delay: "1 minute",
       backoff: "exponential",
     },
-    timeout: "30 minutes",
+    timeout: "5 minutes",
   });
+});
+
+test("checkpoints one Agent's turns and retries invalid decisions inside the model step", async () => {
+  const features = buildCompanyFeaturePack({
+    source: "yahoo_finance",
+    ticker: "AMZN",
+    targetPeriodEnd: "2026-03-31",
+    observations: [observation("2026-03-31", "total_revenue", "100")],
+  });
+  const evidenceRef = features.features[0]!.featureRef;
+  const packet: CompanyAnalysisPacket = {
+    ticker: "AMZN", periodId: "AMZN:2026-03-31:quarter", reportDate: "2026-03-31",
+    targetPeriodEnd: "2026-03-31", memoryVersion: 1, fundamentalsDataVersion: "test-version",
+    ready: true, reason: null, features, currentMemory: [], historicalMemory: [], priorConclusion: null,
+  };
+  const keys = ["business_stability", "earning_power", "balance_sheet", "cash_quality", "valuation_readiness"];
+  const decision = {
+    headline: "业务保持韧性", thesis: "当前证据支持继续观察业务质量。",
+    internalPillars: keys.map((key) => ({
+      key, state: "watch", claim: "仍需跨期验证。", evidenceRefs: [evidenceRef],
+      falsifier: "后续需求持续减弱。", nextCheck: "观察下一季度经营表现。",
+    })),
+    selectedEvidenceRefs: [evidenceRef],
+  };
+  const responses = [
+    { summary: "本季经营保持稳定。", drivers: [{ statement: "需求支撑经营。", evidenceRefs: [evidenceRef] }], risks: [], unresolved: [] },
+    { action: "finalize", decision: { ...decision, internalPillars: [] } },
+    { action: "finalize", decision },
+    { ...overview(), highlights: overview().highlights.map((highlight) => ({ ...highlight, evidenceRefs: [evidenceRef] })) },
+  ];
+  const payloads: Record<string, unknown>[] = [];
+  const fetcher: typeof fetch = async (_url, init) => {
+    const body = JSON.parse(String(init?.body));
+    payloads.push(JSON.parse(body.messages[1].content));
+    return Response.json({ choices: [{ message: { content: JSON.stringify(responses.shift()) } }] });
+  };
+  const stages: string[] = [];
+  const result = await runCompanyAnalysisAgent({
+    env: { AI_API_KEY: "test-key" } as SecPipelineEnv,
+    fetcher, currentPacket: packet, crossPeriodPacket: packet,
+    analysisId: "company:AMZN:test", generatedAt,
+    runStage: async (stage, callback) => {
+      stages.push(stage);
+      try { return await callback(); } catch (error) {
+        if (stage === "cross-period-round-01") return callback();
+        throw error;
+      }
+    },
+  });
+  assert.deepEqual(stages, ["current-quarter", "cross-period-round-01", "editorial"]);
+  assert.equal(payloads.length, 4);
+  const schema = payloads[1]!.outputSchema as { decision: { internalPillars: Array<{ key: string }> } };
+  assert.deepEqual(schema.decision.internalPillars.map((pillar) => pillar.key), keys);
+  assert.equal(result.overview.highlights.length, 4);
 });
 
 function observation(

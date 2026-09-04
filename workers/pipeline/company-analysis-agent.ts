@@ -45,8 +45,10 @@ export async function runCompanyAnalysisAgent(input: {
   crossPeriodPacket: CompanyAnalysisPacket;
   analysisId: string;
   generatedAt: string;
+  runStage?: <T>(stage: string, callback: () => Promise<T>) => Promise<T>;
 }): Promise<CompanyAnalysisAgentOutput> {
   const fetcher = input.fetcher ?? fetch;
+  const runStage = input.runStage ?? (async <T>(_stage: string, callback: () => Promise<T>) => callback());
   if (!input.currentPacket.features || !input.crossPeriodPacket.features) {
     throw new Error("Company analysis cannot run before Yahoo features are ready.");
   }
@@ -55,7 +57,7 @@ export async function runCompanyAnalysisAgent(input: {
   }
   const currentQuarterEvidence = collectAllowedEvidence(input.currentPacket);
   const allowedEvidence = collectAllowedEvidence(input.crossPeriodPacket);
-  const diagnosticRaw = await callWorkerSecModel(
+  const diagnostic = await runStage("current-quarter", async () => normalizeDiagnostic(await callWorkerSecModel(
     input.env,
     fetcher,
     "company-current-quarter",
@@ -71,8 +73,7 @@ export async function runCompanyAnalysisAgent(input: {
         unresolved: "string[]",
       },
     },
-  );
-  const diagnostic = normalizeDiagnostic(diagnosticRaw, currentQuarterEvidence);
+  ), currentQuarterEvidence));
 
   const memoryById = new Map(
     [...input.crossPeriodPacket.currentMemory, ...input.crossPeriodPacket.historicalMemory]
@@ -90,7 +91,7 @@ export async function runCompanyAnalysisAgent(input: {
   let rounds = 0;
   for (let round = 1; round <= 4; round += 1) {
     rounds = round;
-    const actionRaw = await callWorkerSecModel(
+    const action = await runStage(`cross-period-round-${String(round).padStart(2, "0")}`, async () => normalizeAction(await callWorkerSecModel(
       input.env,
       fetcher,
       `company-cross-period-round-${String(round).padStart(2, "0")}`,
@@ -105,8 +106,7 @@ export async function runCompanyAnalysisAgent(input: {
           ? { action: "finalize", decision: decisionSchema() }
           : { action: "inspect_memory|finalize", memoryIds: "string[] when inspect_memory", reason: "string", decision: decisionSchema() },
       },
-    );
-    const action = normalizeAction(actionRaw, memoryById, allowedEvidence, round === 4);
+    ), memoryById, allowedEvidence, round === 4));
     if (action.action === "finalize") {
       decision = action.decision;
       break;
@@ -118,27 +118,30 @@ export async function runCompanyAnalysisAgent(input: {
   }
   if (!decision) throw new Error("Company analysis Agent exhausted its decision loop without finalizing.");
 
-  const editorialRaw = await callWorkerSecModel(
-    input.env,
-    fetcher,
-    "company-editorial-report-v1",
-    editorialPrompt(),
-    {
-      analysisId: input.analysisId,
-      ticker: input.crossPeriodPacket.ticker,
-      generatedAt: input.generatedAt,
-      decision,
-      approvedEvidence: approvedEvidence(decision.selectedEvidenceRefs, input.crossPeriodPacket),
-      outputSchema: {
-        label: "string",
-        headline: "string",
-        introduction: "string",
-        highlights: "exactly 4 [{title,body,evidenceRefs}]",
+  const overview = await runStage("editorial", async () => {
+    const editorialRaw = await callWorkerSecModel(
+      input.env,
+      fetcher,
+      "company-editorial-report-v1",
+      editorialPrompt(),
+      {
+        analysisId: input.analysisId,
+        ticker: input.crossPeriodPacket.ticker,
+        generatedAt: input.generatedAt,
+        decision,
+        approvedEvidence: approvedEvidence(decision.selectedEvidenceRefs, input.crossPeriodPacket),
+        outputSchema: {
+          label: "string",
+          headline: "string",
+          introduction: "string",
+          highlights: "exactly 4 [{title,body,evidenceRefs}]",
+        },
       },
-    },
-  );
-  const overview = normalizeCompanyAnalysisOverview(editorialRaw);
-  validateEditorialEvidence(overview, new Set(decision.selectedEvidenceRefs));
+    );
+    const overview = normalizeCompanyAnalysisOverview(editorialRaw);
+    validateEditorialEvidence(overview, new Set(decision.selectedEvidenceRefs));
+    return overview;
+  });
   return { diagnostic, decision, overview, rounds };
 }
 
@@ -156,6 +159,8 @@ function crossPeriodPrompt(round: number): string {
     "You are the cross-period phase of the same company-analysis Agent.",
     "Decide whether the evidence is enough. You may inspect named Memory items or finalize; no other action exists.",
     "The five internal pillars are reasoning constraints, never the public report outline.",
+    "Return exactly these five pillar keys: business_stability, earning_power, balance_sheet, cash_quality, valuation_readiness.",
+    "Each pillar state must be exactly one of strengthening, intact, watch, impaired, unobserved; never translate these keys or states.",
     "Fixed Buffett thresholds are references, not universal scores. Mark unavailable evidence unobserved.",
     "Every pillar claim must be falsifiable and cite supplied featureRef or Memory evidenceIds.",
     round === 4 ? "This is the last round. You must finalize or fail." : "Request only Memory items material to the unresolved decision.",
@@ -178,7 +183,14 @@ function decisionSchema() {
   return {
     headline: "string",
     thesis: "string",
-    internalPillars: "exactly 5 [{key,state,claim,evidenceRefs,falsifier,nextCheck}]",
+    internalPillars: ["business_stability", "earning_power", "balance_sheet", "cash_quality", "valuation_readiness"].map((key) => ({
+      key,
+      state: "strengthening|intact|watch|impaired|unobserved",
+      claim: "string",
+      evidenceRefs: "string[] containing supplied featureRef or Memory evidenceIds",
+      falsifier: "string describing what would invalidate this claim",
+      nextCheck: "string describing what to verify next",
+    })),
     selectedEvidenceRefs: "string[]",
   };
 }
