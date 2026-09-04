@@ -1,6 +1,7 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 
-import { handleSecAnalysisRequest, runSecMemorySweep, runSecRefresh, type SecMemoryWorkflowParams, type SecWorkflowParams } from "./core.ts";
+import { handleSecAnalysisRequest, runCompanyAnalysisSweep, runSecMemorySweep, runSecRefresh, type CompanyAnalysisBackfillParams, type CompanyAnalysisWorkflowParams, type SecMemoryWorkflowParams, type SecWorkflowParams } from "./core.ts";
+import { executeCompanyAnalysisWorkflow, type CompanyWorkflowStep } from "./company-analysis-workflow.ts";
 import { executeSecMemoryWorkflow } from "./memory-workflow.ts";
 import { createSecPipelineOperations, type SecPipelineEnv } from "./operations.ts";
 import { retryDelayForAttempt } from "./retry-policy.ts";
@@ -37,6 +38,35 @@ export class SecMemoryWorkflow extends WorkflowEntrypoint<SecPipelineEnv, SecMem
   }
 }
 
+export class CompanyAnalysisWorkflow extends WorkflowEntrypoint<SecPipelineEnv, CompanyAnalysisWorkflowParams> {
+  async run(event: WorkflowEvent<CompanyAnalysisWorkflowParams>, step: WorkflowStep) {
+    return executeCompanyAnalysisWorkflow(
+      event.payload,
+      event.instanceId,
+      event.timestamp,
+      step as unknown as CompanyWorkflowStep,
+      this.env,
+    );
+  }
+}
+
+export class CompanyAnalysisBackfillWorkflow extends WorkflowEntrypoint<SecPipelineEnv, CompanyAnalysisBackfillParams> {
+  async run(event: WorkflowEvent<CompanyAnalysisBackfillParams>, step: WorkflowStep) {
+    const durable = durableSteps(step);
+    // Recovery reuses the latest completed Memory and Yahoo snapshot. Starting every SEC workflow
+    // again would add unrelated model traffic precisely while recovering rate-limited Agent runs.
+    const sec = event.payload.forceIncomplete === true
+      ? { started: [], failed: [], skipped: true }
+      : await durable.do("backfill-latest-sec", () => runSecRefresh(this.env));
+    const company = await durable.do("backfill-company-analysis", () => runCompanyAnalysisSweep(
+      this.env,
+      undefined,
+      { forceIncomplete: event.payload.forceIncomplete === true },
+    ));
+    return { sec, company };
+  }
+}
+
 /**
  * `JSON.stringify` renders an Error as `{}`, so a rejection reason has to be read off it before it
  * reaches the log. The old handler logged the raw settled results and every failure it did report
@@ -57,9 +87,9 @@ const worker = {
   },
 
   async scheduled(_controller: ScheduledController, env: SecPipelineEnv) {
-    const results = await Promise.allSettled([runSecRefresh(env), runSecMemorySweep(env)]);
-    const [analysis, memory] = results.map(describeSettled);
-    const payload = JSON.stringify({ event: "sec-workflows", analysis, memory });
+    const results = await Promise.allSettled([runSecRefresh(env), runSecMemorySweep(env), runCompanyAnalysisSweep(env)]);
+    const [analysis, memory, companyAnalysis] = results.map(describeSettled);
+    const payload = JSON.stringify({ event: "sec-workflows", analysis, memory, companyAnalysis });
     const rejected = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
     if (!rejected.length) {
       console.log(payload);

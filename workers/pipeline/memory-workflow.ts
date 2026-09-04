@@ -1,4 +1,5 @@
 import type { SecMemoryJobClaim } from "../../lib/sec-d1.ts";
+import { hashString } from "../../lib/sec-analysis.ts";
 import { serviceFetcher } from "../../lib/service-binding.ts";
 import { normalizeMemoryExtraction } from "../../lib/sec-memory.ts";
 import type { SecMemoryWorkflowParams } from "./core.ts";
@@ -33,11 +34,52 @@ export async function executeSecMemoryWorkflow(
     const value = await callWorkerSecModel(env, fetcher, "memory-extract", memoryExtractionSystemPrompt(), compactMemorySource(source), execution.model);
     return normalizeMemoryExtraction(value, validEvidenceIds, priorMemoryIds);
   });
-  const committed = await step.do(`memory-commit:${params.jobId}`, () => sitePost<{ status: string; noOp: boolean; itemCount: number }>(env, siteFetch, "/api/internal/sec/memory/commit", {
+  const committed = await step.do(`memory-commit:${params.jobId}`, () => sitePost<{
+    status: string;
+    noOp: boolean;
+    itemCount: number;
+    memoryVersion: number;
+  }>(env, siteFetch, "/api/internal/sec/memory/commit", {
     claim,
     extraction,
   }));
-  return { status: committed.status, jobId: params.jobId, noOp: committed.noOp, itemCount: committed.itemCount };
+  let companyAnalysisQueued = false;
+  const reportDate = sourceReportDate(source, claim.periodId);
+  if (env.COMPANY_ANALYSIS_WORKFLOW && Number.isInteger(committed.memoryVersion) && reportDate) {
+    companyAnalysisQueued = await step.do(`company-analysis-enqueue:${params.jobId}`, async () => {
+      const triggerRef = `${params.jobId}:${committed.memoryVersion}`;
+      try {
+        await env.COMPANY_ANALYSIS_WORKFLOW!.create({
+          id: `company-${hashString(triggerRef)}`,
+          params: {
+            ticker: params.ticker,
+            memoryJobId: params.jobId,
+            memoryVersion: committed.memoryVersion,
+            periodId: claim.periodId,
+            reportDate,
+            triggerRef,
+          },
+        });
+        return true;
+      } catch (error) {
+        if (/already exists|duplicate/i.test(String(error))) return true;
+        throw error;
+      }
+    });
+  }
+  return {
+    status: committed.status,
+    jobId: params.jobId,
+    noOp: committed.noOp,
+    itemCount: committed.itemCount,
+    companyAnalysisQueued,
+  };
+}
+
+function sourceReportDate(source: Record<string, unknown>, periodId: string): string {
+  const reportDate = String(record(record(source.artifact)?.filing)?.reportDate ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(reportDate)) return reportDate;
+  return periodId.match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? "";
 }
 
 function compactMemorySource(source: Record<string, unknown>) {

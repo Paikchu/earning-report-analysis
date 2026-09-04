@@ -445,7 +445,7 @@ test("serializes ticker Memory leases and prevents an expired worker from overwr
   }] });
   assert.equal(committed.itemCount, 1);
   assert.equal((await database.prepare("SELECT statement FROM sec_memory_items WHERE ticker = ?").bind(issuer).first<{ statement: string }>())?.statement, "Backlog expanded.");
-  assert.deepEqual(await repository.commitMemoryJob(replacement!, { candidates: [] }), { noOp: true, itemCount: 0 });
+  assert.deepEqual(await repository.commitMemoryJob(replacement!, { candidates: [] }), { noOp: true, itemCount: 0, memoryVersion: 1 });
 });
 
 function createMemoryD1() {

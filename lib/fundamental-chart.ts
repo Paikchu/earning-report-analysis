@@ -13,7 +13,7 @@ export const FUNDAMENTAL_CHART_SPEC_VERSION = "fundamental-chart.v1";
 export const FUNDAMENTAL_CHART_MAX_SERIES = 4;
 export const FUNDAMENTAL_CHART_MAX_AXES = 2;
 export const FUNDAMENTAL_CHART_WIDTH = 760;
-export const FUNDAMENTAL_CHART_HEIGHT = 360;
+export const FUNDAMENTAL_CHART_HEIGHT = 280;
 
 export type FundamentalChartAxisSide = "left" | "right";
 

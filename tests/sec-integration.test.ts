@@ -119,6 +119,7 @@ test("ships SEC analysis as a bounded durable Cloudflare workflow with isolated 
   assert.match(workerConfig, /"compatibility_flags": \["nodejs_compat"\]/);
   assert.match(workerConfig, /"workflows"/);
   assert.equal(workerConfig.match(/"concurrency":\s*\{\s*"limit": 4\s*\}/g)?.length, 2);
+  assert.equal(workerConfig.match(/"concurrency":\s*\{\s*"limit": 2\s*\}/g)?.length, 2);
   assert.match(workerConfig, /"r2_buckets"/);
   assert.match(workflowCore, /const SEC_NODE_CONCURRENCY = 2;/);
   assert.match(workflowCore, /mapWithConcurrency\(plan\.nodes, SEC_NODE_CONCURRENCY,/);
@@ -140,7 +141,7 @@ test("reports a failed scheduled run instead of finishing it as ok", async () =>
 
   // `allSettled` cannot reject, so the handler has to await the work and rethrow for the Cron
   // invocation to record anything but `outcome: ok`. Handing it to `waitUntil` loses that.
-  assert.match(workerSource, /const results = await Promise\.allSettled\(\[runSecRefresh\(env\), runSecMemorySweep\(env\)\]\)/);
+  assert.match(workerSource, /const results = await Promise\.allSettled\(\[runSecRefresh\(env\), runSecMemorySweep\(env\), runCompanyAnalysisSweep\(env\)\]\)/);
   assert.match(workerSource, /console\.error\(payload\)/);
   // A rejection reason is an Error, and JSON.stringify renders those as `{}` — the log has to
   // unwrap the message or a reported failure says nothing about what failed.
