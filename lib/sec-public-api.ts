@@ -46,7 +46,9 @@ export async function getPublicFilingPage(
   const cachedFeed = typeof repository.getCache === "function" ? await readCachedSecFeed(repository, ticker) : null;
   // The cache only holds the newest window. A cursor older than its last filing selects nothing here,
   // so a deep page never pays to hydrate a window it cannot use.
-  const cachedFilings = cachedFeed?.filings.filter((filing) => isBeforeCursor(filing, cursor)) ?? [];
+  const cachedFilings = cachedFeed?.filings
+    .filter((filing) => isBeforeCursor(filing, cursor))
+    .sort(byCursorOrder) ?? [];
   const cachedPage = cachedFilings.slice(0, limit);
   const total = cursor ? null : await repository.countPublicFilings(ticker);
   const last = cachedPage.at(-1);
@@ -116,6 +118,17 @@ function isBeforeCursor(filing: SecFiling, cursor: { filingDate: string; accessi
   if (!cursor) return true;
   return filing.filingDate < cursor.filingDate
     || (filing.filingDate === cursor.filingDate && filing.accessionNumber < cursor.accessionNumber);
+}
+
+/**
+ * The order the cursor reads. `sortSecFilings` keeps SEC's own order inside a filing date, but the
+ * cursor breaks a same-date tie on the accession number and D1 orders by it, so a page served from
+ * the cache has to agree — otherwise the two sources disagree about what follows a given filing and
+ * same-day filings fall through the gap between pages.
+ */
+function byCursorOrder(left: SecFiling, right: SecFiling): number {
+  return right.filingDate.localeCompare(left.filingDate)
+    || right.accessionNumber.localeCompare(left.accessionNumber);
 }
 
 function companyFromFiling(filing: SecFilingWithSummary): { ticker: string; name: string; cik: string } | null {
