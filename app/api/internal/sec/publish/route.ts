@@ -36,7 +36,10 @@ export async function POST(request: Request) {
       && body.summary.accessionNumber === eventAccession;
     if (!validEvent) return Response.json({ error: "SEC 事件简析无效。" }, { status: 400 });
     if (!isTrackedTicker(eventTicker, runtime.trackedTickers)) return Response.json({ error: "Ticker is not tracked" }, { status: 403 });
-    await repository.setSummary({ ...body.summary, ticker: eventTicker, accessionNumber: eventAccession });
+    await repository.setSummary(
+      { ticker: eventTicker, accessionNumber: eventAccession, form: body.filing.form },
+      { ...body.summary, ticker: eventTicker, accessionNumber: eventAccession },
+    );
     return Response.json({ status: "published", ticker: eventTicker, accessionNumber: eventAccession }, { headers: { "cache-control": "no-store" } });
   }
   const artifact = body?.artifact;
