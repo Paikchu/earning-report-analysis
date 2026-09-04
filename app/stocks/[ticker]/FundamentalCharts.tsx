@@ -24,9 +24,12 @@ import {
   type ResolvedFundamentalPresentation,
 } from "@/lib/fundamental-chart-plan";
 import {
+  FUNDAMENTAL_NOT_MEANINGFUL_HINT,
+  FUNDAMENTAL_NOT_MEANINGFUL_LABEL,
   buildFundamentalChartModel,
-  formatFundamentalChartValue,
+  formatFundamentalChartPoint,
   formatFundamentalPeriod,
+  type FundamentalChartPoint,
 } from "@/lib/fundamental-chart";
 import type { FundamentalMetricKey, FundamentalTransform } from "@/lib/fundamental-metrics";
 import { FUNDAMENTALS_DEFAULT_PERIOD_COUNT, type PublicFundamentalsResponse } from "@/lib/fundamentals-api";
@@ -394,14 +397,22 @@ export function FundamentalChartsView({
   );
 }
 
+/**
+ * 一格增速：显示什么、要不要展开解释、用哪种颜色。「—」和「NM」都不是数字，
+ * 因此都不该沿用涨跌的绿红。
+ */
+type SnapshotDelta = {
+  text: string;
+  hint: string | null;
+  tone: "down" | "muted" | undefined;
+};
+
 type SnapshotRow = {
   key: FundamentalMetricKey;
   label: string;
   value: string;
-  qoq: string;
-  qoqDown: boolean;
-  yoy: string;
-  yoyDown: boolean;
+  qoq: SnapshotDelta;
+  yoy: SnapshotDelta;
 };
 
 /**
@@ -434,14 +445,25 @@ function SnapshotPanel({
                 <dl className="fundamentals-workbench__table-row" key={row.key}>
                   <dt>{row.label}</dt>
                   <dd>{row.value}</dd>
-                  <dd data-delta={row.qoqDown ? "down" : undefined}>{row.qoq}</dd>
-                  <dd data-delta={row.yoyDown ? "down" : undefined}>{row.yoy}</dd>
+                  <DeltaCell delta={row.qoq} />
+                  <DeltaCell delta={row.yoy} />
                 </dl>
               ))}
             </div>
           ))}
       </div>
     </section>
+  );
+}
+
+/**
+ * 缩写自己解释自己：<abbr> 让 NM 在悬停和读屏里都能展开成整句，而列宽只用付两个字母。
+ */
+function DeltaCell({ delta }: { delta: SnapshotDelta }) {
+  return (
+    <dd data-delta={delta.tone}>
+      {delta.hint === null ? delta.text : <abbr title={delta.hint}>{delta.text}</abbr>}
+    </dd>
   );
 }
 
@@ -467,16 +489,13 @@ function buildSnapshotRows(
       ]);
       const [valueSeries, qoqSeries, yoySeries] = model.series;
       const valuePoint = valueSeries?.points[periodIndex] ?? null;
-      const qoqValue = qoqSeries?.points[periodIndex]?.value ?? null;
-      const yoyValue = yoySeries?.points[periodIndex]?.value ?? null;
+      const unitSuffix = isPercent ? "pt" : "%";
       rows.push({
         key: metricKey,
         label: series.shortLabel,
-        value: valueSeries ? formatFundamentalChartValue(valuePoint?.value ?? null, valueSeries) : "暂无数据",
-        qoq: formatDelta(qoqValue, isPercent ? "pt" : "%"),
-        qoqDown: (qoqValue ?? 0) < 0,
-        yoy: formatDelta(yoyValue, isPercent ? "pt" : "%"),
-        yoyDown: (yoyValue ?? 0) < 0,
+        value: valueSeries ? formatFundamentalChartPoint(valuePoint, valueSeries) : "暂无数据",
+        qoq: buildSnapshotDelta(qoqSeries?.points[periodIndex] ?? null, unitSuffix),
+        yoy: buildSnapshotDelta(yoySeries?.points[periodIndex] ?? null, unitSuffix),
       });
     } catch {
       continue;
@@ -485,10 +504,27 @@ function buildSnapshotRows(
   return rows;
 }
 
-function formatDelta(value: number | null, unitSuffix: "%" | "pt"): string {
-  if (value === null || !Number.isFinite(value)) return "—";
+function buildSnapshotDelta(
+  point: FundamentalChartPoint | null,
+  unitSuffix: "%" | "pt",
+): SnapshotDelta {
+  // 基数为零或为负时算不出有意义的增速——扭亏为盈是好消息，和「这个季度缺数据」
+  // 不该在同一列里长成同一个破折号，所以这里只让缺数据留破折号。
+  if (point?.unavailableReason === "not_meaningful") {
+    return {
+      text: FUNDAMENTAL_NOT_MEANINGFUL_LABEL,
+      hint: FUNDAMENTAL_NOT_MEANINGFUL_HINT,
+      tone: "muted",
+    };
+  }
+  const value = point?.value ?? null;
+  if (value === null || !Number.isFinite(value)) return { text: "—", hint: null, tone: "muted" };
   const sign = value > 0 ? "+" : "";
-  return `${sign}${new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 }).format(value)}${unitSuffix}`;
+  return {
+    text: `${sign}${new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 }).format(value)}${unitSuffix}`,
+    hint: null,
+    tone: value < 0 ? "down" : undefined,
+  };
 }
 
 function ChartPanel({

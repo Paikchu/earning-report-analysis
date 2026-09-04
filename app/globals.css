@@ -3022,6 +3022,13 @@ td { font-size: 14px; }
 .fundamentals-workbench__table-row dd:first-of-type { font: 600 13.5px/1.2 var(--serif); }
 .fundamentals-workbench__table-row dd:not(:first-of-type) { color: var(--color-profit); font: 500 11.5px/1.2 var(--serif); }
 .fundamentals-workbench__table-row dd[data-delta="down"] { color: var(--color-loss); }
+/* 「—」（缺数据）和「NM」（基数非正、增速无意义）都不是涨跌，不该穿绿或红。 */
+.fundamentals-workbench__table-row dd[data-delta="muted"] { color: var(--ink-muted); }
+.fundamentals-workbench__table-row abbr {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
 .fundamentals-workbench__table-empty { grid-column: 1 / -1; padding: 40px 0; color: var(--ink-muted); font-size: 13px; text-align: center; }
 
 /* Disclosure timeline. The rail is one continuous 1px line placed in the gap

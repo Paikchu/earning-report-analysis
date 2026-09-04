@@ -104,6 +104,39 @@ test("the snapshot lists operating and valuation measures for the picked quarter
   assert.match(html, /EV\/EBITDA/);
 });
 
+test("the snapshot tells a meaningless growth rate apart from a missing quarter", () => {
+  const data = makeChartResponse([
+    makeChartSeries("total_revenue"),
+    makeChartSeries("gross_margin"),
+    // 2024-06 亏损 -150，2025-06 盈利 120：同比是扭亏为盈，增速没有意义；
+    // 环比的基数（50）为正，照常出数字。
+    makeChartSeries("net_income", [100e6, -150e6, 200e6, 300e6, 50e6, 120e6]),
+    // 最新一期没有经营现金流：这一行才是真正的「没有数据」。
+    makeChartSeries("operating_cash_flow", [10e6, 20e6, 30e6, 40e6, 50e6, null]),
+  ]);
+  const html = renderToStaticMarkup(
+    <FundamentalChartsView
+      ticker="ACME"
+      companyName="ACME Industrial"
+      data={data}
+      pageState={pageState}
+      requestState="ready"
+      error={null}
+      {...callbacks}
+    />,
+  );
+
+  const netIncomeRow = /<dt>净利润<\/dt>(.*?)<\/dl>/.exec(html)?.[1] ?? "";
+  assert.match(netIncomeRow, /<dd>\+140%<\/dd>/);
+  // 扭亏为盈标 NM，并且缩写自带展开说明，不再和缺数据同形。
+  assert.match(netIncomeRow, /<dd data-delta="muted"><abbr title="[^"]*增速没有数学意义">NM<\/abbr><\/dd>/);
+
+  const cashFlowRow = /<dt>经营现金流<\/dt>(.*?)<\/dl>/.exec(html)?.[1] ?? "";
+  assert.match(cashFlowRow, /<dd>暂无数据<\/dd>/);
+  assert.match(cashFlowRow, /<dd data-delta="muted">—<\/dd>/);
+  assert.doesNotMatch(cashFlowRow, /NM/);
+});
+
 test("request states remain local to the fundamentals surface", () => {
   const loadingHtml = renderToStaticMarkup(
     <FundamentalChartsView
