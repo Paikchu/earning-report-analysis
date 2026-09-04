@@ -1,8 +1,5 @@
-import { FundamentalSyncService } from "./fundamental-sync.ts";
-import {
-  FundamentalSyncInProgressError,
-  type FundamentalsRepository,
-} from "./fundamentals-d1.ts";
+import { FundamentalSyncInProgressError } from "./fundamentals-d1.ts";
+import { getSecRuntimeConfig } from "./sec-runtime.ts";
 
 export type FundamentalRefreshSchedulerOptions = {
   waitUntil?: (promise: Promise<unknown>) => void;
@@ -12,7 +9,6 @@ export type FundamentalRefreshSchedulerOptions = {
 const CLOUDFLARE_WORKERS_MODULE = "cloudflare:workers";
 
 export async function scheduleFundamentalRefresh(
-  repository: FundamentalsRepository,
   ticker: string,
   options: FundamentalRefreshSchedulerOptions = {},
 ): Promise<boolean> {
@@ -23,8 +19,7 @@ export async function scheduleFundamentalRefresh(
         waitUntil(promise: Promise<unknown>): void;
       };
     const waitUntil = options.waitUntil ?? runtime!.waitUntil;
-    const syncTicker = options.syncTicker ?? ((value: string) =>
-      new FundamentalSyncService(repository).syncTicker(value));
+    const syncTicker = options.syncTicker ?? requestFundamentalRefresh;
     waitUntil(syncTicker(ticker).catch((error) => {
       // Another request already holds the ticker's lease. That is ordinary contention, not a failure.
       if (error instanceof FundamentalSyncInProgressError) return;
@@ -48,4 +43,21 @@ export async function scheduleFundamentalRefresh(
   } catch {
     return false;
   }
+}
+
+/**
+ * The sync itself runs on the Pipeline Worker, which owns the D1 write and the cron that keeps
+ * fundamentals fresh on its own. This is a control-plane request, not a data one: it asks the
+ * Worker below this one to do the work, the same way an admin-triggered SEC refresh does — Web
+ * does not touch D1 for this at all.
+ */
+async function requestFundamentalRefresh(ticker: string): Promise<void> {
+  const runtime = await getSecRuntimeConfig();
+  const origin = runtime.pipelineOrigin.replace(/\/+$/, "");
+  const response = await runtime.pipelineFetch(`${origin}/fundamentals/refresh/${encodeURIComponent(ticker)}`, {
+    method: "POST",
+    headers: { "x-sec-refresh-key": runtime.refreshKey },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error(`Fundamentals refresh HTTP ${response.status}`);
 }

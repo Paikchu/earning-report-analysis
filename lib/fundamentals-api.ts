@@ -80,7 +80,7 @@ export type PublicFundamentalsResponse = {
 export type PublicFundamentalsHandlerDependencies = {
   getRepository(): Promise<FundamentalsRepository>;
   isRefreshEligible(ticker: string): boolean;
-  scheduleRefresh(repository: FundamentalsRepository, ticker: string): Promise<boolean>;
+  scheduleRefresh(ticker: string): Promise<boolean>;
   clock?: () => Date;
 };
 
@@ -183,7 +183,7 @@ export async function handlePublicFundamentalsRequest(
     }
 
     const scheduled = payload.refresh.recommended && refreshEligible
-      ? await dependencies.scheduleRefresh(repository, query.ticker)
+      ? await dependencies.scheduleRefresh(query.ticker)
       : false;
     return jsonResponse(
       { ...payload, refresh: { ...payload.refresh, scheduled } },

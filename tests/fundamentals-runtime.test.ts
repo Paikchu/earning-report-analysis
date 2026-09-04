@@ -7,7 +7,7 @@ import { FundamentalSyncInProgressError } from "../lib/fundamentals-d1.ts";
 test("hands background refresh work to waitUntil without blocking the response path", async () => {
   const calls: string[] = [];
   let backgroundTask: Promise<unknown> | null = null;
-  const scheduled = await scheduleFundamentalRefresh({} as never, "ACME", {
+  const scheduled = await scheduleFundamentalRefresh("ACME", {
     waitUntil: (promise) => { backgroundTask = promise; },
     syncTicker: async (ticker) => { calls.push(ticker); },
   });
@@ -20,7 +20,7 @@ test("hands background refresh work to waitUntil without blocking the response p
 
 test("treats a ticker lease collision as an already-scheduled refresh", async () => {
   let backgroundTask: Promise<unknown> | null = null;
-  const scheduled = await scheduleFundamentalRefresh({} as never, "ACME", {
+  const scheduled = await scheduleFundamentalRefresh("ACME", {
     waitUntil: (promise) => { backgroundTask = promise; },
     syncTicker: async () => { throw new FundamentalSyncInProgressError("ACME"); },
   });
@@ -37,7 +37,7 @@ test("surfaces a failed refresh on the invocation record instead of swallowing i
   let backgroundTask: Promise<unknown> | null = null;
 
   try {
-    const scheduled = await scheduleFundamentalRefresh({} as never, "ACME", {
+    const scheduled = await scheduleFundamentalRefresh("ACME", {
       waitUntil: (promise) => { backgroundTask = promise; },
       syncTicker: async () => {
         throw new Error("D1_ERROR: CHECK constraint failed: fundamental_observations_unit_family_check");
@@ -61,7 +61,7 @@ test("surfaces a failed refresh on the invocation record instead of swallowing i
 });
 
 test("reports scheduling unavailable when waitUntil cannot accept the task", async () => {
-  const scheduled = await scheduleFundamentalRefresh({} as never, "ACME", {
+  const scheduled = await scheduleFundamentalRefresh("ACME", {
     waitUntil: () => { throw new Error("context closed"); },
     syncTicker: async () => undefined,
   });

@@ -1,4 +1,3 @@
 SEC_PIPELINE_ORIGIN=https://earning-report-analysis-sec-pipeline.example.workers.dev
 SEC_REFRESH_KEY=
 SEC_ADMIN_TOKEN=
-SEC_TRACKED_TICKERS=AAA,BBB

@@ -5,7 +5,6 @@
   "compatibility_date": "2026-08-26",
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
-    "WEB_APP_ORIGIN": "https://earning-report-analysis-sec-web.max-zhangyuchen.workers.dev",
     "SEC_USER_AGENT": "earning-report-analysis/1.0 max.zhangyuchen@gmail.com",
     "SEC_ANALYSIS_MODEL": "glm-5.3-flash"
   },
@@ -56,13 +55,6 @@
       "migrations_dir": "../web/migrations"
     }
   ],
-  // The Web Worker's public hostname is unreachable from inside this Worker — two Workers on the
-  // same workers.dev subdomain get a 404 from the edge before the request lands. Every bridge call
-  // goes through this binding instead. Block comments would break check-config.ts, which strips
-  // only whole-line // comments before parsing this file.
-  "services": [
-    { "binding": "WEB", "service": "earning-report-analysis-sec-web" }
-  ],
   // TEMPORARY, while the dead scheduled refresh is being diagnosed: every 10 minutes around the
   // clock, so a failed run surfaces within minutes instead of at the next hourly slot. The market
   // windows this replaces cover 09:00-23:00 ET Mon-Fri and must go back once the run is healthy:
@@ -77,7 +69,6 @@
     "staging": {
       "name": "earning-report-analysis-sec-pipeline-staging",
       "vars": {
-        "WEB_APP_ORIGIN": "https://earning-report-analysis-sec-web-staging.max-zhangyuchen.workers.dev",
         "SEC_USER_AGENT": "earning-report-analysis/1.0 max.zhangyuchen@gmail.com",
         "SEC_ANALYSIS_MODEL": "glm-5.3-flash"
       },
