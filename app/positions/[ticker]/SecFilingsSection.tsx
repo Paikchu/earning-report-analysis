@@ -10,12 +10,12 @@ import type { PublicSecFiling } from "@/lib/sec-public-api";
 
 const expandEase = [0.22, 1, 0.36, 1] as const;
 
-/** Distance from the bottom of the rail that starts the next page. */
+/** Distance from the end of the rail that starts the next page. */
 const TIMELINE_PREFETCH_PX = 180;
-/** Guard so an under-filled first screen cannot page through the whole history. */
-const TIMELINE_AUTOFILL_LIMIT = 6;
+/** Guard so a cursor that keeps returning nothing cannot page in a loop. */
+const TIMELINE_EMPTY_PAGE_LIMIT = 6;
 
-type Page = { filings: PublicSecFiling[]; nextCursor: string | null; checkedAt: string | null; total?: number };
+type Page = { filings: PublicSecFiling[]; nextCursor: string | null; checkedAt: string | null; total?: number | null };
 
 export function SecFilingsSection({ ticker, title = "SEC 文件与 AI 解读" }: { ticker: string; title?: string }) {
   const [filings, setFilings] = useState<PublicSecFiling[]>([]);
@@ -25,8 +25,8 @@ export function SecFilingsSection({ ticker, title = "SEC 文件与 AI 解读" }:
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [loadingMore, setLoadingMore] = useState(false);
   const filingsRef = useRef<PublicSecFiling[]>([]);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const autofillRounds = useRef(0);
+  const railEndRef = useRef<HTMLParagraphElement | null>(null);
+  const emptyPages = useRef(0);
 
   const load = useCallback(async (cursor: string | null, append: boolean) => {
     if (append) setLoadingMore(true);
@@ -40,11 +40,10 @@ export function SecFilingsSection({ ticker, title = "SEC 文件与 AI 解读" }:
       filingsRef.current = merged;
       setFilings(merged);
       setNextCursor(page.nextCursor);
-      setTotal(Math.max(page.total ?? 0, merged.length));
-      if (!append) {
-        autofillRounds.current = 0;
-        setOpenAccessions(new Set(defaultOpenAccessions(merged)));
-      }
+      // Only the first page carries a count, so an appended page keeps the total it already knows.
+      setTotal((current) => Math.max(append ? current : 0, page.total ?? 0, merged.length));
+      emptyPages.current = page.filings.length > 0 ? 0 : emptyPages.current + 1;
+      if (!append) setOpenAccessions(new Set(defaultOpenAccessions(merged)));
       setStatus("ready");
     } catch {
       setStatus("error");
@@ -76,28 +75,19 @@ export function SecFilingsSection({ ticker, title = "SEC 文件与 AI 解读" }:
     });
   }, []);
 
-  const loadMore = useCallback(() => {
-    if (!nextCursor || loadingMore) return;
-    void load(nextCursor, true);
-  }, [load, loadingMore, nextCursor]);
-
-  const handleTimelineScroll = useCallback(() => {
-    const rail = scrollRef.current;
-    if (!rail || !nextCursor || loadingMore) return;
-    if (rail.scrollHeight - rail.scrollTop - rail.clientHeight > TIMELINE_PREFETCH_PX) return;
-    autofillRounds.current = 0;
-    void load(nextCursor, true);
-  }, [load, loadingMore, nextCursor]);
-
-  // A tall viewport can leave the rail shorter than its own column, which would
-  // hide the fact that more filings exist. Top it up until it can scroll.
+  // The rail is its own scroller beside the chart column but scrolls with the page once the layout
+  // stacks, and a tall viewport can leave it shorter than its column. Watching the end of the rail
+  // reach the viewport covers all three: no scroll offset of any single element is involved.
   useEffect(() => {
-    const rail = scrollRef.current;
-    if (!rail || !nextCursor || loadingMore || status !== "ready") return;
-    if (rail.scrollHeight > rail.clientHeight + 8) return;
-    if (autofillRounds.current >= TIMELINE_AUTOFILL_LIMIT) return;
-    autofillRounds.current += 1;
-    void load(nextCursor, true);
+    const railEnd = railEndRef.current;
+    if (!railEnd || !nextCursor || loadingMore || status !== "ready") return;
+    if (emptyPages.current >= TIMELINE_EMPTY_PAGE_LIMIT) return;
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries.some((entry) => entry.isIntersecting)) void load(nextCursor, true); },
+      { rootMargin: `${TIMELINE_PREFETCH_PX}px` },
+    );
+    observer.observe(railEnd);
+    return () => observer.disconnect();
   }, [filings, load, loadingMore, nextCursor, status]);
 
   return (
@@ -109,35 +99,26 @@ export function SecFilingsSection({ ticker, title = "SEC 文件与 AI 解读" }:
       {status === "error" && <p className="sec-state sec-state-error" role="alert">SEC 数据读取失败。</p>}
       {status === "ready" && filings.length === 0 && <p className="sec-state">暂未收录该股票的 SEC 报告。</p>}
       {status === "ready" && filings.length > 0 && (
-        <>
-          <div className="sec-filing-scroll" ref={scrollRef} onScroll={handleTimelineScroll}>
-            <div className="sec-filing-list">
-              {filings.map((filing, index) => (
-                <SecFilingCard
-                  filing={filing}
-                  isLatestPeriodic={isPeriodicFiling(filing.form) && !filings.slice(0, index).some((candidate) => isPeriodicFiling(candidate.form))}
-                  isOpen={openAccessions.has(filing.accessionNumber)}
-                  key={filing.accessionNumber}
-                  onToggle={() => toggleAccession(filing.accessionNumber)}
-                />
-              ))}
-            </div>
-            <p className="sec-filing-rail-status" role="status">
-              {loadingMore
-                ? "正在载入更早申报…"
-                : total > filings.length
-                  ? `已显示 ${filings.length} / ${total} 份`
-                  : `已显示全部 ${filings.length} 份申报`}
-            </p>
+        <div className="sec-filing-scroll">
+          <div className="sec-filing-list">
+            {filings.map((filing, index) => (
+              <SecFilingCard
+                filing={filing}
+                isLatestPeriodic={isPeriodicFiling(filing.form) && !filings.slice(0, index).some((candidate) => isPeriodicFiling(candidate.form))}
+                isOpen={openAccessions.has(filing.accessionNumber)}
+                key={filing.accessionNumber}
+                onToggle={() => toggleAccession(filing.accessionNumber)}
+              />
+            ))}
           </div>
-          <div className="sec-filing-footer">
-            {nextCursor && (
-              <button className="sec-load-more" type="button" disabled={loadingMore} onClick={loadMore}>
-                {loadingMore ? "正在读取…" : "加载更早申报"}
-              </button>
-            )}
-          </div>
-        </>
+          <p className="sec-filing-rail-status" ref={railEndRef} role="status">
+            {loadingMore
+              ? "正在载入更早申报…"
+              : total > filings.length
+                ? `已显示 ${filings.length} / ${total} 份`
+                : `已显示全部 ${filings.length} 份申报`}
+          </p>
+        </div>
       )}
     </section>
   );

@@ -28,7 +28,6 @@ type D1Like = {
 export type PublicFilingPage = {
   filings: SecFilingWithSummary[];
   nextCursor: string | null;
-  total: number;
 };
 
 type PublicFilingRow = {
@@ -269,7 +268,6 @@ export class D1SecRepository implements SecRepository {
       ORDER BY filing_date DESC, accession_number DESC
       LIMIT ?
     `).bind(...values).all<PublicFilingRow>();
-    const totalRow = await this.database.prepare("SELECT COUNT(*) AS count FROM sec_filings WHERE ticker = ?").bind(ticker).first<{ count: number }>();
     const hasMore = rows.results.length > limit;
     const pageRows = rows.results.slice(0, limit);
     const filings = await Promise.all(pageRows.map((row) => this.hydratePublicFiling(row)));
@@ -277,8 +275,14 @@ export class D1SecRepository implements SecRepository {
     return {
       filings,
       nextCursor: hasMore && last ? encodePageCursor({ filingDate: last.filingDate, accessionNumber: last.accessionNumber }) : null,
-      total: Number(totalRow?.count ?? 0),
     };
+  }
+
+  /** Counted on its own so paging pays for it once, on the first page, instead of on every page. */
+  async countPublicFilings(rawTicker: string): Promise<number> {
+    const row = await this.database.prepare("SELECT COUNT(*) AS count FROM sec_filings WHERE ticker = ?")
+      .bind(rawTicker.trim().toUpperCase()).first<{ count: number }>();
+    return Number(row?.count ?? 0);
   }
 
   async getPublicFiling(rawTicker: string, rawAccession: string): Promise<SecFilingWithSummary | null> {

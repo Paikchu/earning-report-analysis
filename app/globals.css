@@ -2597,8 +2597,6 @@ td { font-size: 14px; }
 .sec-row-actions a:hover { color: var(--color-loss); }
 .sec-not-ready { color: var(--ink-muted); font-size: 11px; }
 .sec-row-headline { grid-column: 2 / -1; margin: -4px 0 0; color: var(--ink-soft); font-size: 12px; line-height: 1.5; }
-.sec-load-more { margin-top: 22px; padding: 11px 18px; color: var(--ink); border: 1px solid var(--ink); background: transparent; font: 600 12px/1 var(--sans); cursor: pointer; }
-.sec-load-more:hover { color: var(--paper); background: var(--ink); }
 .sec-empty-state { display: grid; gap: 8px; padding: 34px 0; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--paper-deep); }
 .sec-empty-state strong { font: 600 21px/1 var(--serif); }
 .sec-empty-state span { color: var(--ink-muted); font-size: 12px; }
@@ -3111,14 +3109,6 @@ td { font-size: 14px; }
   color: var(--ink-muted);
   font-size: 13px;
 }
-.stock-analysis-filings .sec-filing-footer {
-  flex: none;
-  min-height: 12px;
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--hairline);
-}
-.stock-analysis-filings .sec-load-more { margin-top: 0; padding: 8px 14px; font-size: 12px; }
 
 .fundamentals-bottom-sheet { position: absolute; z-index: 30; top: calc(100% + 5px); left: 0; }
 
