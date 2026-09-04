@@ -12,6 +12,7 @@ import {
   type PreparedSecFilingMeta,
   type SecModelCall,
 } from "../../lib/sec-pipeline.ts";
+import type { FundamentalsD1Database } from "../../lib/fundamentals-d1.ts";
 import type { SecAnalysisArtifact } from "../../lib/sec-types.ts";
 import type { SecFilingSummary, SecNodePlan, SecNodeResult, SecNodeSpec } from "../../lib/sec.ts";
 import { SEC_ANALYSIS_SCHEMA_VERSION, type FilingBlock, type ManagerReview, type SecHistorySnapshot } from "../../lib/sec-analysis.ts";
@@ -30,6 +31,8 @@ type R2BucketLike = {
 
 export type SecPipelineEnv = SecCronEnv & {
   SEC_FILINGS: R2BucketLike;
+  /** The same D1 database the Web Worker binds. Optional only so tests can build a partial env. */
+  DB?: FundamentalsD1Database;
   SEC_USER_AGENT: string;
   AI_API_KEY?: string;
   SEC_ANALYSIS_MODEL?: string;

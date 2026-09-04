@@ -17,11 +17,16 @@ import { WEB_WORKER_CONFIG_PATH } from "../config.ts";
 
 const execFileAsync = promisify(execFile);
 
-const configPath = process.env.SEC_WEB_WRANGLER_CONFIG ?? WEB_WORKER_CONFIG_PATH;
+// Any Worker that binds D1 needs this check, not just the Web one: the config it reads only has to
+// name a DB binding with a migrations_dir. `SEC_WRANGLER_CONFIG` is the Worker-neutral name;
+// `SEC_WEB_WRANGLER_CONFIG` stays for the Web deploy scripts and the existing tests.
+const configPath = process.env.SEC_WRANGLER_CONFIG ?? process.env.SEC_WEB_WRANGLER_CONFIG ?? WEB_WORKER_CONFIG_PATH;
 // `npx` resolves the pinned devDependency; the override lets a test stand in for the real CLI.
-const [wranglerCommand, ...wranglerArgs] = (process.env.SEC_WEB_WRANGLER_BIN ?? "npx wrangler").split(" ");
+const [wranglerCommand, ...wranglerArgs] = (process.env.SEC_WRANGLER_BIN ?? process.env.SEC_WEB_WRANGLER_BIN ?? "npx wrangler").split(" ");
 
-const config = JSON.parse(await readFile(configPath, "utf8")) as {
+// The Web Worker's config is generated JSON; the Pipeline's is the committed JSONC. Wrangler's
+// JSONC allows whole-line comments, and value strings such as URLs keep their slashes.
+const config = JSON.parse((await readFile(configPath, "utf8")).replace(/^\s*\/\/.*$/gm, "")) as {
   d1_databases?: Array<{
     binding: string;
     database_name?: string;

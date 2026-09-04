@@ -31,6 +31,12 @@ test("keeps both Cloudflare Workers as explicit deploy units", async () => {
   assert.match(packageSource, /wrangler versions upload --config dist\/server\/wrangler\.json/);
   assert.match(packageSource, /"worker:pipeline:version"/);
   assert.match(packageSource, /wrangler versions upload --config workers\/pipeline\/wrangler\.jsonc/);
+  // The Pipeline binds D1 directly rather than asking the Web Worker to write for it. Its config is
+  // the committed source, so the id is real here and no prepare step stands between it and deploy;
+  // the deploy does have to pass the same migration gate the Web Worker passes.
+  assert.match(pipelineConfig, /"binding": "DB"/);
+  assert.doesNotMatch(pipelineConfig, /00000000-0000-4000-8000-000000000000/);
+  assert.match(packageSource, /"worker:pipeline:deploy": "npm run worker:pipeline:check:migrations/);
 });
 
 test("exposes the standalone stock and report routes", async () => {

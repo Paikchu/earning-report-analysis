@@ -48,6 +48,13 @@ printf %s "$SEC_REFRESH_KEY" | npx wrangler secret put SEC_REFRESH_KEY --config 
 
 ## Pipeline Worker
 
+受版本控制的源配置是 `workers/pipeline/wrangler.jsonc`，部署直接用它，没有生成步骤。它现在也绑定
+D1——基本面同步由这个 Worker 直接写库，不再让 Web 代写——D1 id 就写在配置里，和同一份文件里的
+bucket 名、Worker 名一样是 account 内的标识符，不是凭据。所以 Pipeline 不需要任何 Build variable。
+
+部署前会先跑 `worker:pipeline:check:migrations`，向远端 D1 确认这份构建带的 migration 全部
+apply 过——这道门原本只保护 Web，现在写库的主力是 Pipeline，它更需要。
+
 先部署关闭 Cron 的 staging（独立 Worker、Workflow 和 R2）：
 
 ```bash
@@ -56,7 +63,10 @@ printf %s "$SEC_REFRESH_KEY" | npx wrangler secret put SEC_REFRESH_KEY --config 
 printf %s "$AI_API_KEY" | npx wrangler secret put AI_API_KEY --config workers/pipeline/wrangler.jsonc --env staging
 ```
 
-staging 的 Cron 列表为空，只能通过显式 POST 打 canary。
+**staging 没有 D1 绑定**，因为它绝不能写生产库，而它自己还没有库。它的 Cron 列表为空，正常不会
+走到基本面同步；显式 POST 的 canary 如果走到，会拿到明确的 "Pipeline has no D1 binding" 报错，
+而不是静默写错地方。要让 staging 具备这个能力，先建一个 staging D1，再给 `env.staging` 补上
+绑定。
 
 ```bash
 npm run worker:pipeline:deploy
@@ -99,11 +109,12 @@ npx wrangler deploy --config workers/pipeline/wrangler.jsonc --env="" --keep-var
 两个 Worker 都用版本回滚，不重新构建：
 
 ```bash
-npx wrangler rollback <version-id> --config dist/server/wrangler.json          # Web
-npx wrangler rollback <version-id> --config workers/pipeline/wrangler.jsonc    # Pipeline
+npx wrangler rollback <version-id> --config dist/server/wrangler.json    # Web
+npx wrangler rollback <version-id> --config workers/pipeline/wrangler.jsonc  # Pipeline
 ```
 
 Web Worker 的回滚依赖本地 `dist/`（构建产物，已 gitignore）。重新构建后需要先跑
-`worker:web:prepare` 填回真实 D1 id，配置才指向正确的库。
+`worker:web:prepare` 填回真实 D1 id，配置才指向正确的库。Pipeline 用的是受版本控制的配置，
+没有这一步。
 
 已发布的报告不随 Worker 回滚改变——它们在 D1 里，只有跨过门禁的分析才会写入。

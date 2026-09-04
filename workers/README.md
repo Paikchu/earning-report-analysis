@@ -39,6 +39,9 @@ Deploy command: npm run worker:pipeline:deploy
 Non-production branch deploy command: npm run worker:pipeline:version
 ```
 
+Pipeline 不需要 Build variables：它直接从 committed 的 `wrangler.jsonc` 部署，D1 id 就写在里面
+（account 内的标识符，不是凭据，和同一份配置里的 bucket 名、Worker 名同级）。
+
 Pipeline 的 `SEC_REFRESH_KEY` 与 `AI_API_KEY` 是 Worker runtime secrets，不是 Build
 variables。生产部署命令使用 `--keep-vars`，避免覆盖 Dashboard 中现有 runtime vars。
 
@@ -69,9 +72,14 @@ Pipeline Worker：
 ```text
 lib/*
 workers/pipeline/*
+workers/web/migrations/*
+workers/web/scripts/check-migrations.ts
 tsconfig.json
 package.json
 package-lock.json
 ```
+
+Pipeline 也监听 migrations 目录：它绑定 D1 之后，部署前要跑同一套 migration 门禁，构建里带的
+migration 列表必须跟 Web 一致。
 
 详细的密钥、迁移、staging 与回滚顺序见 [`../docs/deploy.md`](../docs/deploy.md)。

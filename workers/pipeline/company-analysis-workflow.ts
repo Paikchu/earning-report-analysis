@@ -10,6 +10,7 @@ import { hashString } from "../../lib/sec-analysis.ts";
 import { serviceFetcher } from "../../lib/service-binding.ts";
 import type { CompanyAnalysisWorkflowParams } from "./core.ts";
 import { runCompanyAnalysisAgent } from "./company-analysis-agent.ts";
+import { syncFundamentals } from "./fundamentals.ts";
 import { sitePost, type SecPipelineEnv } from "./operations.ts";
 
 const READINESS_DELAYS = [0, 15 * 60_000, 2 * 60 * 60_000, 8 * 60 * 60_000, 24 * 60 * 60_000, 48 * 60 * 60_000] as const;
@@ -67,11 +68,12 @@ export async function executeCompanyAnalysisWorkflow(
       if (delay > 0) {
         await step.sleepUntil(`yahoo-readiness-${readinessLabel(delay)}`, createdAt.getTime() + delay);
       }
-      await step.do(`yahoo-refresh-${String(index).padStart(2, "0")}`, () => sitePost(env, siteFetch, "/api/internal/fundamentals/refresh", {
-        ticker: params.ticker,
-        targetPeriodEnd: params.reportDate,
-        triggerRef: params.triggerRef,
-      }));
+      await step.do(`yahoo-refresh-${String(index).padStart(2, "0")}`, () => {
+        // Only staging reaches this: it deliberately has no D1 binding, because it must never write
+        // the production database and has no database of its own.
+        if (!env.DB) throw new Error("Pipeline has no D1 binding — fundamentals cannot be synced from this environment");
+        return syncFundamentals(env.DB, params.ticker);
+      });
       currentPacket = await step.do(`current-quarter-packet-${String(index).padStart(2, "0")}`, () => readPacket(env, siteFetch, params, "current_quarter"));
       if (currentPacket.ready) break;
     }

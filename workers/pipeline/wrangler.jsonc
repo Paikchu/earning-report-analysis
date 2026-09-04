@@ -43,6 +43,19 @@
       "bucket_name": "earning-report-analysis-sec-filings"
     }
   ],
+  // The same database the Web Worker binds — this Worker writes it directly rather than asking the
+  // Web Worker to write on its behalf. The id is an account-scoped identifier, not a credential,
+  // and is committed here the way the bucket and Worker names above are; the Web Worker's config
+  // carries a placeholder only because `vinext build` generates it. migrations_dir points at their
+  // single source directory so worker:pipeline:check:migrations compares the same list Web applies.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "earning-report-analysis-sec-web",
+      "database_id": "3c917a4c-3562-4de1-8b21-586fa384e63f",
+      "migrations_dir": "../web/migrations"
+    }
+  ],
   // The Web Worker's public hostname is unreachable from inside this Worker — two Workers on the
   // same workers.dev subdomain get a 404 from the edge before the request lands. Every bridge call
   // goes through this binding instead. Block comments would break check-config.ts, which strips
@@ -102,6 +115,9 @@
           "bucket_name": "earning-report-analysis-sec-filings-staging"
         }
       ],
+      // No D1 binding: staging must never write the production database, and it has no database of
+      // its own yet. Its Cron list is empty, so nothing reaches the fundamentals sync on its own; a
+      // canary that does gets the explicit "no D1 binding" error instead of a silent wrong write.
       "triggers": { "crons": [] }
     }
   },
