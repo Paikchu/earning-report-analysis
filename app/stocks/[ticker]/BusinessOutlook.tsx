@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import type { PublicCompanyAnalysisResponse } from "@/lib/company-analysis/contracts";
 import { companyAnalysisNotice, shouldPollCompanyAnalysis } from "@/lib/company-analysis/display-state";
+import { OutlookParagraph } from "./OutlookParagraph";
 
 type RequestStatus = "loading" | "ready" | "empty" | "error";
 
@@ -70,7 +71,7 @@ function BusinessOutlookContent({ ticker }: { ticker: string }) {
         <span>{analysis.period?.label}</span>
       </div>
       <h2 className="stock-outlook__headline">{overview.headline}</h2>
-      <p className="stock-outlook__lede">{overview.introduction}</p>
+      <OutlookParagraph key={overview.introduction} className="stock-outlook__lede" text={overview.introduction} label="背景说明" />
       {companyAnalysisNotice(analysis.latestRun, true) && <p className="stock-outlook__updating" role="status">{companyAnalysisNotice(analysis.latestRun, true)}</p>}
 
       <ol className="stock-outlook__clues" aria-label="本次最重要的四项判断">
@@ -79,7 +80,7 @@ function BusinessOutlookContent({ ticker }: { ticker: string }) {
             <span className="stock-outlook__clue-index" aria-hidden="true">{highlight.ordinal}</span>
             <div>
               <h3 className="stock-outlook__clue-title">{highlight.title}</h3>
-              <p className="stock-outlook__clue-desc">{highlight.body}</p>
+              <OutlookParagraph key={highlight.body} className="stock-outlook__clue-desc" text={highlight.body} label={`第 ${highlight.ordinal} 项判断`} />
             </div>
           </li>
         ))}

@@ -2704,47 +2704,63 @@ td { font-size: 14px; }
 
 .stock-analysis-primary { min-width: 0; display: flex; flex-direction: column; }
 
-/* Company-level business outlook. The generated copy follows an editorial
-   report rhythm; the five internal analysis pillars stay out of the UI. */
-.stock-outlook { padding: clamp(34px, 4vw, 58px) 0 clamp(28px, 3vw, 44px); border-bottom: 1px solid var(--paper-deep); }
-.stock-outlook--state { min-height: 112px; }
-.stock-outlook__meta { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; }
-.stock-outlook__meta > span:last-child { color: var(--ink-muted); font: 600 11px/1.3 var(--sans); letter-spacing: .08em; }
+/* A compact editorial overview, sized to its column rather than the window.
+   Long paragraphs disclose inline; titles and all four judgments stay visible. */
+.stock-outlook {
+  --outlook-preview-lines: 3;
+  --outlook-body-size: 1rem;
+  --outlook-body-leading: 1.6;
+  container: outlook / inline-size;
+  padding: 1.25rem 0 1.5rem;
+  border-bottom: 1px solid var(--paper-deep);
+}
+.stock-outlook--state { min-height: 100px; }
+.stock-outlook__meta { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .375rem 1rem; margin-bottom: .75rem; }
+.stock-outlook__meta > span:last-child { color: var(--ink-muted); font: 500 .75rem/1.5 var(--sans); }
 .stock-outlook__eyebrow {
   display: block;
-  margin-bottom: 22px;
   color: var(--color-loss);
-  font: 750 12px/1 var(--sans);
+  font: 700 .75rem/1.5 var(--sans);
   letter-spacing: .12em;
 }
 .stock-outlook__headline {
-  max-width: 19ch;
   margin: 0;
-  font: 600 clamp(34px, 3.2vw, 54px)/1.18 var(--serif);
-  letter-spacing: -.035em;
+  font: 600 clamp(1.375rem, 1.05rem + 1.2cqi, 1.75rem)/1.4 var(--serif);
+  letter-spacing: -.018em;
   text-wrap: pretty;
+  overflow-wrap: anywhere;
 }
 .stock-outlook__lede {
-  max-width: 58ch;
-  margin: 24px 0 0;
+  margin-top: .75rem;
   color: var(--ink-soft);
-  font: 550 clamp(16px, 1.4vw, 19px)/1.8 var(--serif);
-  text-wrap: pretty;
+  font: 400 var(--outlook-body-size)/var(--outlook-body-leading) var(--serif);
 }
-.stock-outlook__updating { margin: 13px 0 0; color: var(--ink-muted); font: 500 12px/1.6 var(--sans); }
+.stock-outlook__updating { margin: .5rem 0 0; color: var(--ink-muted); font: 500 .75rem/1.6 var(--sans); }
 .stock-outlook__clues {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 30px clamp(34px, 4vw, 64px);
-  max-width: 920px;
-  margin: 38px 0 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: .875rem 1.5rem;
+  margin: 1rem 0 0;
   padding: 0;
   list-style: none;
 }
-.stock-outlook__clue { min-width: 0; display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: start; gap: 0 14px; }
-.stock-outlook__clue-index { padding-top: 4px; color: var(--color-loss); font: 750 12px/1 var(--sans); font-variant-numeric: tabular-nums; }
-.stock-outlook__clue-title { margin: 0 0 8px; font: 600 clamp(17px, 1.25vw, 20px)/1.35 var(--serif); letter-spacing: -.012em; }
-.stock-outlook__clue-desc { margin: 0; color: var(--ink-muted); font: 520 15px/1.72 var(--serif); }
+.stock-outlook__clue { min-width: 0; display: grid; grid-template-columns: 1.25rem minmax(0, 1fr); align-items: start; gap: 0 .5rem; padding-top: .75rem; border-top: 1px solid var(--hairline-soft); }
+.stock-outlook__clue-index { padding-top: .3125rem; color: var(--color-loss); font: 700 .75rem/1 var(--sans); font-variant-numeric: tabular-nums; }
+.stock-outlook__clue-title { margin: 0 0 .375rem; font: 600 1rem/1.5 var(--serif); overflow-wrap: anywhere; }
+.stock-outlook__clue-desc { color: var(--ink-soft); font: 400 var(--outlook-body-size)/var(--outlook-body-leading) var(--serif); }
+.stock-outlook__excerpt { margin: 0; overflow-wrap: anywhere; }
+.stock-outlook__excerpt[data-expanded="false"] { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--outlook-preview-lines); overflow: hidden; }
+.stock-outlook__read-more {
+  display: inline-flex; align-items: center; gap: .375rem; min-height: 2rem;
+  margin-top: .125rem; padding: 0; border: 0; background: transparent;
+  color: var(--color-profit); font: 600 .75rem/1.5 var(--sans); cursor: pointer;
+}
+.stock-outlook__read-more:hover { color: var(--color-loss); }
+.stock-outlook__read-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@container outlook (min-width: 34rem) {
+  .stock-outlook__clues { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (pointer: coarse) { .stock-outlook__read-more { min-height: 44px; } }
 .stock-outlook__state-row button {
   padding: 0 0 3px;
   color: var(--accent);
@@ -2757,7 +2773,7 @@ td { font-size: 14px; }
 .stock-outlook__state-row button:hover { color: var(--color-loss); }
 .stock-outlook__state-row button:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; }
 .stock-outlook__state { margin: 0; padding: 8px 0 4px; color: var(--ink-muted); font: 500 14px/1.6 var(--serif); }
-.stock-outlook__state-row { display: flex; align-items: baseline; gap: 16px; }
+.stock-outlook__state-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem 1rem; }
 .stock-outlook__state-row button { font-size: 14px; }
 
 .fundamentals-workbench,
@@ -3174,13 +3190,7 @@ td { font-size: 14px; }
   .stock-analysis-header { min-height: 0; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; padding-bottom: 16px; }
   .stock-analysis-header h1 { font-size: 27px; }
   .stock-analysis-header p { flex-basis: 100%; text-align: left; }
-  .stock-outlook { padding-top: 18px; }
-  .stock-outlook__meta { align-items: flex-start; flex-direction: column; gap: 0; }
-  .stock-outlook__meta > span:last-child { margin: -8px 0 18px; }
-  .stock-outlook__headline { font-size: clamp(31px, 9.5vw, 42px); }
-  .stock-outlook__lede { margin-top: 18px; font-size: 16px; }
-  .stock-outlook__clues { grid-template-columns: minmax(0, 1fr); gap: 24px; margin-top: 30px; }
-  .stock-outlook__clue { grid-template-columns: 28px minmax(0, 1fr); gap: 0 10px; }
+  .stock-outlook { padding-top: 1rem; }
   .fundamentals-workbench { padding-top: 26px; }
   .fundamentals-workbench__header { min-height: 0; flex-wrap: wrap; align-items: baseline; gap: 10px 12px; }
   .fundamentals-workbench__title { flex: 1 1 100%; }
