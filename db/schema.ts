@@ -245,6 +245,8 @@ export const secAnalysisJobs = sqliteTable("sec_analysis_jobs", {
 
 export const companyAnalysisRuns = sqliteTable("company_analysis_runs", {
   analysisId: text("analysis_id").primaryKey(),
+  workflowInstanceId: text("workflow_instance_id"),
+  recoveryCount: integer("recovery_count").notNull().default(0),
   ticker: text("ticker").notNull(),
   triggerRef: text("trigger_ref").notNull(),
   periodId: text("period_id").notNull(),

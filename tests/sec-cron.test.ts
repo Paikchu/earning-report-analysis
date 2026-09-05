@@ -71,7 +71,7 @@ test("starts one idempotent company analysis workflow for each backfill candidat
   assert.match(started[0]?.id ?? "", /^company-/);
 });
 
-test("force backfill requests incomplete candidates and creates a fresh workflow instance", async () => {
+test("repeated force backfills share the recovery id until that attempt actually ends", async () => {
   const ids: string[] = [];
   const triggerRefs: string[] = [];
   const analysisIds: Array<string | undefined> = [];
@@ -99,7 +99,7 @@ test("force backfill requests incomplete candidates and creates a fresh workflow
   await runCompanyAnalysisSweep(sweepEnv, { forceIncomplete: true });
   await runCompanyAnalysisSweep(sweepEnv, { forceIncomplete: true });
 
-  assert.equal(new Set(ids).size, 2);
+  assert.equal(new Set(ids).size, 1);
   assert.deepEqual(triggerRefs, ["memory-job-1:4", "memory-job-1:4"]);
   assert.deepEqual(analysisIds, ["company:MSFT:existing", "company:MSFT:existing"]);
 });

@@ -18,7 +18,7 @@ const READINESS_DELAYS = [0, 15 * 60_000, 2 * 60 * 60_000, 8 * 60 * 60_000, 24 *
 export type CompanyWorkflowStep = {
   do<T>(name: string, callback: () => Promise<T>): Promise<T>;
   do<T>(name: string, config: CompanyWorkflowStepConfig, callback: () => Promise<T>): Promise<T>;
-  sleepUntil(name: string, timestamp: Date | number): Promise<void>;
+  sleep(name: string, duration: number): Promise<void>;
 };
 
 type CompanyWorkflowStepConfig = {
@@ -43,7 +43,7 @@ export const COMPANY_AGENT_MODEL_STEP_CONFIG = {
 export async function executeCompanyAnalysisWorkflow(
   params: CompanyAnalysisWorkflowParams,
   workflowInstanceId: string,
-  createdAt: Date,
+  _createdAt: Date,
   step: CompanyWorkflowStep,
   env: SecPipelineEnv,
   fetcher: typeof fetch = fetch,
@@ -58,21 +58,35 @@ export async function executeCompanyAnalysisWorkflow(
     memoryVersion: params.memoryVersion,
     modelVersion,
     promptVersion: COMPANY_ANALYSIS_PROMPT_VERSION,
+    workflowInstanceId,
   };
   try {
-    await step.do("company-run-created", () => updateStatus(env, { ...statusBase, status: "waiting_fundamentals" }));
+    const claimed = await step.do("company-run-created", () => {
+      assertTrackedTicker(env, params.ticker);
+      return new D1CompanyAnalysisRepository(requireDb(env)).beginRun({
+        ...statusBase, status: "waiting_fundamentals", updatedAt: new Date().toISOString(),
+      }, params.recoveryAttempt ?? 0, params.expectedUpdatedAt);
+    });
+    if (!claimed) return { status: "superseded", analysisId };
     let currentPacket: CompanyAnalysisPacket | null = null;
     for (let index = 0; index < READINESS_DELAYS.length; index += 1) {
       const delay = READINESS_DELAYS[index]!;
       if (delay > 0) {
-        await step.sleepUntil(`yahoo-readiness-${readinessLabel(delay)}`, createdAt.getTime() + delay);
+        // Relative durable sleeps cannot target the past after queue delays or step retries.
+        // Fixed intervals and names also preserve the same execution path on Workflow replay.
+        await step.sleep(`yahoo-readiness-${readinessLabel(delay)}`, delay - READINESS_DELAYS[index - 1]!);
       }
-      await step.do(`yahoo-refresh-${String(index).padStart(2, "0")}`, () => {
-        // Only staging reaches this: it deliberately has no D1 binding, because it must never write
-        // the production database and has no database of its own.
-        if (!env.DB) throw new Error("Pipeline has no D1 binding — fundamentals cannot be synced from this environment");
-        return syncFundamentals(env.DB, params.ticker);
-      });
+      try {
+        await step.do(`yahoo-refresh-${String(index).padStart(2, "0")}`, () => {
+          // Staging deliberately has no production D1 binding.
+          if (!env.DB) throw new Error("Pipeline has no D1 binding — fundamentals cannot be synced from this environment");
+          return syncFundamentals(env.DB, params.ticker);
+        });
+      } catch {
+        // A failed refresh does not invalidate a previously accepted Yahoo snapshot. The packet
+        // below still enforces the target quarter; absent data waits instead of running the Agent.
+        console.warn(JSON.stringify({ event: "company-analysis-yahoo-refresh-failed", ticker: params.ticker, index }));
+      }
       currentPacket = await step.do(`current-quarter-packet-${String(index).padStart(2, "0")}`, () => readPacket(env, params, "current_quarter"));
       if (currentPacket.ready) break;
     }
@@ -97,7 +111,7 @@ export async function executeCompanyAnalysisWorkflow(
       modelVersion,
       schemaVersion: COMPANY_ANALYSIS_SCHEMA_VERSION,
     }));
-    const generatedAt = new Date().toISOString();
+    const generatedAt = await step.do("company-generation-time", async () => new Date().toISOString());
     await step.do("company-run-analyzing", () => updateStatus(env, {
       ...statusBase,
       analysisId,

@@ -79,6 +79,7 @@ test("publishes immutable analysis rows and reads the latest ready version", asy
   const database = new SqliteD1Database();
   try {
     await applySqlMigration(database, "../../workers/pipeline/migrations/0009_company_analysis.sql");
+    await applySqlMigration(database, "../../workers/pipeline/migrations/0010_company_analysis_recovery.sql");
     const repository = new D1CompanyAnalysisRepository(database);
     const first = await repository.publish(publication());
     const duplicate = await repository.publish(publication());
@@ -95,6 +96,7 @@ test("promotes the same in-progress analysis row to an immutable publication", a
   const database = new SqliteD1Database();
   try {
     await applySqlMigration(database, "../../workers/pipeline/migrations/0009_company_analysis.sql");
+    await applySqlMigration(database, "../../workers/pipeline/migrations/0010_company_analysis_recovery.sql");
     const repository = new D1CompanyAnalysisRepository(database);
     await repository.upsertRun({
       analysisId: publication().analysisId,
@@ -122,6 +124,7 @@ test("backfill selects only the latest completed Memory version without an analy
   const database = new SqliteD1Database();
   try {
     await applySqlMigration(database, "../../workers/pipeline/migrations/0009_company_analysis.sql");
+    await applySqlMigration(database, "../../workers/pipeline/migrations/0010_company_analysis_recovery.sql");
     database.raw.exec(`
       CREATE TABLE sec_periods (period_id TEXT PRIMARY KEY, ticker TEXT NOT NULL, end_date TEXT NOT NULL);
       CREATE TABLE sec_memory_jobs (
@@ -159,15 +162,7 @@ test("backfill selects only the latest completed Memory version without an analy
       updatedAt: generatedAt,
     });
     assert.deepEqual(await repository.listBackfillCandidates(["AMZN"]), []);
-    assert.deepEqual(await repository.listBackfillCandidates(["AMZN"], 100, true), [{
-      analysisId: "company:AMZN:backfill",
-      ticker: "AMZN",
-      memoryJobId: "memory-latest",
-      memoryVersion: 7,
-      periodId: "AMZN:2026-03-31:quarter",
-      reportDate: "2026-03-31",
-      triggerRef: "memory-latest:7",
-    }]);
+    assert.deepEqual(await repository.listBackfillCandidates(["AMZN"], 100, true), [], "force recovery must not duplicate active work");
 
     await repository.upsertRun({
       analysisId: "company:AMZN:backfill",

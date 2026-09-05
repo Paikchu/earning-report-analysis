@@ -2,9 +2,13 @@ import { D1CompanyAnalysisRepository } from "../../lib/company-analysis/reposito
 import { D1SecRepository } from "../../lib/sec-d1.ts";
 import { isTrackedTicker, normalizeTrackedTicker, parseTrackedTickers } from "../../lib/sec-config.ts";
 import { hashString } from "../../lib/sec-analysis.ts";
+import { D1FundamentalsRepository } from "../../lib/fundamentals-d1.ts";
+import { resolveTargetPeriodEnd } from "../../lib/company-analysis/packet.ts";
+import { sha256 } from "../../lib/company-analysis/api.ts";
 
 export type SecWorkflowBinding<T = SecWorkflowParams> = {
   create(options: { id: string; params: T }): Promise<{ id: string }>;
+  get?(id: string): Promise<{ status(): Promise<{ status: string }> }>;
 };
 
 export type SecWorkflowParams = {
@@ -21,6 +25,8 @@ export type SecMemoryWorkflowParams = {
 
 export type CompanyAnalysisWorkflowParams = {
   analysisId?: string;
+  recoveryAttempt?: number;
+  expectedUpdatedAt?: string;
   ticker: string;
   memoryJobId: string;
   memoryVersion: number;
@@ -70,17 +76,39 @@ export async function runCompanyAnalysisSweep(
   options: { forceIncomplete?: boolean } = {},
 ): Promise<{ candidates: number; started: string[]; failed: string[] }> {
   if (!env.COMPANY_ANALYSIS_WORKFLOW) return { candidates: 0, started: [], failed: [] };
-  const candidates = await new D1CompanyAnalysisRepository(requireDb(env))
-    .listBackfillCandidates(trackedTickersFor(env), 100, options.forceIncomplete === true);
+  const repository = new D1CompanyAnalysisRepository(requireDb(env));
+  const tickers = trackedTickersFor(env);
+  if (env.COMPANY_ANALYSIS_WORKFLOW.get) {
+    const executions = await repository.listActiveExecutions(tickers, new Date(Date.now() - 60 * 60_000).toISOString());
+    for (const execution of executions) {
+      try {
+        const instance = await env.COMPANY_ANALYSIS_WORKFLOW.get(execution.workflowInstanceId);
+        const state = (await instance.status()).status;
+        if (["errored", "terminated", "complete"].includes(state)) {
+          await repository.markStoppedExecution(execution.analysisId, execution.workflowInstanceId, new Date().toISOString());
+        }
+      } catch {
+        // Unknown platform state is not permission to launch a duplicate running Agent.
+        console.warn(JSON.stringify({ event: "company-analysis-status-unavailable", analysisId: execution.analysisId }));
+      }
+    }
+  }
+  const candidates = await repository.listBackfillCandidates(tickers, 100, options.forceIncomplete === true);
   const started: string[] = [];
   const failed: string[] = [];
   for (const candidate of candidates) {
     const ticker = normalizeTrackedTicker(candidate.ticker);
     if (!ticker || !candidate.triggerRef) continue;
     try {
+      if (candidate.waitingForData) {
+        const snapshot = await new D1FundamentalsRepository(requireDb(env)).getLastGoodSnapshot(ticker);
+        if (!snapshot?.payloadHash || !resolveTargetPeriodEnd(snapshot.observations, candidate.reportDate)) continue;
+      }
       await env.COMPANY_ANALYSIS_WORKFLOW.create({
-        id: options.forceIncomplete
-          ? `company-${hashString(candidate.triggerRef)}-${crypto.randomUUID()}`
+        // A terminal run version has exactly one recovery id, even across concurrent Cron ticks
+        // or an ambiguous create response. The id changes only after that attempt actually ends.
+        id: candidate.analysisId
+          ? `company-recovery-${await sha256(`${candidate.analysisId}:${candidate.expectedUpdatedAt}`)}`
           : `company-${hashString(candidate.triggerRef)}`,
         params: { ...candidate, ticker },
       });

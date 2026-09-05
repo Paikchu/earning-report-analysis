@@ -32,6 +32,7 @@ const MIGRATION_MANIFEST: ReadonlyArray<readonly [string, string]> = [
   ["0008_yahoo_fundamentals_sync.sql", "79156d953502376b"],
   ["0009_company_analysis.sql", "1ab2c07836e00175"],
   ["0009_huge_enchantress.sql", "568351ceb9306b36"],
+  ["0010_company_analysis_recovery.sql", "73b777a14e0c30b2"],
 ];
 
 test("the analysis backend owns the migrations, and the Web Worker no longer carries them", async () => {
@@ -68,6 +69,7 @@ test("relocating the files changed no migration's name or contents", async () =>
     "0008_yahoo_fundamentals_sync.sql",
     "0009_company_analysis.sql",
     "0009_huge_enchantress.sql",
+    "0010_company_analysis_recovery.sql",
   ]);
 
   // Wrangler applies in sorted filename order; that ordering must be stable across the move.

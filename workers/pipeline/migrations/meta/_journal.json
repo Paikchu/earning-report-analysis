@@ -71,6 +71,13 @@
       "when": 1788438956316,
       "tag": "0009_huge_enchantress",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1788630802804,
+      "tag": "0010_company_analysis_recovery",
+      "breakpoints": true
     }
   ]
 }
