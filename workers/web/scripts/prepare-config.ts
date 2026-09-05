@@ -1,28 +1,32 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-import { PLACEHOLDER_D1_DATABASE_ID, WEB_WORKER_CONFIG_PATH } from "../config.ts";
+import { WEB_WORKER_CONFIG_PATH } from "../config.ts";
 
+/**
+ * Prepares the generated Web Worker config for deployment.
+ *
+ * It used to exist to inject the real D1 id, because `vinext build` bakes a placeholder into the
+ * generated config. The Web Worker no longer binds D1 at all, so the job reversed: this script now
+ * *strips* any D1 binding the generator emits, and `check-config.ts` refuses a config that still
+ * carries one. A leftover binding would be exactly the unexplained direct database access the
+ * service boundary was drawn to remove.
+ */
 const configPath = process.env.SEC_WEB_WRANGLER_CONFIG ?? WEB_WORKER_CONFIG_PATH;
-const databaseId = required("SEC_WEB_D1_DATABASE_ID");
 const config = JSON.parse(await readFile(configPath, "utf8")) as {
   name?: string;
-  d1_databases?: Array<{ binding: string; database_id: string; database_name?: string; migrations_dir?: string }>;
+  d1_databases?: Array<{ binding: string }>;
+  services?: Array<{ binding: string; service: string }>;
   vars?: Record<string, string>;
 };
 
-if (!Array.isArray(config.d1_databases) || !config.d1_databases.some((binding) => binding.binding === "DB")) {
-  throw new Error("Generated Vinext config does not contain the DB D1 binding");
+const removedD1Bindings = (config.d1_databases ?? []).map((binding) => binding.binding);
+delete config.d1_databases;
+
+if (!config.services?.some((binding) => binding.binding === "PIPELINE")) {
+  throw new Error("Generated Vinext config does not contain the PIPELINE service binding — every analysis read depends on it");
 }
 
 config.name = process.env.SEC_WEB_WORKER_NAME?.trim() || "earning-report-analysis-sec-web";
-config.d1_databases = config.d1_databases.map((binding) => binding.binding === "DB"
-  ? {
-      ...binding,
-      database_id: databaseId,
-      database_name: process.env.SEC_WEB_D1_DATABASE_NAME?.trim() || "earning-report-analysis-sec-web",
-      migrations_dir: "../migrations",
-    }
-  : binding);
 config.vars = {
   ...config.vars,
   ...(process.env.SEC_PIPELINE_ORIGIN ? { SEC_PIPELINE_ORIGIN: process.env.SEC_PIPELINE_ORIGIN.trim() } : {}),
@@ -32,16 +36,6 @@ await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
 console.log(JSON.stringify({
   configPath,
   worker: config.name,
-  d1Binding: "DB",
-  databaseIdConfigured: true,
-  databaseName: config.d1_databases.find((binding) => binding.binding === "DB")?.database_name,
-  migrationsDirectory: "dist/migrations",
+  removedD1Bindings,
+  pipelineServiceBinding: true,
 }));
-
-function required(name: string): string {
-  const value = process.env[name]?.trim() ?? "";
-  if (!value || value === PLACEHOLDER_D1_DATABASE_ID || !/^[0-9a-f-]{20,}$/i.test(value)) {
-    throw new Error(`${name} must be the real Cloudflare D1 database id`);
-  }
-  return value;
-}

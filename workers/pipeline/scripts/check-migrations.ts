@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { promisify } from "node:util";
 
-import { WEB_WORKER_CONFIG_PATH } from "../config.ts";
+import { PIPELINE_WORKER_CONFIG_PATH } from "../../web/config.ts";
 
 /**
  * Deploying the Worker and applying D1 migrations are two separate commands, and nothing used to
@@ -17,10 +17,10 @@ import { WEB_WORKER_CONFIG_PATH } from "../config.ts";
 
 const execFileAsync = promisify(execFile);
 
-// Any Worker that binds D1 needs this check, not just the Web one: the config it reads only has to
-// name a DB binding with a migrations_dir. `SEC_WRANGLER_CONFIG` is the Worker-neutral name;
-// `SEC_WEB_WRANGLER_CONFIG` stays for the Web deploy scripts and the existing tests.
-const configPath = process.env.SEC_WRANGLER_CONFIG ?? process.env.SEC_WEB_WRANGLER_CONFIG ?? WEB_WORKER_CONFIG_PATH;
+// The Pipeline Worker owns the analysis database and its migrations, so this check moved here with
+// them. It still only needs a config naming a DB binding with a migrations_dir, and the two
+// override variables are kept so existing scripts and tests keep working unchanged.
+const configPath = process.env.SEC_WRANGLER_CONFIG ?? process.env.SEC_WEB_WRANGLER_CONFIG ?? PIPELINE_WORKER_CONFIG_PATH;
 // `npx` resolves the pinned devDependency; the override lets a test stand in for the real CLI.
 const [wranglerCommand, ...wranglerArgs] = (process.env.SEC_WRANGLER_BIN ?? process.env.SEC_WEB_WRANGLER_BIN ?? "npx wrangler").split(" ");
 
@@ -37,7 +37,7 @@ const config = JSON.parse((await readFile(configPath, "utf8")).replace(/^\s*\/\/
 
 const database = config.d1_databases?.find((binding) => binding.binding === "DB");
 if (!database?.database_name || !database.migrations_dir) {
-  throw new Error(`${configPath} has no named DB D1 binding with a migrations_dir — run \`npm run worker:web:prepare\` first`);
+  throw new Error(`${configPath} has no named DB D1 binding with a migrations_dir`);
 }
 
 const databaseName = database.database_name;

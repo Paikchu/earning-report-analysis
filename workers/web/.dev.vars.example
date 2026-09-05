@@ -1,3 +1,7 @@
 SEC_PIPELINE_ORIGIN=https://earning-report-analysis-sec-pipeline.example.workers.dev
 SEC_REFRESH_KEY=
 SEC_ADMIN_TOKEN=
+
+# This Worker's own read credential for the analysis backend: "<keyId>.<secret>", matching one
+# entry in the backend's ANALYSIS_READ_KEYS. Server-only — never expose it to the browser.
+ANALYSIS_READ_TOKEN="local-web.replace-with-a-local-secret-at-least-24-chars"

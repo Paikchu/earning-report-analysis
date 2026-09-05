@@ -47,15 +47,10 @@ export async function hydrateCachedFilings(
   return Promise.all(filings.map(async ({ structuredPeriodId, ...filing }) => ({
     ...filing,
     summary: await repository.getSummary(ticker, filing.accessionNumber),
+    // A rejection here is a storage failure, not "no report". Swallowing it made an outage
+    // indistinguishable from an unanalysed filing, so it propagates and the caller answers 503.
     analysis: structuredPeriodId && repository.getPublishedReport
-      ? await repository.getPublishedReport(ticker, structuredPeriodId).catch(() => null)
+      ? await repository.getPublishedReport(ticker, structuredPeriodId)
       : null,
   })));
-}
-
-export async function getCachedSecFeed(repository: SecRepository, rawTicker: string): Promise<SecFilingFeed> {
-  const ticker = cleanSecTicker(rawTicker);
-  const cached = await readCachedSecFeed(repository, ticker);
-  if (!cached) return { ticker, company: null, filings: [], fetchedAt: null, status: "pending" };
-  return { ...cached, filings: await hydrateCachedFilings(repository, ticker, cached.filings) };
 }

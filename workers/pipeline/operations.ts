@@ -18,6 +18,7 @@ import { cleanSecAccession, cleanSecTicker, type SecFiling, type SecFilingFeed, 
 import { SEC_ANALYSIS_SCHEMA_VERSION, type FilingBlock, type ManagerReview, type SecHistorySnapshot } from "../../lib/sec-analysis.ts";
 import { normalizeCompanyFacts } from "../../lib/sec-history.ts";
 import { assertTrackedTicker, requireDb, type SecCronEnv } from "./core.ts";
+import type { AnalysisReadEnv } from "./read-api/router.ts";
 import type { SecModelExecution } from "./retry-policy.ts";
 import type { PreparedFilingReference, SecPipelineOperations, WorkflowJobUpdate } from "./workflow-core.ts";
 import { jobAnalysisVersionFor } from "./workflow-core.ts";
@@ -28,7 +29,7 @@ type R2BucketLike = {
   put(key: string, value: string, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
 };
 
-export type SecPipelineEnv = SecCronEnv & {
+export type SecPipelineEnv = SecCronEnv & AnalysisReadEnv & {
   SEC_FILINGS: R2BucketLike;
   SEC_USER_AGENT: string;
   AI_API_KEY?: string;

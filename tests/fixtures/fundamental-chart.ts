@@ -1,3 +1,4 @@
+import { ANALYSIS_API_SCHEMA_VERSION } from "../../lib/analysis-contract/versions.ts";
 import {
   FUNDAMENTAL_METRIC_CATALOG,
   type FundamentalMetricKey,
@@ -72,6 +73,7 @@ export function makeChartResponse(
   ],
 ): PublicFundamentalsResponse {
   return {
+    apiSchemaVersion: ANALYSIS_API_SCHEMA_VERSION,
     schemaVersion: FUNDAMENTALS_API_SCHEMA_VERSION,
     catalogVersion: FUNDAMENTAL_METRIC_CATALOG_VERSION,
     source: "yahoo_finance",
@@ -90,7 +92,7 @@ export function makeChartResponse(
       currency: "USD",
     })),
     series: [...series],
-    refresh: { recommended: true, scheduled: false },
+    refresh: { recommended: true, scheduled: false, mode: "backend_scheduled" },
   };
 }
 
@@ -105,6 +107,6 @@ export function makePendingChartResponse(): PublicFundamentalsResponse {
     issueCount: 0,
     periods: [],
     series: [],
-    refresh: { recommended: true, scheduled: true },
+    refresh: { recommended: true, scheduled: false, mode: "backend_scheduled" },
   };
 }

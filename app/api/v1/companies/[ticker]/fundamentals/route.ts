@@ -1,18 +1,17 @@
-import { getD1 } from "@/db";
-import {
-  handlePublicFundamentalsRequest,
-} from "@/lib/fundamentals-api";
-import { D1FundamentalsRepository } from "@/lib/fundamentals-d1";
-import { scheduleFundamentalRefresh } from "@/lib/fundamentals-runtime";
-import { findSecurity } from "@/lib/site-data";
+import { proxyAnalysisRead } from "@/lib/analysis-proxy";
 
+/**
+ * Reading fundamentals no longer schedules anything. The staleness refresh this route used to
+ * trigger on every read now runs on the backend's Cron sweep, so a page load cannot start an
+ * outbound Yahoo fetch and a database write any more.
+ */
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request, context: { params: Promise<{ ticker: string }> }) {
   const { ticker } = await context.params;
-  return handlePublicFundamentalsRequest(request, ticker, {
-    getRepository: async () => new D1FundamentalsRepository(await getD1()),
-    isRefreshEligible: (normalizedTicker) => findSecurity(normalizedTicker)?.type === "stock",
-    scheduleRefresh: scheduleFundamentalRefresh,
-  });
+  const url = new URL(request.url);
+  return proxyAnalysisRead(request, (client) => client.getFundamentals(ticker, {
+    metrics: url.searchParams.get("metrics"),
+    periodCount: url.searchParams.get("periodCount"),
+  }));
 }

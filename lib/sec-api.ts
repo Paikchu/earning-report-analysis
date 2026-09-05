@@ -1,12 +1,16 @@
-import { cleanSecTicker, type SecFilingFeed } from "./sec.ts";
-import { getCachedSecFeed } from "./sec-feed.ts";
-import type { SecRepository } from "./sec-types.ts";
+import { cleanSecTicker } from "./sec.ts";
 
-type SecSecurity = {
-  symbol: string;
-  type: "stock" | "etf";
-};
-
+/**
+ * Control-plane helpers for the Web Worker: administrative authentication, and forwarding a
+ * refresh or backfill down to the analysis backend. Nothing here reads analysis data.
+ *
+ * It used to also hold `handleSecFeedRequest` and `buildSecWatchlist`. Both were left without a
+ * caller by earlier work — the whitelist moved to the Pipeline Worker, and the feed endpoint was
+ * replaced by `/api/v1/companies/:ticker/filings` — and `handleSecFeedRequest` was the one thing
+ * pulling a repository into this module, which put a storage-touching import one hop away from the
+ * admin routes. Removing the dead pair is what makes `tests/analysis-boundary.test.ts` pass on the
+ * control plane rather than having to grant it an exception.
+ */
 export async function hasInternalSecAccess(request: Request, expectedSecret: string): Promise<boolean> {
   const supplied = request.headers.get("x-sec-refresh-key") ?? "";
   if (!expectedSecret || !supplied) return false;
@@ -75,47 +79,6 @@ export async function requestSecBackfill({
   fetcher?: typeof fetch;
 }): Promise<Response> {
   return requestSecAnalysis({ ticker, pipelineOrigin, refreshKey, fetcher, path: "backfill" });
-}
-
-export function buildSecWatchlist(
-  positionTickers: string[],
-  planTickers: string[],
-  securityType: (ticker: string) => "stock" | "etf" | null,
-): string[] {
-  const tickers = [...positionTickers, ...planTickers]
-    .map(cleanSecTicker)
-    .filter((ticker) => ticker && securityType(ticker) === "stock");
-  return [...new Set(tickers)].sort();
-}
-
-export async function handleSecFeedRequest({
-  user,
-  ticker,
-  security,
-  repository,
-}: {
-  user: { email: string } | null;
-  ticker: string;
-  security: SecSecurity | null;
-  repository: SecRepository;
-}): Promise<Response> {
-  if (!user) return Response.json({ error: "未登录。" }, { status: 401 });
-  if (!security) return Response.json({ error: "未找到对应的美股或 ETF。" }, { status: 404 });
-  if (security.type === "etf") {
-    const feed: SecFilingFeed = {
-      ticker: security.symbol,
-      company: null,
-      filings: [],
-      fetchedAt: null,
-      status: "not_applicable",
-    };
-    return privateJson(feed);
-  }
-  return privateJson(await getCachedSecFeed(repository, cleanSecTicker(ticker)));
-}
-
-function privateJson(value: unknown): Response {
-  return Response.json(value, { headers: { "cache-control": "private, no-store" } });
 }
 
 async function digest(value: string): Promise<Uint8Array> {

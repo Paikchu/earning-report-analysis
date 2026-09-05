@@ -1,11 +1,11 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 
-import { handleSecAnalysisRequest, runCompanyAnalysisSweep, runSecMemorySweep, runSecRefresh, type CompanyAnalysisBackfillParams, type CompanyAnalysisWorkflowParams, type SecMemoryWorkflowParams, type SecWorkflowParams } from "./core.ts";
+import { runCompanyAnalysisSweep, runSecRefresh, type CompanyAnalysisBackfillParams, type CompanyAnalysisWorkflowParams, type SecMemoryWorkflowParams, type SecWorkflowParams } from "./core.ts";
 import { executeCompanyAnalysisWorkflow, type CompanyWorkflowStep } from "./company-analysis-workflow.ts";
-import { handleFundamentalsRefreshRequest } from "./fundamentals.ts";
 import { executeSecMemoryWorkflow } from "./memory-workflow.ts";
 import { createSecPipelineOperations, type SecPipelineEnv } from "./operations.ts";
 import { retryDelayForAttempt } from "./retry-policy.ts";
+import worker from "./worker.ts";
 import { executeSecAnalysisWorkflow, type WorkflowStepContextLike, type WorkflowStepLike } from "./workflow-core.ts";
 
 const WORKFLOW_RETRY = {
@@ -68,44 +68,9 @@ export class CompanyAnalysisBackfillWorkflow extends WorkflowEntrypoint<SecPipel
 }
 
 /**
- * `JSON.stringify` renders an Error as `{}`, so a rejection reason has to be read off it before it
- * reaches the log. The old handler logged the raw settled results and every failure it did report
- * arrived as `"reason":{}` — the one line meant to explain a broken run explained nothing.
+ * The request and Cron handler lives in `./worker.ts` so it can be imported — and therefore tested
+ * — without `cloudflare:workers`, which only resolves inside the Workers runtime. The Workflow
+ * entrypoints above genuinely need that module, so they stay here, and this file remains the one
+ * Wrangler points `main` at.
  */
-function describeSettled(result: PromiseSettledResult<unknown>) {
-  return result.status === "fulfilled"
-    ? { status: result.status, value: result.value }
-    : { status: result.status, reason: result.reason instanceof Error ? result.reason.message : String(result.reason) };
-}
-
-const worker = {
-  async fetch(request: Request, env: SecPipelineEnv) {
-    const path = new URL(request.url).pathname;
-    if (path === "/health") {
-      return Response.json({ status: "ok", executor: "workflow", modelConfigured: Boolean(env.AI_API_KEY), watchlistConfigured: Boolean(env.SEC_TRACKED_TICKERS?.trim()) }, { headers: { "cache-control": "no-store" } });
-    }
-    if (path.startsWith("/fundamentals/refresh/")) return handleFundamentalsRefreshRequest(request, env);
-    return handleSecAnalysisRequest(request, env);
-  },
-
-  async scheduled(_controller: ScheduledController, env: SecPipelineEnv) {
-    const results = await Promise.allSettled([runSecRefresh(env), runSecMemorySweep(env), runCompanyAnalysisSweep(env)]);
-    const [analysis, memory, companyAnalysis] = results.map(describeSettled);
-    const payload = JSON.stringify({ event: "sec-workflows", analysis, memory, companyAnalysis });
-    const rejected = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
-    if (!rejected.length) {
-      console.log(payload);
-      return;
-    }
-    /**
-     * `allSettled` never rejects, so a broken run used to finish as `outcome: ok` with nothing but
-     * this one log line to show for it — the whole refresh sat dead for days behind that. The work
-     * is awaited rather than handed to `waitUntil` so a rethrow lands on the invocation record,
-     * which is the only part of a Cron run anything can alert on.
-     */
-    console.error(payload);
-    throw new AggregateError(rejected.map((result) => result.reason), "SEC scheduled run failed");
-  },
-} satisfies ExportedHandler<SecPipelineEnv>;
-
 export default worker;

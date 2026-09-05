@@ -28,33 +28,47 @@
 
 ## 项目架构
 
-仓库是一个 **monorepo**：一份 Next.js 前端代码 + 两个独立部署的 Cloudflare Worker，共享根目录的 `lib/`、`db/` 和依赖。
+仓库是一个 **monorepo**：一份 Next.js 前端代码 + 两个独立部署的 Cloudflare Worker，共享根目录的 `lib/` 和依赖。
+
+Pipeline Worker 是**财务分析后端**：它拥有分析数据模型、migrations、Workflows、Cron，以及对外的只读结果 API。Web Worker 是它的一个客户端，**没有任何直接访问分析存储的能力**；其他服务可以用同一份 API 通过 HTTPS 成为另一个客户端，不需要依赖这个网站或它的数据库 schema。完整的架构决策、API 契约、凭据流程与上线/回滚手册见 [`docs/analysis-backend.md`](docs/analysis-backend.md)。
 
 ```mermaid
 flowchart LR
-    User["用户浏览器"] -->|HTTPS| Web["Web Worker\nearning-report-analysis-sec-web\n(Next.js SSR + /api/v1，D1 只读)"]
-    Web -->|SQL 只读| D1[("Cloudflare D1\nSQLite")]
-    Web -->|Service Binding\n控制面：触发分析/回填、按需刷新基本面| Pipeline["Pipeline Worker\nearning-report-analysis-sec-pipeline\n(Cron + Workflows，D1 全部写入)"]
-    Pipeline -->|SQL 读写| D1
-    Pipeline -->|读写原文/证据块/XBRL| R2[("Cloudflare R2\nSEC 原文与证据")]
-    Pipeline -->|调用模型| AI["AI 模型 API\nSEC_ANALYSIS_MODEL"]
-    Pipeline -->|抓取| EDGAR["SEC EDGAR"]
-    Pipeline -->|抓取| Yahoo["Yahoo Finance"]
+    User["用户浏览器"] -->|HTTPS，匿名| Web["Web Worker\nearning-report-analysis-sec-web\n(Next.js SSR + /api/v1 兼容代理)"]
+    Other["其他后端服务"] -->|HTTPS + 读凭据| ReadAPI
+    Web -->|Service Binding + 读凭据| ReadAPI["只读 API\n/api/v1/companies/..."]
+    Web -->|Service Binding\n控制面：触发分析/回填| Control["受保护的控制端点\n/jobs /backfill /fundamentals/refresh"]
+    subgraph Pipeline["Pipeline Worker（分析后端）earning-report-analysis-sec-pipeline"]
+        ReadAPI
+        Control
+        Cron["Cron + Workflows"]
+    end
+    ReadAPI -->|SQL 只读| D1[("Cloudflare D1\nSQLite")]
+    Control --> Cron
+    Cron -->|SQL 读写| D1
+    Cron -->|读写原文/证据块/XBRL| R2[("Cloudflare R2\nSEC 原文与证据")]
+    Cron -->|调用模型| AI["AI 模型 API\nSEC_ANALYSIS_MODEL"]
+    Cron -->|抓取| EDGAR["SEC EDGAR"]
+    Cron -->|抓取| Yahoo["Yahoo Finance"]
 ```
 
 两个 Worker 是两个独立的 Cloudflare 项目，各自有自己的 `wrangler.jsonc`、部署命令和密钥，但共享同一份 `lib/` 业务逻辑和根 `package.json`。**部署命令必须显式指定各自的配置文件**，不依赖 Wrangler 自动探测。
 
 | Cloudflare Worker | 仓库目录 | 源配置 | 职责 |
 | --- | --- | --- | --- |
-| `earning-report-analysis-sec-web` | [`workers/web/`](workers/web/) | `workers/web/wrangler.jsonc` | Next.js SSR 页面、公开 `/api/v1` 读取接口、管理接口；对 D1 **严格只读**——只服务已经写好的分析数据，不生成任何东西 |
-| `earning-report-analysis-sec-pipeline` | [`workers/pipeline/`](workers/pipeline/) | `workers/pipeline/wrangler.jsonc` | Cron 调度、`SecAnalysisWorkflow` / `SecMemoryWorkflow` / `CompanyAnalysisWorkflow` / `CompanyAnalysisBackfillWorkflow`、模型调用、R2 读写、**D1 的全部写入**（直接读写同一个数据库，不经过 Web 转手） |
+| `earning-report-analysis-sec-web` | [`workers/web/`](workers/web/) | `workers/web/wrangler.jsonc` | Next.js SSR 页面、公开 `/api/v1` 兼容代理、管理接口；**不绑定 D1 或 R2**，所有分析数据都从后端的只读 API 取 |
+| `earning-report-analysis-sec-pipeline` | [`workers/pipeline/`](workers/pipeline/) | `workers/pipeline/wrangler.jsonc` | 分析后端：只读结果 API、Cron 调度、`SecAnalysisWorkflow` / `SecMemoryWorkflow` / `CompanyAnalysisWorkflow` / `CompanyAnalysisBackfillWorkflow`、模型调用、R2 读写、**D1 的全部读写**、migrations |
 
 **依赖只朝一个方向**：Web 可以调用 Pipeline，反过来不允许。这不是靠约定维持的——Pipeline 的 `wrangler.jsonc` 里没有任何指向 Web 的 `services` 绑定，代码里也没有 `WEB_APP_ORIGIN`，物理上就调不到 Web；它需要的一切要么来自自己的运行时配置（`SEC_TRACKED_TICKERS`），要么直接读写 D1，要么自己抓外部数据源（EDGAR、Yahoo）。Web → Pipeline 只用于两类控制面请求，都经过 Service Binding `PIPELINE`（`lib/sec-runtime.ts` 的 `pipelineFetch`，两个 Worker 在同一个 `workers.dev` 子域下，公网域名互相调用会在边缘被拒）：
 
-- 管理员手动触发分析/回填：`admin/*/refresh`、`admin/*/backfill`、`internal/sec/refresh/[ticker]` 转发到 Pipeline 的 `/jobs/:ticker`、`/backfill/:ticker`。
-- 按需刷新某支股票的基本面：公开页面发现数据过期时，`lib/fundamentals-runtime.ts` 的 `scheduleFundamentalRefresh` 请求 Pipeline 的 `/fundamentals/refresh/:ticker`，Pipeline 自己完成抓取和写库，Web 全程不碰 D1。
+- **数据面（只读）**：`/api/v1/companies/*` 的四个读接口。Web 用 `lib/analysis-contract/client.ts` 调用后端的只读 API，携带服务端持有的读凭据 `ANALYSIS_READ_TOKEN`。走 Service Binding **并不构成身份证明**——后端的 fetch handler 本身就是公网可达的，所以它只认 `Authorization`，和外部服务完全一样。
+- **控制面**：管理员手动触发分析/回填，`admin/*/refresh`、`admin/*/backfill`、`internal/sec/refresh/[ticker]` 转发到 Pipeline 的 `/jobs/:ticker`、`/backfill/:ticker`，用 `SEC_REFRESH_KEY` 认证。
 
-两侧通过共享密钥 `SEC_REFRESH_KEY` 互相认证。
+两类凭据严格分开：**读凭据永远无法触发 refresh / backfill 等任何控制操作**，控制端点只认 `SEC_REFRESH_KEY`，读凭据列表根本不参与。
+
+读取基本面**不再触发刷新**。过期数据的刷新改由后端的 Cron 巡检（每次最多 2 个、只覆盖白名单里超过 24 小时未成功抓取的股票）和受认证的 `POST /fundamentals/refresh/:ticker` 负责——浏览器的一次读取不会再顺带发起一次 Yahoo 抓取和一次写库。
+
+`tests/analysis-boundary.test.ts` 会遍历 Web 每个入口的**完整 import 图**，任何直接或间接重新引入分析存储的依赖都会让测试失败。
 
 ### 目录结构
 
@@ -96,6 +110,10 @@ docs/                   架构与部署详细文档
 - `POST /api/v1/admin/companies/:ticker/refresh`，`Authorization: Bearer $SEC_ADMIN_TOKEN`
 - `POST /api/v1/admin/companies/:ticker/backfill`，`Authorization: Bearer $SEC_ADMIN_TOKEN`
 
+上面四个 `GET` 是**兼容代理**：URL、成功响应结构、分页语义和匿名访问都没有变，数据来自分析后端而不是本 Worker 里的数据库绑定。
+
+**其他服务要读这些结果**，直接调用分析后端本身，用一个读凭据认证，不需要经过这个网站：机器可读契约在 `GET /api/v1/openapi.json`，独立消费者示例见 [`examples/analysis-backend-consumer.mjs`](examples/analysis-backend-consumer.mjs)，凭据的创建/轮换/吊销见 [`docs/analysis-backend.md`](docs/analysis-backend.md#3-credentials)。
+
 `app/api/internal/*`（现在只剩 `sec/refresh/[ticker]`）是 Web 转发给 Pipeline 的控制面请求，用 `SEC_REFRESH_KEY` 鉴权，不面向外部使用者；方向只能是 Web → Pipeline。
 
 ## 本地开发
@@ -129,7 +147,7 @@ npx wrangler r2 bucket create earning-report-analysis-sec-filings
 npx wrangler r2 bucket create earning-report-analysis-sec-filings-staging   # Pipeline staging 用
 ```
 
-同一个 D1 数据库被两个 Worker 用两种方式接入：Web Worker 的 `workers/web/wrangler.jsonc` 里是占位 id，构建时由 Build variable `SEC_WEB_D1_DATABASE_ID` 注入；Pipeline Worker 直接把这个 D1 id **提交进** `workers/pipeline/wrangler.jsonc`（它是账号内的标识符，不是凭据，跟同一份配置里的 bucket 名、Worker 名同级），部署时不需要任何 Build variable。
+D1 数据库只被 Pipeline Worker 绑定。它把 D1 id **提交进** `workers/pipeline/wrangler.jsonc`（账号内的标识符，不是凭据，跟同一份配置里的 bucket 名、Worker 名同级），部署时不需要任何 Build variable。Web Worker 没有 D1 绑定，所以 `SEC_WEB_D1_DATABASE_ID` / `SEC_WEB_D1_DATABASE_NAME` 这两个 Build variable 已经可以删除。
 
 ### Cloudflare Dashboard 配置
 
@@ -148,12 +166,14 @@ Build variables：
 
 | 变量 | 说明 |
 | --- | --- |
-| `SEC_WEB_D1_DATABASE_ID` | 上一步创建的真实 D1 database id |
-| `SEC_WEB_D1_DATABASE_NAME` | 建议 `earning-report-analysis-sec-web` |
 | `SEC_WEB_WORKER_NAME` | `earning-report-analysis-sec-web` |
-| `SEC_PIPELINE_ORIGIN` | Pipeline Worker 的生产 URL |
+| `SEC_PIPELINE_ORIGIN` | Pipeline Worker（分析后端）的生产 URL |
 
-Web 不再持有白名单——它对 D1 里的分析数据只读，`SEC_TRACKED_TICKERS` 只配在 Pipeline 上。
+`SEC_WEB_D1_DATABASE_ID` / `SEC_WEB_D1_DATABASE_NAME` 已经不需要——这个 Worker 没有 D1 绑定了，可以从 Dashboard 删除。
+
+Runtime secrets：`ANALYSIS_READ_TOKEN`（读凭据）、`SEC_ADMIN_TOKEN`、`SEC_REFRESH_KEY`。
+
+Web 不再持有白名单——`SEC_TRACKED_TICKERS` 只配在 Pipeline 上。
 
 **Pipeline Worker**
 
@@ -164,46 +184,44 @@ Deploy command: npm run worker:pipeline:deploy
 Non-production branch deploy command: npm run worker:pipeline:version
 ```
 
-Pipeline **不需要任何 Build variable**：它直接从 committed 的 `wrangler.jsonc` 部署，D1 id 已经写在配置里。`SEC_REFRESH_KEY`、`AI_API_KEY`、`SEC_TRACKED_TICKERS` 都是 **Worker runtime secrets/vars**，不是 Build variable，只能用 `wrangler secret put`（或 Dashboard）写入，不进代码。生产部署命令都带 `--keep-vars`，避免覆盖 Dashboard 里已有的 runtime vars/secrets；`worker:pipeline:deploy` 部署前还会自动跑一次 migration 门禁（`worker:pipeline:check:migrations`），因为现在写 D1 的主力是 Pipeline。
+Pipeline **不需要任何 Build variable**：它直接从 committed 的 `wrangler.jsonc` 部署，D1 id 已经写在配置里。`SEC_REFRESH_KEY`、`AI_API_KEY`、`SEC_TRACKED_TICKERS`、`ANALYSIS_READ_KEYS` 都是 **Worker runtime secrets/vars**，不是 Build variable，只能用 `wrangler secret put`（或 Dashboard）写入，不进代码。生产部署命令都带 `--keep-vars`，避免覆盖 Dashboard 里已有的 runtime vars/secrets；`worker:pipeline:deploy` 部署前还会自动跑一次 migration 门禁（`worker:pipeline:check:migrations`），因为现在写 D1 的主力是 Pipeline。
 
 Build watch paths（共享路径改动时两个 Worker 都要重新构建）：
 
 | Web Worker | Pipeline Worker |
 | --- | --- |
-| `app/*` `components/*` `data/*` `db/*` `lib/*` `public/*` `workers/web/*` `next.config.ts` `postcss.config.mjs` `tsconfig.json` `vite.config.ts` `package.json` `package-lock.json` | `lib/*` `workers/pipeline/*` `workers/web/migrations/*` `workers/web/scripts/check-migrations.ts` `tsconfig.json` `package.json` `package-lock.json` |
+| `app/*` `components/*` `data/*` `lib/*` `public/*` `workers/web/*` `next.config.ts` `postcss.config.mjs` `tsconfig.json` `vite.config.ts` `package.json` `package-lock.json` | `db/*` `lib/*` `workers/pipeline/*` `tsconfig.json` `package.json` `package-lock.json` |
 
 ### 部署命令
 
-**Web Worker**：`workers/web/wrangler.jsonc` 里的 D1 id 是不可部署的占位值，`vinext build` 会先把它转成 `dist/server/wrangler.json`，再由脚本注入真实 id 并做门禁检查。
+**Web Worker**：`vinext build` 先把源配置转成 `dist/server/wrangler.json`，再由脚本剥掉 D1 绑定并做门禁检查。这个 Worker 没有数据库，所以也没有 migration 门禁。
 
 ```bash
-export SEC_WEB_D1_DATABASE_ID="<real-d1-id>"
-export SEC_WEB_D1_DATABASE_NAME="earning-report-analysis-sec-web"
 export SEC_WEB_WORKER_NAME="earning-report-analysis-sec-web"
 export SEC_PIPELINE_ORIGIN="https://earning-report-analysis-sec-pipeline.<subdomain>.workers.dev"
 npm run web:deploy
 ```
 
-`web:deploy` 等价于 build → `worker:web:prepare`（注入真实 D1 id）→ `worker:web:check`（拦下占位 id、缺失的 `nodejs_compat`、和 Pipeline 漂移的兼容性日期）→ `worker:web:check:migrations`（向远端 D1 确认本次构建带的 migration 都已 apply，否则拒绝部署）→ `wrangler deploy --keep-vars`。
+`web:deploy` 等价于 build → `worker:web:prepare`（剥掉生成器写入的 D1 binding，确认 `PIPELINE` binding 在）→ `worker:web:check`（拒绝仍带 D1/R2 绑定、缺 `PIPELINE` binding、缺 `nodejs_compat`，或与 Pipeline 漂移的兼容性日期的配置）→ `wrangler deploy --keep-vars`。
 
-需要手工分步（例如先跑 D1 迁移）时：
+需要手工分步时：
 
 ```bash
 npm run build
 npm run worker:web:prepare
 npm run worker:web:check
-npx wrangler d1 migrations apply "$SEC_WEB_D1_DATABASE_NAME" --remote --config dist/server/wrangler.json
-npm run worker:web:check:migrations
 npx wrangler deploy --config dist/server/wrangler.json --keep-vars
 ```
 
-> 绕过 `web:deploy` 直接 `wrangler deploy` 之前**一定要**跑 `worker:web:check` 和 `worker:web:check:migrations`——生成配置里的 D1 id 默认是占位值，只部署 Worker、漏掉 migration 会让新代码撞上旧 schema。D1 migrations 的唯一源目录是 [`workers/web/migrations/`](workers/web/migrations/)，用 `npm run db:generate` 生成新迁移。
+> 绕过 `web:deploy` 直接 `wrangler deploy` 之前**一定要**跑 `worker:web:check`——它会拒绝任何仍然带着 D1/R2 绑定或丢了 `PIPELINE` binding 的生成配置。D1 migrations 的唯一源目录现在是 [`workers/pipeline/migrations/`](workers/pipeline/migrations/)（文件名和内容在迁移过程中逐字节未变，已应用过的数据库不会重跑），用 `npm run db:generate` 生成新迁移，用 `npm run worker:pipeline:check:migrations` 在部署后端前确认远端 D1 不落后。
 
 写入密钥：
 
 ```bash
 printf %s "$SEC_ADMIN_TOKEN" | npx wrangler secret put SEC_ADMIN_TOKEN --config dist/server/wrangler.json
 printf %s "$SEC_REFRESH_KEY" | npx wrangler secret put SEC_REFRESH_KEY --config dist/server/wrangler.json
+# 读分析数据用的凭据，格式 <keyId>.<secret>，对应后端 ANALYSIS_READ_KEYS 里的一条。
+printf %s "$ANALYSIS_READ_TOKEN" | npx wrangler secret put ANALYSIS_READ_TOKEN --config dist/server/wrangler.json
 ```
 
 **Pipeline Worker**：先部署关闭 Cron 的 staging（独立 Worker、Workflow 和 R2），验证通过后再上生产。**staging 没有 D1 绑定**——它绝不能写生产库，而它自己还没有库；显式 POST 的 canary 如果走到基本面同步，会拿到明确的 "Pipeline has no D1 binding" 报错，而不是静默写错地方。
@@ -233,7 +251,9 @@ printf %s "$SEC_TRACKED_TICKERS" | npx wrangler secret put SEC_TRACKED_TICKERS -
 npx wrangler secret put SEC_TRACKED_TICKERS --config workers/pipeline/wrangler.jsonc
 ```
 
-（用 `secret` 而非普通 var 只是因为这是 Wrangler 唯一能不触发部署直接改运行时值的命令；ticker 列表本身不敏感，跟 `SEC_REFRESH_KEY` 那种真正的密钥不是一回事。）Pipeline 的 `/health` 报的 `watchlistConfigured` 表示"这个 Worker 自己有没有配好 `SEC_TRACKED_TICKERS`"，不涉及任何跨 Worker 依赖。
+（用 `secret` 而非普通 var 只是因为这是 Wrangler 唯一能不触发部署直接改运行时值的命令；ticker 列表本身不敏感，跟 `SEC_REFRESH_KEY` 那种真正的密钥不是一回事。）
+
+探针分成两个：`/health` 只报存活（`{"status":"ok"}`，不暴露任何依赖状态），`/ready` 才报依赖就绪——它只读绑定和配置**是否存在**的布尔值，不发任何查询、不做任何写入，也不回显任何值。读取路径不需要模型凭据，所以 `AI_API_KEY` 缺失不会让 `/ready` 变红。
 
 ### 回滚
 

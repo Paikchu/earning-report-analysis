@@ -64,8 +64,8 @@ export class SqliteD1Database implements FundamentalsD1Database {
 export async function applyFundamentalsMigrations(database: SqliteD1Database): Promise<void> {
   database.raw.exec("PRAGMA foreign_keys = ON");
   for (const migration of [
-    "../../workers/web/migrations/0007_yahoo_fundamentals_p1.sql",
-    "../../workers/web/migrations/0008_yahoo_fundamentals_sync.sql",
+    "../../workers/pipeline/migrations/0007_yahoo_fundamentals_p1.sql",
+    "../../workers/pipeline/migrations/0008_yahoo_fundamentals_sync.sql",
   ]) {
     await applySqlMigration(database, migration);
   }

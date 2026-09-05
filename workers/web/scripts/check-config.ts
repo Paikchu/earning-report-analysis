@@ -1,41 +1,38 @@
-import { access, readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { readFile } from "node:fs/promises";
 
-import { PLACEHOLDER_D1_DATABASE_ID, WEB_WORKER_CONFIG_PATH } from "../config.ts";
+import { PIPELINE_WORKER_CONFIG_PATH, WEB_WORKER_CONFIG_PATH } from "../config.ts";
 
+/**
+ * Refuses to deploy a Web Worker config that could reach analysis storage directly, or that has
+ * lost the Service Binding every analysis read now depends on.
+ */
 const configPath = process.env.SEC_WEB_WRANGLER_CONFIG ?? WEB_WORKER_CONFIG_PATH;
-const pipelineConfigPath = "workers/pipeline/wrangler.jsonc";
+const pipelineConfigPath = process.env.SEC_PIPELINE_WRANGLER_CONFIG ?? PIPELINE_WORKER_CONFIG_PATH;
 
 const config = JSON.parse(await readFile(configPath, "utf8")) as {
   name?: string;
   compatibility_date?: string;
   compatibility_flags?: string[];
-  d1_databases?: Array<{ binding: string; database_id: string; database_name?: string; migrations_dir?: string }>;
+  d1_databases?: Array<{ binding: string; database_name?: string }>;
+  r2_buckets?: Array<{ binding: string; bucket_name?: string }>;
+  services?: Array<{ binding: string; service?: string }>;
 };
 
-const database = config.d1_databases?.find((binding) => binding.binding === "DB");
 const pipelineDate = pipelineCompatibilityDate(await readFile(pipelineConfigPath, "utf8"));
 const problems: string[] = [];
 
-if (!database) {
-  problems.push("has no DB D1 binding");
-} else if (database.database_id === PLACEHOLDER_D1_DATABASE_ID) {
-  problems.push("still carries the placeholder D1 id — run `npm run worker:web:prepare` with the real SEC_WEB_D1_DATABASE_ID");
-} else if (!/^[0-9a-f-]{20,}$/i.test(database.database_id)) {
-  problems.push(`has a malformed D1 id: ${database.database_id}`);
+if (config.d1_databases?.length) {
+  problems.push(
+    `still binds D1 (${config.d1_databases.map((binding) => binding.binding).join(", ")}) — the Web Worker reads analysis data through the PIPELINE service binding, not from a database`,
+  );
 }
 
-const migrationsDirectory = database?.migrations_dir
-  ? resolve(dirname(configPath), database.migrations_dir)
-  : "";
-if (!migrationsDirectory) {
-  problems.push("has no migrations_dir on the DB binding");
-} else {
-  try {
-    await access(migrationsDirectory);
-  } catch {
-    problems.push(`points DB migrations_dir at a missing directory: ${migrationsDirectory}`);
-  }
+if (config.r2_buckets?.length) {
+  problems.push(`still binds R2 (${config.r2_buckets.map((binding) => binding.binding).join(", ")}) — analysis artefacts belong to the Pipeline Worker`);
+}
+
+if (!config.services?.some((binding) => binding.binding === "PIPELINE")) {
+  problems.push("has no PIPELINE service binding — every analysis read and every admin control request goes through it");
 }
 
 if (!config.compatibility_flags?.includes("nodejs_compat")) {
@@ -54,8 +51,8 @@ console.log(JSON.stringify({
   configPath,
   worker: config.name,
   compatibilityDate: config.compatibility_date,
-  databaseName: database?.database_name,
-  migrationsDirectory,
+  d1Bindings: 0,
+  pipelineServiceBinding: true,
 }));
 
 function pipelineCompatibilityDate(source: string): string {

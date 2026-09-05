@@ -37,15 +37,24 @@ function readyPublication() {
   });
 }
 
-test("public overview exposes last-good content without internal evidence ids", async () => {
+/**
+ * Evidence references used to be stripped here. They are published now: a consumer that has to
+ * re-derive which observation backs a claim by reading the prose does not have a usable contract.
+ * What stays unpublished is anything internal to how the analysis was produced.
+ */
+test("public overview publishes last-good content with the evidence backing it", async () => {
   const publication = await readyPublication();
   const payload = await getPublicCompanyAnalysis({
     async getLatestPublication() { return publication; },
     async hasNewerActiveRun() { return true; },
+    async getLatestRunSummary() { return { state: "running" as const, updatedAt: "2026-09-04T00:00:00.000Z", errorCode: null }; },
   }, "amzn");
   assert.equal(payload.status, "updating");
   assert.equal(payload.overview?.highlights.length, 4);
-  assert.equal("evidenceRefs" in payload.overview!.highlights[0]!, false);
+  assert.deepEqual(payload.overview!.highlights[0]!.evidenceRefs, ["evidence-1"]);
   assert.equal("sourceLabel" in payload.overview!.highlights[0]!, false);
   assert.equal("fullReportRef" in payload, false);
+  // A newer run in flight is reported beside the published result, not instead of it.
+  assert.equal(payload.latestRun.state, "running");
+  assert.equal(payload.overview?.headline, publication.overview.headline);
 });

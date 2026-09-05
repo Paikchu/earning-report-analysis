@@ -5,7 +5,7 @@ import test from "node:test";
 test("declares SEC tables and removes portfolio tables from the standalone schema", async () => {
   const [schema, migration] = await Promise.all([
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
-    readFile(new URL("../workers/web/migrations/0006_standalone_sec.sql", import.meta.url), "utf8"),
+    readFile(new URL("../workers/pipeline/migrations/0006_standalone_sec.sql", import.meta.url), "utf8"),
   ]);
   assert.match(schema, /sqliteTable\("sec_cache"/);
   assert.match(schema, /sqliteTable\("sec_filing_summaries"/);
@@ -24,7 +24,11 @@ test("keeps both Cloudflare Workers as explicit deploy units", async () => {
 
   assert.match(webConfig, /"name": "earning-report-analysis-sec-web"/);
   assert.match(webConfig, /"main": "index\.ts"/);
-  assert.match(webConfig, /"migrations_dir": "migrations"/);
+  // Migrations belong to the Worker that owns the data model. The Web Worker no longer binds D1 at
+  // all, so it carries neither a migrations directory nor a database binding to point one at.
+  assert.doesNotMatch(webConfig, /"migrations_dir"/);
+  assert.doesNotMatch(webConfig, /"d1_databases"/);
+  assert.match(pipelineConfig, /"migrations_dir": "migrations"/);
   assert.match(pipelineConfig, /"name": "earning-report-analysis-sec-pipeline"/);
   assert.match(viteConfig, /configPath: "workers\/web\/wrangler\.jsonc"/);
   assert.match(packageSource, /"worker:web:version:built"/);
@@ -56,8 +60,13 @@ test("exposes the standalone stock and report routes", async () => {
   assert.match(stockPage, /stock-analysis-grid/);
   assert.match(stockPage, /parseFundamentalPageState/);
   assert.match(stockPage, /findSecurity/);
-  assert.match(reportPage, /getPublicFiling/);
+  // The report page reads through the backend client; there is no database binding to fall back to.
+  assert.match(reportPage, /getAnalysisBackendRuntime/);
+  assert.match(reportPage, /client\.getFiling/);
+  assert.doesNotMatch(reportPage, /getD1|D1SecRepository/);
   assert.match(reportPage, /notFound\(\)/);
+  // A backend outage stays distinct from a missing filing rather than rendering as "not found".
+  assert.match(reportPage, /"unavailable"/);
   assert.match(document, /核心结论/);
   assert.match(document, /验证指标/);
   assert.match(document, /动态分段分析/);
@@ -88,8 +97,13 @@ test("publishes public filing, search, and protected admin contracts", async () 
   ];
   const sources = await Promise.all(routes.map((path) => readFile(new URL(path, import.meta.url), "utf8")));
   assert.match(sources[0], /searchCompanyDirectory/);
-  assert.match(sources[1], /getPublicFilingPage/);
-  assert.match(sources[2], /getPublicFiling/);
+  // The two public financial routes are compatibility proxies over the analysis backend: same URLs,
+  // same anonymous access, no database binding in this Worker.
+  assert.match(sources[1], /proxyAnalysisRead/);
+  assert.match(sources[1], /client\.listFilings/);
+  assert.match(sources[2], /proxyAnalysisRead/);
+  assert.match(sources[2], /client\.getFiling/);
+  assert.doesNotMatch(sources[1] + sources[2], /getD1|D1SecRepository/);
   assert.match(sources[3], /hasSecAdminAccess/);
   assert.match(sources[3], /requestSecAnalysis/);
   assert.match(sources[4], /requestSecBackfill/);
@@ -145,14 +159,22 @@ test("ships SEC analysis as a bounded durable Cloudflare workflow with isolated 
 });
 
 test("reports a failed scheduled run instead of finishing it as ok", async () => {
-  const [workerSource, core] = await Promise.all([
+  // The request and Cron handler lives in worker.ts so it can be imported without
+  // `cloudflare:workers`; index.ts keeps the Workflow entrypoints and re-exports it as the default.
+  const [workerSource, entry, core] = await Promise.all([
+    readFile(new URL("../workers/pipeline/worker.ts", import.meta.url), "utf8"),
     readFile(new URL("../workers/pipeline/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../workers/pipeline/core.ts", import.meta.url), "utf8"),
   ]);
+  assert.match(entry, /import worker from "\.\/worker\.ts";/);
+  assert.match(entry, /export default worker;/);
 
   // `allSettled` cannot reject, so the handler has to await the work and rethrow for the Cron
   // invocation to record anything but `outcome: ok`. Handing it to `waitUntil` loses that.
-  assert.match(workerSource, /const results = await Promise\.allSettled\(\[runSecRefresh\(env\), runSecMemorySweep\(env\), runCompanyAnalysisSweep\(env\)\]\)/);
+  assert.match(workerSource, /const results = await Promise\.allSettled\(\[/);
+  for (const sweep of ["runSecRefresh(env)", "runSecMemorySweep(env)", "runCompanyAnalysisSweep(env)", "runFundamentalsStalenessSweep(env)"]) {
+    assert.ok(workerSource.includes(sweep), `the scheduled handler must still run ${sweep}`);
+  }
   assert.match(workerSource, /console\.error\(payload\)/);
   // A rejection reason is an Error, and JSON.stringify renders those as `{}` — the log has to
   // unwrap the message or a reported failure says nothing about what failed.
@@ -164,7 +186,7 @@ test("reports a failed scheduled run instead of finishing it as ok", async () =>
 });
 
 test("keeps dependencies pointed one way: Web can call Pipeline, Pipeline calls no one", async () => {
-  const [pipelineConfig, webConfig, core, operations, memoryWorkflow, companyAnalysisWorkflow, fundamentalsPipeline, runtime, adminRefresh, fundamentalsRuntime] = await Promise.all([
+  const [pipelineConfig, webConfig, core, operations, memoryWorkflow, companyAnalysisWorkflow, fundamentalsPipeline, pipelineWorker, runtime, adminRefresh, backendRuntime] = await Promise.all([
     readFile(new URL("../workers/pipeline/wrangler.jsonc", import.meta.url), "utf8"),
     readFile(new URL("../workers/web/wrangler.jsonc", import.meta.url), "utf8"),
     readFile(new URL("../workers/pipeline/core.ts", import.meta.url), "utf8"),
@@ -172,11 +194,12 @@ test("keeps dependencies pointed one way: Web can call Pipeline, Pipeline calls 
     readFile(new URL("../workers/pipeline/memory-workflow.ts", import.meta.url), "utf8"),
     readFile(new URL("../workers/pipeline/company-analysis-workflow.ts", import.meta.url), "utf8"),
     readFile(new URL("../workers/pipeline/fundamentals.ts", import.meta.url), "utf8"),
+    readFile(new URL("../workers/pipeline/worker.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/sec-runtime.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/v1/admin/companies/[ticker]/refresh/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../lib/fundamentals-runtime.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/analysis-backend-runtime.ts", import.meta.url), "utf8"),
   ]);
-  const pipelineSources = [core, operations, memoryWorkflow, companyAnalysisWorkflow, fundamentalsPipeline].join("\n");
+  const pipelineSources = [core, operations, memoryWorkflow, companyAnalysisWorkflow, fundamentalsPipeline, pipelineWorker].join("\n");
 
   // Pipeline is the lower layer: it has no binding, no origin, and no fetcher pointed at Web. A
   // second copy of the whitelist drifting from Web's was exactly the failure mode this replaced —
@@ -192,8 +215,16 @@ test("keeps dependencies pointed one way: Web can call Pipeline, Pipeline calls 
   assert.match(webConfig, /"binding":\s*"PIPELINE",\s*"service":\s*"earning-report-analysis-sec-pipeline"/);
   assert.match(runtime, /pipelineFetch: serviceFetcher\(asServiceBinding\(values\.PIPELINE\)\)/);
   assert.match(adminRefresh, /fetcher: runtime\.pipelineFetch/);
-  assert.match(fundamentalsRuntime, /runtime\.pipelineFetch/);
-  assert.match(fundamentalsRuntime, /\/fundamentals\/refresh\//);
+
+  // Data now travels the same binding as control, through the read client — and it presents a real
+  // read credential rather than trusting the binding. Reading no longer triggers a refresh: that
+  // moved to the backend's own scheduled sweep, so `lib/fundamentals-runtime.ts` no longer exists.
+  assert.match(backendRuntime, /serviceFetcher\(asServiceBinding\(values\.PIPELINE\)\)/);
+  assert.match(backendRuntime, /ANALYSIS_READ_TOKEN/);
+  // The refresh endpoint is still there, still on the backend, and still behind the refresh key.
+  assert.match(pipelineWorker, /path\.startsWith\("\/fundamentals\/refresh\/"\)/);
+  assert.match(fundamentalsPipeline, /x-sec-refresh-key/);
+  await assert.rejects(readFile(new URL("../lib/fundamentals-runtime.ts", import.meta.url), "utf8"), /ENOENT/);
 
   // SEC and the model API are the open internet and keep the plain fetcher — only the Web bridge
   // was ever routed differently.

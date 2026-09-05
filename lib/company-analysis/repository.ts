@@ -1,3 +1,4 @@
+import type { AnalysisRunSummary } from "../analysis-contract/filings.ts";
 import {
   normalizeCompanyAnalysisPublication,
   type CompanyAnalysisPublication,
@@ -93,6 +94,30 @@ export class D1CompanyAnalysisRepository {
       LIMIT 1
     `).bind(ticker, generatedAt).first<{ analysisId: string }>();
     return Boolean(row);
+  }
+
+  /**
+   * The newest run for a company, whatever state it is in — the counterpart to
+   * `getLatestPublication`, which only ever sees rows that reached `ready`. Without this a failed
+   * or queued first run is indistinguishable from a company nothing has ever been requested for.
+   *
+   * Only `error_code` is read, never `error_detail`: the detail column holds provider text and has
+   * no business crossing the API boundary.
+   */
+  async getLatestRunSummary(ticker: string): Promise<AnalysisRunSummary> {
+    const row = await this.database.prepare(`
+      SELECT status, updated_at AS updatedAt, error_code AS errorCode
+      FROM company_analysis_runs
+      WHERE ticker = ?
+      ORDER BY updated_at DESC, analysis_id DESC
+      LIMIT 1
+    `).bind(ticker).first<{ status: CompanyAnalysisRunStatus; updatedAt: string; errorCode: string | null }>();
+    if (!row) return { state: "none", updatedAt: null, errorCode: null };
+    return {
+      state: runStateFor(row.status),
+      updatedAt: row.updatedAt ?? null,
+      errorCode: safeErrorCode(row.status, row.errorCode),
+    };
   }
 
   async listBackfillCandidates(tickers: string[], limit = 100, includeIncomplete = false): Promise<CompanyAnalysisBackfillCandidate[]> {
@@ -239,6 +264,24 @@ export class D1CompanyAnalysisRepository {
     }
     return { duplicate: false, publication: stored };
   }
+}
+
+function runStateFor(status: CompanyAnalysisRunStatus): AnalysisRunSummary["state"] {
+  if (status === "ready") return "succeeded";
+  if (status === "failed" || status === "insufficient_data") return "failed";
+  // `waiting_fundamentals` is the run sitting in line for its inputs, not yet doing work.
+  return status === "waiting_fundamentals" ? "queued" : "running";
+}
+
+/**
+ * Error codes are published; error details are not. A stored code is additionally bounded to the
+ * shape a machine code has, so a value that somehow carried prose is dropped rather than echoed.
+ */
+function safeErrorCode(status: CompanyAnalysisRunStatus, errorCode: string | null): string | null {
+  if (runStateFor(status) !== "failed") return null;
+  if (status === "insufficient_data" && !errorCode) return "INSUFFICIENT_DATA";
+  const code = (errorCode ?? "").trim();
+  return /^[A-Za-z0-9_.:-]{1,64}$/.test(code) ? code : errorCode ? "ANALYSIS_FAILED" : null;
 }
 
 function publicationSelect(): string {

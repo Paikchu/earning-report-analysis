@@ -95,6 +95,17 @@ export type SecMemoryCommitResult = {
   memoryVersion: number;
 };
 
+/**
+ * Job error codes are published; job error details are not. A stored value that does not look like
+ * a machine code is reduced to a generic one rather than echoed to a reader.
+ */
+function safeJobErrorCode(status: SecAnalysisJobStatus | null, errorCode: string | null): string | null {
+  if (status !== "failed") return null;
+  const code = (errorCode ?? "").trim();
+  if (!code) return null;
+  return /^[A-Za-z0-9_.:-]{1,64}$/.test(code) ? code : "ANALYSIS_FAILED";
+}
+
 export class D1SecRepository implements SecRepository {
   private readonly database: D1Like;
 
@@ -226,30 +237,50 @@ export class D1SecRepository implements SecRepository {
   }
 
   async getLatestAnalysisJobStatus(ticker: string, accessionNumber: string): Promise<SecAnalysisJobStatus | null> {
+    return (await this.getLatestAnalysisJobSummary(ticker, accessionNumber)).status;
+  }
+
+  /**
+   * The newest analysis job for a filing, with the two extra columns a reader needs to tell a
+   * failed run from a filing nothing ever ran against. `getLatestAnalysisJobStatus` keeps its
+   * signature and delegates here, so the same single query serves both and paging a filing list
+   * still costs exactly one job lookup per filing.
+   *
+   * `error_detail` is deliberately not selected: it can hold a provider message, and nothing
+   * outside this Worker has any business seeing one.
+   */
+  async getLatestAnalysisJobSummary(ticker: string, accessionNumber: string): Promise<{
+    status: SecAnalysisJobStatus | null;
+    updatedAt: string | null;
+    errorCode: string | null;
+  }> {
     const row = await this.database.prepare(`
-      SELECT status
+      SELECT status, updated_at AS updatedAt, error_code AS errorCode
       FROM sec_analysis_jobs
       WHERE ticker = ? AND accession_number = ?
       ORDER BY updated_at DESC
       LIMIT 1
-    `).bind(ticker, accessionNumber).first<{ status: SecAnalysisJobStatus }>();
-    return row?.status ?? null;
+    `).bind(ticker, accessionNumber).first<{ status: SecAnalysisJobStatus; updatedAt: string | null; errorCode: string | null }>();
+    if (!row) return { status: null, updatedAt: null, errorCode: null };
+    return { status: row.status, updatedAt: row.updatedAt ?? null, errorCode: safeJobErrorCode(row.status, row.errorCode) };
   }
 
+  /**
+   * A storage failure used to be caught here and returned as `null`, which every caller then
+   * rendered as "this filing has no analysis". A D1 outage therefore looked exactly like a filing
+   * nobody had analysed yet — an infrastructure failure served as an empty success. The error now
+   * propagates so the read router can answer 503, which is the only answer that is true.
+   */
   async getPublishedReport(ticker: string, periodId: string): Promise<PublishedSecReport | null> {
-    try {
-      const row = await this.database.prepare(`
-        SELECT payload
-        FROM sec_published_reports
-        WHERE ticker = ? AND period_id = ?
-          AND verification_status IN ('verified', 'partial')
-        ORDER BY generated_at DESC
-        LIMIT 1
-      `).bind(ticker, periodId).first<{ payload: string }>();
-      return row ? parseJson<PublishedSecReport>(row.payload) : null;
-    } catch {
-      return null;
-    }
+    const row = await this.database.prepare(`
+      SELECT payload
+      FROM sec_published_reports
+      WHERE ticker = ? AND period_id = ?
+        AND verification_status IN ('verified', 'partial')
+      ORDER BY generated_at DESC
+      LIMIT 1
+    `).bind(ticker, periodId).first<{ payload: string }>();
+    return row ? parseJson<PublishedSecReport>(row.payload) : null;
   }
 
   async listPublicFilings(rawTicker: string, rawCursor: string | null, rawLimit = 20): Promise<PublicFilingPage> {

@@ -7,53 +7,57 @@
 ## Web Worker
 
 受版本控制的源配置是 `workers/web/wrangler.jsonc`。`vinext build` 根据它生成
-`dist/server/wrangler.json`；`worker:web:prepare` 负责填入真实 D1 id，
-`worker:web:check` 会拦下占位 id、丢失的 migrations、缺失的 `nodejs_compat`，以及和
-Pipeline 漂移的兼容性日期；`worker:web:check:migrations` 再向远端 D1 读一次
-`d1_migrations`，本次构建带的 migration 只要有一条没 apply 就拒绝部署。
+`dist/server/wrangler.json`；`worker:web:prepare` 会**剥掉**生成器可能写进去的任何 D1
+binding 并确认 `PIPELINE` service binding 存在，`worker:web:check` 会拒绝任何仍带 D1/R2
+binding、缺 `PIPELINE` binding、缺 `nodejs_compat`，或与 Pipeline 兼容性日期漂移的配置。
+
+这个 Worker 已经没有数据库，所以也没有 migration 门禁了——那道门跟着数据所有权搬到了
+Pipeline（`npm run worker:pipeline:check:migrations`）。
 
 ```bash
-export SEC_WEB_D1_DATABASE_ID="<real-d1-id>"
-export SEC_WEB_D1_DATABASE_NAME="earning-report-analysis-sec-web"
 export SEC_WEB_WORKER_NAME="earning-report-analysis-sec-web"
 export SEC_PIPELINE_ORIGIN="https://earning-report-analysis-sec-pipeline.<subdomain>.workers.dev"
 npm run web:deploy
 ```
 
 `web:deploy` 等价于 build → `worker:web:prepare` → `worker:web:check` →
-`worker:web:check:migrations` → `wrangler deploy --keep-vars`。需要手工分步（例如先跑
-D1 迁移）时：
+`wrangler deploy --keep-vars`。需要手工分步时：
 
 ```bash
 npm run build
 npm run worker:web:prepare
 npm run worker:web:check
-npx wrangler d1 migrations apply "$SEC_WEB_D1_DATABASE_NAME" --remote --config dist/server/wrangler.json
-npm run worker:web:check:migrations
 npx wrangler deploy --config dist/server/wrangler.json --keep-vars
 ```
-
-绕过 `web:deploy` 直接 `wrangler deploy` 之前一定要跑 `worker:web:check` 和
-`worker:web:check:migrations`——生成配置里的 D1 id 默认是占位值，而只部署 Worker、漏掉
-migration 会让新代码撞上旧 schema：catalog v2 的 `multiple` 单位族撞 `unit_family` CHECK
-约束，就曾让每一次基本面同步失败整整一天。D1 migrations 的唯一源目录是
-`workers/web/migrations/`。
 
 密钥：
 
 ```bash
 printf %s "$SEC_ADMIN_TOKEN" | npx wrangler secret put SEC_ADMIN_TOKEN --config dist/server/wrangler.json
 printf %s "$SEC_REFRESH_KEY" | npx wrangler secret put SEC_REFRESH_KEY --config dist/server/wrangler.json
+# 这个 Worker 读分析数据用的读凭据，格式 <keyId>.<secret>，对应后端 ANALYSIS_READ_KEYS 里的一条。
+printf %s "$ANALYSIS_READ_TOKEN" | npx wrangler secret put ANALYSIS_READ_TOKEN --config dist/server/wrangler.json
 ```
 
 ## Pipeline Worker
 
-受版本控制的源配置是 `workers/pipeline/wrangler.jsonc`，部署直接用它，没有生成步骤。它现在也绑定
-D1——基本面同步由这个 Worker 直接写库，不再让 Web 代写——D1 id 就写在配置里，和同一份文件里的
-bucket 名、Worker 名一样是 account 内的标识符，不是凭据。所以 Pipeline 不需要任何 Build variable。
+受版本控制的源配置是 `workers/pipeline/wrangler.jsonc`，部署直接用它，没有生成步骤。这个 Worker
+是**分析后端**：它是 D1 的唯一读者和唯一写者，migrations 也归它所有
+（`workers/pipeline/migrations/`，`migrations_dir: "migrations"`）。D1 id 就写在配置里，和同一份
+文件里的 bucket 名、Worker 名一样是 account 内的标识符，不是凭据。所以 Pipeline 不需要任何
+Build variable。
 
 部署前会先跑 `worker:pipeline:check:migrations`，向远端 D1 确认这份构建带的 migration 全部
-apply 过——这道门原本只保护 Web，现在写库的主力是 Pipeline，它更需要。
+apply 过。漏掉一条会让新代码撞上旧 schema：catalog v2 的 `multiple` 单位族撞 `unit_family`
+CHECK 约束，就曾让每一次基本面同步失败整整一天。
+
+只读 API 的凭据是 runtime secret `ANALYSIS_READ_KEYS`；**没有配置它，只读 API 会拒绝所有请求**
+（503 `READ_AUTH_NOT_CONFIGURED`），不会退化成开放访问。创建、轮换与吊销见
+[`analysis-backend.md`](analysis-backend.md#3-credentials)。
+
+```bash
+printf %s '<keyId>:<secret>:*' | npx wrangler secret put ANALYSIS_READ_KEYS --config workers/pipeline/wrangler.jsonc --env=""
+```
 
 先部署关闭 Cron 的 staging（独立 Worker、Workflow 和 R2）：
 
@@ -94,8 +98,9 @@ Web 侧不再做任何白名单校验——`admin/*/refresh`、`admin/*/backfill
 （`workers/pipeline/core.ts` 的 `assertTrackedTicker`）。403 的来源从 Web 换到了 Pipeline，这是
 故意的：判断"该不该分析"的权力现在完全在下层。
 
-Pipeline 的 `/health` 报的 `watchlistConfigured` 现在表示"这个 Worker 自己有没有配好
-`SEC_TRACKED_TICKERS`"，不再涉及任何跨 Worker 依赖。
+探针分成两个：`/health` 只报存活（`{"status":"ok"}`），`/ready` 报依赖就绪——只读绑定和配置
+**是否存在**的布尔值，不发查询、不做写入、不回显任何值。读取路径不需要模型凭据，所以
+`AI_API_KEY` 缺失不会让 `/ready` 变红。
 
 `SEC_ANALYSIS_MODEL` 是所有阶段的主模型。可选的 `SEC_REASONING_MODEL` 只接管 Manager 规划、Manager Review 和 Synthesis——节点抽取、事件简析和 Memory 提取仍走主模型。不设置就是单模型，行为与之前一致；重试降级到 `hy3` 始终优先于这两者：
 
@@ -117,13 +122,14 @@ Web 仍然可以调用 Pipeline，这是允许的控制面方向，现在有两�
 
 - 手动触发分析/回填：`admin/*/refresh`、`admin/*/backfill`、`internal/sec/refresh/[ticker]`
   转发到 Pipeline 的 `/jobs/:ticker` / `/backfill/:ticker`。
-- 按需刷新某支股票的基本面：公开的 fundamentals 页面发现数据过期时，通过
-  `lib/fundamentals-runtime.ts` 的 `scheduleFundamentalRefresh` 请求 Pipeline 的
-  `/fundamentals/refresh/:ticker`，Pipeline 自己完成抓取和写库，Web 全程不碰 D1。
+- 读分析数据：Web 的 `/api/v1/*` 兼容代理和 SSR 页面调用后端的只读 API，携带服务端持有的
+  `ANALYSIS_READ_TOKEN`。走 Service Binding 不构成身份证明，后端只认 `Authorization`。
 
-两者都走 `services: [{ binding: "PIPELINE", ... }]` 这个 Service Binding（`lib/sec-runtime.ts`
-的 `pipelineFetch`），不直接打公网域名——两个 Worker 在同一个 workers.dev 子域下，公网域名互相
-调用会在边缘被拒（404），拿不到对方。
+按需刷新基本面这条路径**已经删除**：读取不再触发刷新，改由后端 Cron 巡检和受认证的
+`/fundamentals/refresh/:ticker` 负责。
+
+上面几类都走 `services: [{ binding: "PIPELINE", ... }]` 这个 Service Binding，不直接打公网
+域名——两个 Worker 在同一个 workers.dev 子域下，公网域名互相调用会在边缘被拒（404）。
 
 ## 回滚
 
@@ -134,8 +140,13 @@ npx wrangler rollback <version-id> --config dist/server/wrangler.json    # Web
 npx wrangler rollback <version-id> --config workers/pipeline/wrangler.jsonc  # Pipeline
 ```
 
-Web Worker 的回滚依赖本地 `dist/`（构建产物，已 gitignore）。重新构建后需要先跑
-`worker:web:prepare` 填回真实 D1 id，配置才指向正确的库。Pipeline 用的是受版本控制的配置，
-没有这一步。
+Web Worker 的回滚依赖本地 `dist/`（构建产物，已 gitignore）。回滚到**本次重构之前**的 Web 版本
+会重新引入它对 D1 的直接访问，那个版本需要 `DB` binding 才能工作——这是一次刻意的、临时的
+暴露，滚回新版本后必须立刻把 binding 去掉。详见
+[`analysis-backend.md` §6.4](analysis-backend.md#64-rollback)。Pipeline 用的是受版本控制的
+配置，回滚是无条件安全的：旧版本仍然拥有数据库和全部控制端点，只是少了只读 API，此时 Web 的
+代理会返回 503 `ANALYSIS_BACKEND_UNAVAILABLE`。
+
+本次重构**没有任何 schema 变更**，因此没有需要向下迁移的东西，也不会删除任何已发布结果。
 
 已发布的报告不随 Worker 回滚改变——它们在 D1 里，只有跨过门禁的分析才会写入。

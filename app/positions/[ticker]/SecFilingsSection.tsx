@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { SecEventCategory } from "@/lib/sec";
 import { formatSecMetricLabel, formatSecMetricValue } from "@/lib/sec-metric-format";
-import type { PublicSecFiling } from "@/lib/sec-public-api";
+import type { PublicSecFiling } from "@/lib/analysis-contract/filings";
 
 const expandEase = [0.22, 1, 0.36, 1] as const;
 

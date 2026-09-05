@@ -1,4 +1,4 @@
-import type { PublicFundamentalSeries } from "./fundamentals-api.ts";
+import type { PublicFundamentalSeries } from "./analysis-contract/fundamentals.ts";
 import {
   isFundamentalMetricKey,
   type FundamentalMetricKey,
