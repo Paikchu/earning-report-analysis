@@ -58,7 +58,7 @@ test("returns stale last-good immediately and schedules one eligible background 
     {
       getRepository: async () => repository(minimalSnapshot("2026-08-26T00:00:00.000Z")),
       isRefreshEligible: () => true,
-      scheduleRefresh: async (_repository, ticker) => { refreshes.push(ticker); return true; },
+      scheduleRefresh: async (ticker) => { refreshes.push(ticker); return true; },
       clock: () => new Date("2026-08-28T00:00:00.000Z"),
     },
   );

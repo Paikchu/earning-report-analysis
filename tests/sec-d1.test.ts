@@ -73,8 +73,29 @@ test("persists and restores one summary per ticker and accession", async () => {
   };
   const repository = new D1SecRepository(asDatabase(database));
 
-  await repository.setSummary(summary);
+  await repository.setSummary({ ticker: summary.ticker, accessionNumber: summary.accessionNumber, form: summary.form }, summary);
   assert.equal((await repository.getSummary("MSFT", summary.accessionNumber))?.headline, "云业务推动增长");
+});
+
+test("refuses to store a summary that does not match the filing it is published against", async () => {
+  const summary: SecFilingSummary = {
+    ticker: "MSFT",
+    form: "10-Q",
+    filingDate: "2026-07-24",
+    accessionNumber: "0000789019-26-000001",
+    headline: "云业务推动增长",
+    bullets: [],
+    analystView: "盈利质量稳定。",
+    source: "deepseek",
+    generatedAt: "2026-07-25T00:00:00.000Z",
+  };
+  const database = { prepare() { throw new Error("must not reach the database"); } };
+  const repository = new D1SecRepository(asDatabase(database));
+
+  await assert.rejects(
+    () => repository.setSummary({ ticker: "AAPL", accessionNumber: summary.accessionNumber, form: summary.form }, summary),
+    /does not match the filing/,
+  );
 });
 
 test("upserts independent SEC workflow job state", async () => {

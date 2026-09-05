@@ -12,14 +12,14 @@ import {
   type PreparedSecFilingMeta,
   type SecModelCall,
 } from "../../lib/sec-pipeline.ts";
+import { D1SecRepository } from "../../lib/sec-d1.ts";
 import type { SecAnalysisArtifact } from "../../lib/sec-types.ts";
-import type { SecFilingSummary, SecNodePlan, SecNodeResult, SecNodeSpec } from "../../lib/sec.ts";
+import { cleanSecAccession, cleanSecTicker, type SecFiling, type SecFilingFeed, type SecFilingSummary, type SecNodePlan, type SecNodeResult, type SecNodeSpec } from "../../lib/sec.ts";
 import { SEC_ANALYSIS_SCHEMA_VERSION, type FilingBlock, type ManagerReview, type SecHistorySnapshot } from "../../lib/sec-analysis.ts";
 import { normalizeCompanyFacts } from "../../lib/sec-history.ts";
-import { serviceFetcher } from "../../lib/service-binding.ts";
-import { siteHeaders, type SecCronEnv } from "./core.ts";
+import { assertTrackedTicker, requireDb, type SecCronEnv } from "./core.ts";
 import type { SecModelExecution } from "./retry-policy.ts";
-import type { PreparedFilingReference, SecPipelineOperations } from "./workflow-core.ts";
+import type { PreparedFilingReference, SecPipelineOperations, WorkflowJobUpdate } from "./workflow-core.ts";
 import { jobAnalysisVersionFor } from "./workflow-core.ts";
 
 type R2ObjectLike = { text(): Promise<string> };
@@ -47,11 +47,8 @@ export function modelForStage(env: SecPipelineEnv, stage: string, override?: str
   return REASONING_STAGE.test(stage) ? env.SEC_REASONING_MODEL || undefined : undefined;
 }
 
-/**
- * `fetcher` reaches the open internet (SEC, the model API). `siteFetch` reaches the Web Worker and
- * has to go through the Service Binding — its public hostname 404s from inside a Worker.
- */
-export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof fetch = fetch, siteFetch: typeof fetch = serviceFetcher(env.WEB, fetcher)): SecPipelineOperations {
+export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof fetch = fetch): SecPipelineOperations {
+  const repository = () => new D1SecRepository(requireDb(env));
   const modelFor = (execution?: SecModelExecution): SecModelCall => async (stage, system, payload) => {
     try {
       return await callWorkerSecModel(env, fetcher, stage, system, payload, modelForStage(env, stage, execution?.model));
@@ -63,22 +60,34 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
   };
   return {
     discover: (ticker) => discoverSecTicker(ticker, { userAgent: env.SEC_USER_AGENT, fetcher }),
-    publishFeed: (feed) => sitePost(env, siteFetch, "/api/internal/sec/feed", { feed }).then(() => undefined),
+    publishFeed: async (feed) => {
+      const typedFeed = feed as SecFilingFeed;
+      const ticker = cleanSecTicker(typedFeed.ticker);
+      if (!ticker) throw new Error("SEC 索引数据无效。");
+      assertTrackedTicker(env, ticker);
+      const normalizedFeed = { ...typedFeed, ticker, filings: typedFeed.filings.map(toStoredFiling) };
+      const store = repository();
+      await store.setCache(`sec:filings:${ticker}`, normalizedFeed, typedFeed.fetchedAt ?? new Date().toISOString());
+      await Promise.all(normalizedFeed.filings.map((filing) => store.upsertFilingIndex(filing)));
+    },
     shouldAnalyze: async (filing, requestedBy) => {
       if (requestedBy === "manual") return true;
-      const result = await sitePost<{ status: "queued" | "running" | "complete" | "failed" | null }>(env, siteFetch, "/api/internal/sec/jobs", {
-        lookup: {
-          ticker: filing.ticker,
-          accessionNumber: filing.accessionNumber,
-          analysisVersion: jobAnalysisVersionFor(filing.form),
-        },
-      });
-      return result.status === null || result.status === "failed";
+      const ticker = cleanSecTicker(filing.ticker);
+      if (!ticker) throw new Error("SEC 任务查询无效。");
+      assertTrackedTicker(env, ticker);
+      const status = await repository().getAnalysisJobStatus(ticker, filing.accessionNumber, jobAnalysisVersionFor(filing.form));
+      return status === null || status === "failed";
     },
     getContext: async (filing, reference) => {
       const history = reference ? await readHistory(env.SEC_FILINGS, reference) : EMPTY_HISTORY;
-      const response = await sitePost<{ context: Awaited<ReturnType<SecPipelineOperations["getContext"]>> }>(env, siteFetch, "/api/internal/sec/context", { filing, history });
-      return { ...response.context, history: response.context.history ?? history };
+      const ticker = cleanSecTicker(filing.ticker);
+      if (!ticker || !filing.accessionNumber) throw new Error("SEC filing 无效。");
+      assertTrackedTicker(env, ticker);
+      const normalizedFiling = { ...filing, ticker };
+      const store = repository();
+      await store.saveHistory(normalizedFiling, history);
+      const context = await store.getAnalysisContext(normalizedFiling);
+      return { ...context, history: context.history ?? history };
     },
     prepare: async (filing) => {
       const prepared = await prepareSecFiling(filing, { userAgent: env.SEC_USER_AGENT, fetcher });
@@ -136,24 +145,71 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       const prepared = await readPrepared(env.SEC_FILINGS, reference);
       const citedBlockIds = collectReferencedBlockIds(artifact);
       const citedBlocks = prepared.blocks.filter((block) => citedBlockIds.has(block.blockId));
+      const ticker = cleanSecTicker(artifact.filing.ticker);
+      const accessionNumber = cleanSecAccession(artifact.filing.accessionNumber);
+      if (!accessionNumber || !ticker) throw new Error("SEC 分析结果无效。");
+      assertTrackedTicker(env, ticker);
+      const store = repository();
+      const normalizedFiling = { ...artifact.filing, ticker, accessionNumber };
       for (const blocks of chunks(citedBlocks, PUBLISH_BLOCK_CHUNK_SIZE)) {
-        await sitePost(env, siteFetch, "/api/internal/sec/publish", { filing: artifact.filing, blocks });
+        await store.saveFilingBlocks(normalizedFiling, blocks);
       }
-      return sitePost<{ memoryJobId?: string }>(env, siteFetch, "/api/internal/sec/publish", {
-        artifact: { ...artifact, blocks: [] } satisfies SecAnalysisArtifact,
-        summary,
-      });
+      const normalizedArtifact = { ...artifact, filing: normalizedFiling };
+      await store.saveAnalysis(normalizedArtifact, false);
+      if (artifact.report.dataQuality.verificationStatus === "failed") return {};
+      if (!summary) throw new Error("SEC 最终发布缺少报告摘要。");
+      const memoryJobId = await store.commitFinalPublication(normalizedArtifact, summary);
+      return { memoryJobId };
     },
     enqueueMemory: async (jobId, ticker) => {
       if (!env.SEC_MEMORY_WORKFLOW) return;
       await env.SEC_MEMORY_WORKFLOW.create({ id: `memory-${crypto.randomUUID()}`, params: { jobId, ticker } });
     },
-    publishEvent: async (summary) => sitePost(env, siteFetch, "/api/internal/sec/publish", { filing: summaryIdentity(summary), summary }).then(() => undefined),
-    updateJob: (job) => sitePost(env, siteFetch, "/api/internal/sec/jobs", { job }).then(() => undefined),
+    publishEvent: async (summary) => {
+      const identity = summaryIdentity(summary);
+      const eventTicker = cleanSecTicker(identity.ticker);
+      const eventAccession = cleanSecAccession(identity.accessionNumber);
+      const validEvent = /^(8-K|6-K)(\/A)?$/.test(identity.form)
+        && Boolean(eventTicker)
+        && summary.source === "deepseek"
+        && summary.ticker === eventTicker
+        && summary.form === identity.form
+        && summary.accessionNumber === eventAccession;
+      if (!validEvent) throw new Error("SEC 事件简析无效。");
+      assertTrackedTicker(env, eventTicker);
+      await repository().setSummary(
+        { ticker: eventTicker, accessionNumber: eventAccession, form: identity.form },
+        { ...summary, ticker: eventTicker, accessionNumber: eventAccession },
+      );
+    },
+    updateJob: async (job: WorkflowJobUpdate) => {
+      const ticker = cleanSecTicker(job.ticker);
+      if (!ticker || !job.jobId || !job.accessionNumber) throw new Error("SEC 任务状态无效。");
+      assertTrackedTicker(env, ticker);
+      await repository().upsertAnalysisJob({ ...job, ticker });
+    },
   };
 }
 
 const EMPTY_HISTORY: SecHistorySnapshot = { registryVersion: "sec-canonical-series.v1", series: [] };
+
+function toStoredFiling(filing: SecFilingFeed["filings"][number]): SecFiling {
+  return {
+    ticker: filing.ticker,
+    cik: filing.cik,
+    cikNumber: filing.cikNumber,
+    companyName: filing.companyName,
+    form: filing.form,
+    filingDate: filing.filingDate,
+    reportDate: filing.reportDate,
+    accessionNumber: filing.accessionNumber,
+    primaryDocument: filing.primaryDocument,
+    description: filing.description,
+    items: filing.items,
+    documentUrl: filing.documentUrl,
+    indexUrl: filing.indexUrl,
+  };
+}
 
 async function readJson<T>(bucket: R2BucketLike, key: string): Promise<T> {
   const object = await bucket.get(key);
@@ -179,19 +235,6 @@ async function readPrepared(bucket: R2BucketLike, reference: PreparedFilingRefer
     readJson<{ document: PreparedSecFiling["document"]; blocks: FilingBlock[] }>(bucket, `${reference.key}/text.json`),
   ]);
   return { ...meta, document: body.document, blocks: body.blocks };
-}
-
-export async function sitePost<T = Record<string, unknown>>(env: SecPipelineEnv, fetcher: typeof fetch, path: string, body: unknown): Promise<T> {
-  const response = await fetcher(`${env.WEB_APP_ORIGIN.replace(/\/+$/, "")}${path}`, {
-    method: "POST",
-    headers: siteHeaders(env),
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`Site bridge ${path} HTTP ${response.status}: ${detail.slice(0, 300)}`);
-  }
-  return response.json() as Promise<T>;
 }
 
 function preparedKey(ticker: string, accessionNumber: string) {

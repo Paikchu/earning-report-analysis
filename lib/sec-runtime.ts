@@ -1,4 +1,3 @@
-import { parseTrackedTickers } from "./sec-config.ts";
 import { asServiceBinding, serviceFetcher } from "./service-binding.ts";
 
 type SecRuntimeConfig = {
@@ -8,7 +7,6 @@ type SecRuntimeConfig = {
    *  refresh and backfill have to go through the Service Binding when one is bound. */
   pipelineFetch: typeof fetch;
   adminToken: string;
-  trackedTickers: string[];
 };
 
 export async function getSecRuntimeConfig(): Promise<SecRuntimeConfig> {
@@ -19,7 +17,6 @@ export async function getSecRuntimeConfig(): Promise<SecRuntimeConfig> {
     pipelineOrigin: stringValue(values.SEC_PIPELINE_ORIGIN) || "https://earning-report-analysis-sec-pipeline.example.workers.dev",
     pipelineFetch: serviceFetcher(asServiceBinding(values.PIPELINE)),
     adminToken: stringValue(values.SEC_ADMIN_TOKEN),
-    trackedTickers: parseTrackedTickers(stringValue(values.SEC_TRACKED_TICKERS)),
   };
 }
 

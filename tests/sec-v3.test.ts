@@ -423,6 +423,26 @@ test("commits the final report, summary, and pending Memory job in one D1 batch"
   assert.match(jobId, /:memory$/);
 });
 
+test("refuses to commit a summary for a different filing than the one being published", async () => {
+  const database = { prepare() { throw new Error("must not reach the database"); }, async batch() { throw new Error("must not reach the database"); } };
+  const filing = {
+    ticker: issuer, cik: "0000000001", cikNumber: 1, companyName: "Test Company", form: "10-Q",
+    filingDate: "2026-04-20", reportDate: "2026-03-31", accessionNumber: "test-filing", primaryDocument: "test.htm",
+    description: "Quarterly report", items: "", documentUrl: "https://sec.test/test.htm", indexUrl: "https://sec.test/index.htm",
+  };
+  const artifact = {
+    filing, periodId: `${issuer}:2026-03-31:quarter`, periodScope: "quarter", blocks: [], comparisons: [],
+    artifactKeys: { synthesis: "analysis/test/synthesis.json" },
+    report: { ticker: issuer, periodId: `${issuer}:2026-03-31:quarter`, reportVersion: "v3", headline: "Test", keyMetrics: [], changes: { qoq: [], yoy: [], guidance: [], risks: [] }, dataQuality: { coverage: 1, verificationStatus: "partial", warnings: [], analysisStatus: "partial" } },
+  } satisfies SecAnalysisArtifact;
+  const summary = { ticker: issuer, form: "10-Q", filingDate: filing.filingDate, accessionNumber: "some-other-filing", headline: "Test", bullets: [], analystView: "Test", report: "Test", source: "deepseek", generatedAt: "2026-04-21T00:00:00.000Z" } satisfies SecFilingSummary;
+
+  await assert.rejects(
+    () => new D1SecRepository(asDatabase(database)).commitFinalPublication(artifact, summary),
+    /does not match the filing/,
+  );
+});
+
 test("serializes ticker Memory leases and prevents an expired worker from overwriting a new owner", async () => {
   const database = createMemoryD1();
   await database.prepare(`

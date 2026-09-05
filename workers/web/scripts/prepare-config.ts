@@ -26,7 +26,6 @@ config.d1_databases = config.d1_databases.map((binding) => binding.binding === "
 config.vars = {
   ...config.vars,
   ...(process.env.SEC_PIPELINE_ORIGIN ? { SEC_PIPELINE_ORIGIN: process.env.SEC_PIPELINE_ORIGIN.trim() } : {}),
-  ...(process.env.SEC_TRACKED_TICKERS ? { SEC_TRACKED_TICKERS: process.env.SEC_TRACKED_TICKERS.trim() } : {}),
 };
 
 await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");

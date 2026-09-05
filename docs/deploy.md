@@ -48,6 +48,13 @@ printf %s "$SEC_REFRESH_KEY" | npx wrangler secret put SEC_REFRESH_KEY --config 
 
 ## Pipeline Worker
 
+受版本控制的源配置是 `workers/pipeline/wrangler.jsonc`，部署直接用它，没有生成步骤。它现在也绑定
+D1——基本面同步由这个 Worker 直接写库，不再让 Web 代写——D1 id 就写在配置里，和同一份文件里的
+bucket 名、Worker 名一样是 account 内的标识符，不是凭据。所以 Pipeline 不需要任何 Build variable。
+
+部署前会先跑 `worker:pipeline:check:migrations`，向远端 D1 确认这份构建带的 migration 全部
+apply 过——这道门原本只保护 Web，现在写库的主力是 Pipeline，它更需要。
+
 先部署关闭 Cron 的 staging（独立 Worker、Workflow 和 R2）：
 
 ```bash
@@ -56,7 +63,10 @@ printf %s "$SEC_REFRESH_KEY" | npx wrangler secret put SEC_REFRESH_KEY --config 
 printf %s "$AI_API_KEY" | npx wrangler secret put AI_API_KEY --config workers/pipeline/wrangler.jsonc --env staging
 ```
 
-staging 的 Cron 列表为空，只能通过显式 POST 打 canary。
+**staging 没有 D1 绑定**，因为它绝不能写生产库，而它自己还没有库。它的 Cron 列表为空，正常不会
+走到基本面同步；显式 POST 的 canary 如果走到，会拿到明确的 "Pipeline has no D1 binding" 报错，
+而不是静默写错地方。要让 staging 具备这个能力，先建一个 staging D1，再给 `env.staging` 补上
+绑定。
 
 ```bash
 npm run worker:pipeline:deploy
@@ -64,26 +74,28 @@ npm run worker:pipeline:deploy
 
 ## 白名单
 
-`SEC_TRACKED_TICKERS` **只配置在 Web Worker 上**。Pipeline 不再持有副本，它在 Cron 和手动任务
-开始时通过 `/api/internal/sec/watchlist` 读取；Web Worker 本来就是在每条桥接和管理路由上拒绝
-非白名单 ticker 的一侧。两边各存一份时，不一致不会报错，只会表现为任务反复失败。
+`SEC_TRACKED_TICKERS` **只配置在 Pipeline Worker 上**，作为一个 runtime variable（不进
+`wrangler.jsonc`，不进代码，也不是 Build variable）。Pipeline 自己决定分析谁——它不该问上层要
+这个答案，Web 也不再持有这份数据。
+
+直接在 Cloudflare Dashboard 的 Pipeline Worker → Settings → Variables and Secrets 里编辑这一个
+值即可，不需要重新构建或部署；`--keep-vars` 保证之后的部署不会覆盖它。加一个股票代码就是改这一
+个值。也可以用命令行：
 
 ```bash
-export SEC_WEB_D1_DATABASE_ID="<real-d1-id>"
-export SEC_TRACKED_TICKERS="MSFT,NVDA"
-npm run web:deploy
+npx wrangler secret put SEC_TRACKED_TICKERS --config workers/pipeline/wrangler.jsonc
 ```
 
-改完只需要部署 Web Worker。核对线上实际值：
+（用 `secret` 而非普通 var 只是因为这是 Wrangler 唯一能不触发部署直接改运行时值的命令；ticker
+列表本身不敏感，值就是明文的股票代码，跟 `SEC_REFRESH_KEY` 那种真正的密钥不是一回事。）
 
-```bash
-npx wrangler versions view <version-id> --config dist/server/wrangler.json
-```
+Web 侧不再做任何白名单校验——`admin/*/refresh`、`admin/*/backfill` 这两个转发路由把请求原样
+转给 Pipeline，Pipeline 的 `handleSecAnalysisRequest` 会在真正起 workflow 之前自己检查一遍
+（`workers/pipeline/core.ts` 的 `assertTrackedTicker`）。403 的来源从 Web 换到了 Pipeline，这是
+故意的：判断"该不该分析"的权力现在完全在下层。
 
-Pipeline 的 `/health` 只报 `watchlistConfigured`，也就是它有没有配好读取白名单所需的
-`WEB_APP_ORIGIN` 与 `SEC_REFRESH_KEY`——它不再知道白名单的内容。
-Web Worker 不可用时这一轮 Cron 会整轮失败，**不会回退到任何本地副本**：每篇 filing 的 context、
-发布和任务状态都要经过同一个 Worker，用旧名单起的任务也跑不完。
+Pipeline 的 `/health` 报的 `watchlistConfigured` 现在表示"这个 Worker 自己有没有配好
+`SEC_TRACKED_TICKERS`"，不再涉及任何跨 Worker 依赖。
 
 `SEC_ANALYSIS_MODEL` 是所有阶段的主模型。可选的 `SEC_REASONING_MODEL` 只接管 Manager 规划、Manager Review 和 Synthesis——节点抽取、事件简析和 Memory 提取仍走主模型。不设置就是单模型，行为与之前一致；重试降级到 `hy3` 始终优先于这两者：
 
@@ -94,16 +106,36 @@ npx wrangler deploy --config workers/pipeline/wrangler.jsonc --env="" --keep-var
 `npm run worker:pipeline:check` 是不落地的干跑，可以在部署前确认绑定解析正确。旧的
 `sec-cron:check` / `sec-cron:deploy` scripts 只作为兼容别名保留。
 
+## 依赖方向
+
+Pipeline 是下层，Web 是上层：依赖只能从 Web 指向 Pipeline，反过来不允许。这不是靠约定维持
+的——Pipeline 的 `wrangler.jsonc` 里没有任何指向 Web 的 `services` 绑定，代码里也没有
+`WEB_APP_ORIGIN`，物理上就调不到 Web。Pipeline 需要的一切要么来自自己的配置（`SEC_TRACKED_TICKERS`），
+要么直接读写 D1，要么自己去抓外部数据源（EDGAR、Yahoo）。
+
+Web 仍然可以调用 Pipeline，这是允许的控制面方向，现在有两类：
+
+- 手动触发分析/回填：`admin/*/refresh`、`admin/*/backfill`、`internal/sec/refresh/[ticker]`
+  转发到 Pipeline 的 `/jobs/:ticker` / `/backfill/:ticker`。
+- 按需刷新某支股票的基本面：公开的 fundamentals 页面发现数据过期时，通过
+  `lib/fundamentals-runtime.ts` 的 `scheduleFundamentalRefresh` 请求 Pipeline 的
+  `/fundamentals/refresh/:ticker`，Pipeline 自己完成抓取和写库，Web 全程不碰 D1。
+
+两者都走 `services: [{ binding: "PIPELINE", ... }]` 这个 Service Binding（`lib/sec-runtime.ts`
+的 `pipelineFetch`），不直接打公网域名——两个 Worker 在同一个 workers.dev 子域下，公网域名互相
+调用会在边缘被拒（404），拿不到对方。
+
 ## 回滚
 
 两个 Worker 都用版本回滚，不重新构建：
 
 ```bash
-npx wrangler rollback <version-id> --config dist/server/wrangler.json          # Web
-npx wrangler rollback <version-id> --config workers/pipeline/wrangler.jsonc    # Pipeline
+npx wrangler rollback <version-id> --config dist/server/wrangler.json    # Web
+npx wrangler rollback <version-id> --config workers/pipeline/wrangler.jsonc  # Pipeline
 ```
 
 Web Worker 的回滚依赖本地 `dist/`（构建产物，已 gitignore）。重新构建后需要先跑
-`worker:web:prepare` 填回真实 D1 id，配置才指向正确的库。
+`worker:web:prepare` 填回真实 D1 id，配置才指向正确的库。Pipeline 用的是受版本控制的配置，
+没有这一步。
 
 已发布的报告不随 Worker 回滚改变——它们在 D1 里，只有跨过门禁的分析才会写入。

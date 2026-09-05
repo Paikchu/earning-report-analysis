@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("declares SEC tables and removes portfolio tables from the standalone schema", async () => {
@@ -31,6 +31,12 @@ test("keeps both Cloudflare Workers as explicit deploy units", async () => {
   assert.match(packageSource, /wrangler versions upload --config dist\/server\/wrangler\.json/);
   assert.match(packageSource, /"worker:pipeline:version"/);
   assert.match(packageSource, /wrangler versions upload --config workers\/pipeline\/wrangler\.jsonc/);
+  // The Pipeline binds D1 directly rather than asking the Web Worker to write for it. Its config is
+  // the committed source, so the id is real here and no prepare step stands between it and deploy;
+  // the deploy does have to pass the same migration gate the Web Worker passes.
+  assert.match(pipelineConfig, /"binding": "DB"/);
+  assert.doesNotMatch(pipelineConfig, /00000000-0000-4000-8000-000000000000/);
+  assert.match(packageSource, /"worker:pipeline:deploy": "npm run worker:pipeline:check:migrations/);
 });
 
 test("exposes the standalone stock and report routes", async () => {
@@ -87,22 +93,25 @@ test("publishes public filing, search, and protected admin contracts", async () 
   assert.match(sources[3], /hasSecAdminAccess/);
   assert.match(sources[3], /requestSecAnalysis/);
   assert.match(sources[4], /requestSecBackfill/);
-  assert.match(sources.join("\n"), /isTrackedTicker/);
+  // The whitelist lives on the Pipeline Worker now: it re-checks the ticker before starting a run,
+  // so the Web-side admin routes forwarding to it no longer need their own copy of the check.
+  assert.doesNotMatch(sources.join("\n"), /isTrackedTicker/);
   assert.doesNotMatch(sources.join("\n"), /getChatGPTUser|oai-sites-authorization/);
 });
 
-test("keeps only short authenticated internal bridge routes", async () => {
-  const routes = [
-    "../app/api/internal/sec/feed/route.ts",
-    "../app/api/internal/sec/context/route.ts",
-    "../app/api/internal/sec/publish/route.ts",
-    "../app/api/internal/sec/jobs/route.ts",
-  ];
-  const sources = await Promise.all(routes.map((path) => readFile(new URL(path, import.meta.url), "utf8")));
-  for (const source of sources) assert.match(source, /hasInternalSecAccess/);
-  assert.match(sources[2], /saveAnalysis/);
-  assert.match(sources[2], /body\.summary\.accessionNumber === eventAccession/);
-  assert.doesNotMatch(sources.join("\n"), /SEC_BOOTSTRAP|model-key|oai-sites-authorization/);
+test("keeps only the one short authenticated internal forwarding route", async () => {
+  // Every other /api/internal/* route was a Pipeline-to-Web bridge call; Pipeline now reads and
+  // writes D1 directly, so none of them exist any more. This one remains because it is a genuine
+  // Web-to-Pipeline control-plane forward (an operator or a webhook triggering a refresh via the
+  // internal key, the same shape the admin routes use with the admin token instead).
+  const source = await readFile(new URL("../app/api/internal/sec/refresh/[ticker]/route.ts", import.meta.url), "utf8");
+  assert.match(source, /hasInternalSecAccess/);
+  assert.match(source, /requestSecAnalysis/);
+  assert.doesNotMatch(source, /isTrackedTicker/);
+
+  const internalDirectory = await readdir(new URL("../app/api/internal", import.meta.url), { recursive: true, withFileTypes: true });
+  const routeFiles = internalDirectory.filter((entry) => entry.isFile() && entry.name === "route.ts");
+  assert.equal(routeFiles.length, 1);
 });
 
 test("ships SEC analysis as a bounded durable Cloudflare workflow with isolated model credentials", async () => {
@@ -123,10 +132,12 @@ test("ships SEC analysis as a bounded durable Cloudflare workflow with isolated 
   assert.match(workerConfig, /"r2_buckets"/);
   assert.match(workflowCore, /const SEC_NODE_CONCURRENCY = 2;/);
   assert.match(workflowCore, /mapWithConcurrency\(plan\.nodes, SEC_NODE_CONCURRENCY,/);
+  // The whitelist has one home, the Pipeline Worker's own runtime var — never the committed config
+  // (that would put a deploy between an operator and adding a ticker) and never a copy the Web
+  // Worker holds too (that's the drift this design replaced).
   assert.doesNotMatch(workerConfig, /SEC_TRACKED_TICKERS/);
-  // The whitelist has one home, the Web Worker; the Pipeline reads it over the bridge.
-  assert.match(core, /\/api\/internal\/sec\/watchlist/);
-  assert.doesNotMatch(core, /env\.SEC_TRACKED_TICKERS/);
+  assert.match(core, /env\.SEC_TRACKED_TICKERS/);
+  assert.doesNotMatch(core, /\/api\/internal\/sec\/watchlist/);
   assert.match(operations, /AI_API_KEY/);
   assert.match(operations, /glm-5.3-flash/);
   assert.doesNotMatch(runtime, /AI_API_KEY/);
@@ -152,30 +163,40 @@ test("reports a failed scheduled run instead of finishing it as ok", async () =>
   assert.match(core, /started no workflows/);
 });
 
-test("bridges the two Workers with Service Bindings instead of their public hostnames", async () => {
-  const [pipelineConfig, webConfig, core, operations, memoryWorkflow, runtime, adminRefresh] = await Promise.all([
+test("keeps dependencies pointed one way: Web can call Pipeline, Pipeline calls no one", async () => {
+  const [pipelineConfig, webConfig, core, operations, memoryWorkflow, companyAnalysisWorkflow, fundamentalsPipeline, runtime, adminRefresh, fundamentalsRuntime] = await Promise.all([
     readFile(new URL("../workers/pipeline/wrangler.jsonc", import.meta.url), "utf8"),
     readFile(new URL("../workers/web/wrangler.jsonc", import.meta.url), "utf8"),
     readFile(new URL("../workers/pipeline/core.ts", import.meta.url), "utf8"),
     readFile(new URL("../workers/pipeline/operations.ts", import.meta.url), "utf8"),
     readFile(new URL("../workers/pipeline/memory-workflow.ts", import.meta.url), "utf8"),
+    readFile(new URL("../workers/pipeline/company-analysis-workflow.ts", import.meta.url), "utf8"),
+    readFile(new URL("../workers/pipeline/fundamentals.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/sec-runtime.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/v1/admin/companies/[ticker]/refresh/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/fundamentals-runtime.ts", import.meta.url), "utf8"),
   ]);
+  const pipelineSources = [core, operations, memoryWorkflow, companyAnalysisWorkflow, fundamentalsPipeline].join("\n");
 
-  // Two Workers on one workers.dev subdomain cannot reach each other over their public hostnames:
-  // the edge answers the subrequest with a 404 that never reaches the target Worker at all.
-  assert.match(pipelineConfig, /"binding":\s*"WEB",\s*"service":\s*"earning-report-analysis-sec-web"/);
+  // Pipeline is the lower layer: it has no binding, no origin, and no fetcher pointed at Web. A
+  // second copy of the whitelist drifting from Web's was exactly the failure mode this replaced —
+  // removing the binding makes a reverse dependency impossible to add back by accident, not just
+  // discouraged by convention.
+  assert.doesNotMatch(pipelineConfig, /"service":\s*"earning-report-analysis-sec-web"/);
+  assert.doesNotMatch(pipelineSources, /WEB_APP_ORIGIN/);
+  assert.doesNotMatch(pipelineSources, /serviceFetcher\(env\.WEB/);
+
+  // Web is the upper layer and may still call down for control-plane requests: kicking off an
+  // analysis run, or asking Pipeline to refresh one ticker's fundamentals. Both go through the
+  // Service Binding, since the two Workers' public hostnames 404 each other from the edge.
   assert.match(webConfig, /"binding":\s*"PIPELINE",\s*"service":\s*"earning-report-analysis-sec-pipeline"/);
-  assert.match(core, /serviceFetcher\(env\.WEB\)/);
-  assert.match(operations, /siteFetch: typeof fetch = serviceFetcher\(env\.WEB, fetcher\)/);
-  assert.match(memoryWorkflow, /siteFetch: typeof fetch = serviceFetcher\(env\.WEB, fetcher\)/);
   assert.match(runtime, /pipelineFetch: serviceFetcher\(asServiceBinding\(values\.PIPELINE\)\)/);
   assert.match(adminRefresh, /fetcher: runtime\.pipelineFetch/);
+  assert.match(fundamentalsRuntime, /runtime\.pipelineFetch/);
+  assert.match(fundamentalsRuntime, /\/fundamentals\/refresh\//);
 
-  // Only the bridge moves. SEC and the model API are the open internet and keep the plain fetcher.
-  assert.doesNotMatch(operations, /\(env, fetcher, "\/api\/internal\//);
-  assert.doesNotMatch(memoryWorkflow, /\(env, fetcher, "\/api\/internal\//);
+  // SEC and the model API are the open internet and keep the plain fetcher — only the Web bridge
+  // was ever routed differently.
   assert.match(operations, /discoverSecTicker\(ticker, \{ userAgent: env\.SEC_USER_AGENT, fetcher \}\)/);
   assert.match(operations, /callWorkerSecModel\(env, fetcher,/);
 });

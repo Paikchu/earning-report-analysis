@@ -140,7 +140,10 @@ export class D1SecRepository implements SecRepository {
     }
   }
 
-  async setSummary(summary: SecFilingSummary): Promise<void> {
+  async setSummary(filing: Pick<SecFiling, "ticker" | "accessionNumber" | "form">, summary: SecFilingSummary): Promise<void> {
+    if (summary.ticker !== filing.ticker || summary.accessionNumber !== filing.accessionNumber || summary.form !== filing.form) {
+      throw new Error("SEC summary does not match the filing it is being published against");
+    }
     await this.database.prepare(`
       INSERT INTO sec_filing_summaries (ticker, accession_number, generated_at, payload)
       VALUES (?, ?, ?, ?)
@@ -574,6 +577,9 @@ export class D1SecRepository implements SecRepository {
 
   async commitFinalPublication(artifact: SecAnalysisArtifact, summary: SecFilingSummary): Promise<string> {
     if (artifact.report.dataQuality.verificationStatus === "failed") throw new Error("Failed SEC analysis cannot be published");
+    if (summary.ticker !== artifact.filing.ticker || summary.accessionNumber !== artifact.filing.accessionNumber) {
+      throw new Error("SEC summary does not match the filing it is being published against");
+    }
     if (!this.database.batch) throw new Error("D1 batch is required for atomic SEC publication");
     const memoryJobId = `${artifact.filing.ticker}:${artifact.periodId}:${artifact.report.reportVersion}:memory`;
     const sourceR2Key = artifact.artifactKeys?.synthesis;

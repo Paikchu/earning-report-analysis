@@ -28,7 +28,9 @@ Build variables 至少配置：
 - `SEC_WEB_D1_DATABASE_NAME`：建议为 `earning-report-analysis-sec-web`。
 - `SEC_WEB_WORKER_NAME`：`earning-report-analysis-sec-web`。
 - `SEC_PIPELINE_ORIGIN`：Pipeline Worker 的生产 URL。
-- `SEC_TRACKED_TICKERS`：需要生成报告的股票白名单。
+
+Web 不再持有白名单——它对 D1 里的分析数据只读，`SEC_TRACKED_TICKERS` 只配在 Pipeline
+上，见下方 Pipeline Worker 一节。
 
 ### Pipeline Worker
 
@@ -39,8 +41,14 @@ Deploy command: npm run worker:pipeline:deploy
 Non-production branch deploy command: npm run worker:pipeline:version
 ```
 
-Pipeline 的 `SEC_REFRESH_KEY` 与 `AI_API_KEY` 是 Worker runtime secrets，不是 Build
-variables。生产部署命令使用 `--keep-vars`，避免覆盖 Dashboard 中现有 runtime vars。
+Pipeline 不需要 Build variables：它直接从 committed 的 `wrangler.jsonc` 部署，D1 id 就写在里面
+（account 内的标识符，不是凭据，和同一份配置里的 bucket 名、Worker 名同级）。
+
+Pipeline 的 `SEC_REFRESH_KEY`、`AI_API_KEY`、`SEC_TRACKED_TICKERS` 都是 Worker runtime
+secrets/vars，不是 Build variables，直接在 Dashboard 或用 `wrangler secret put` 配置。
+`SEC_TRACKED_TICKERS` 就是白名单——Pipeline 自己决定分析谁，不问 Web 要这份名单，改一个
+股票代码只需要改这一个值，不需要重新部署。生产部署命令使用 `--keep-vars`，避免覆盖
+Dashboard 中现有 runtime vars/secrets。
 
 ## Build watch paths
 
@@ -69,9 +77,14 @@ Pipeline Worker：
 ```text
 lib/*
 workers/pipeline/*
+workers/web/migrations/*
+workers/web/scripts/check-migrations.ts
 tsconfig.json
 package.json
 package-lock.json
 ```
+
+Pipeline 也监听 migrations 目录：它绑定 D1 之后，部署前要跑同一套 migration 门禁，构建里带的
+migration 列表必须跟 Web 一致。
 
 详细的密钥、迁移、staging 与回滚顺序见 [`../docs/deploy.md`](../docs/deploy.md)。

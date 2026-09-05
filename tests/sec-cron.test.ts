@@ -9,14 +9,24 @@ import {
   type SecWorkflowBinding,
 } from "../workers/pipeline/core.ts";
 
+/** A fake D1 whose only job here is to answer `listBackfillCandidates`'s query. */
+function companyAnalysisDb(candidates: Array<Record<string, unknown>>) {
+  return {
+    prepare() {
+      return {
+        bind() {
+          return { async all() { return { results: candidates }; } };
+        },
+      };
+    },
+  } as unknown as D1Database;
+}
+
 const env: SecCronEnv = {
-  WEB_APP_ORIGIN: "https://web.example",
+  SEC_TRACKED_TICKERS: "MSFT,NOK",
   SEC_REFRESH_KEY: "refresh-key",
   SEC_ANALYSIS_WORKFLOW: workflowBinding(),
 };
-
-/** The whitelist is served by the Web Worker, so every entry point here has to go and read it. */
-const watchlist: typeof fetch = async () => Response.json({ tickers: ["MSFT", "NOK"] });
 
 function workflowBinding(started: string[] = []): SecWorkflowBinding {
   return {
@@ -27,9 +37,9 @@ function workflowBinding(started: string[] = []): SecWorkflowBinding {
   };
 }
 
-test("loads the watchlist and starts one independent workflow per ticker", async () => {
+test("reads its own whitelist and starts one independent workflow per ticker", async () => {
   const started: string[] = [];
-  const result = await runSecRefresh({ ...env, SEC_ANALYSIS_WORKFLOW: workflowBinding(started) }, watchlist, 1_786_000_000_000);
+  const result = await runSecRefresh({ ...env, SEC_ANALYSIS_WORKFLOW: workflowBinding(started) }, 1_786_000_000_000);
 
   assert.deepEqual(result, { started: ["MSFT", "NOK"], failed: [] });
   assert.deepEqual(started, ["MSFT", "NOK"]);
@@ -37,23 +47,23 @@ test("loads the watchlist and starts one independent workflow per ticker", async
 
 test("starts one idempotent company analysis workflow for each backfill candidate", async () => {
   const started: Array<{ id: string; ticker: string; triggerRef: string }> = [];
-  const candidates: typeof fetch = async () => Response.json({ candidates: [{
-    ticker: "MSFT",
-    memoryJobId: "memory-job-1",
-    memoryVersion: 4,
-    periodId: "MSFT:2026-06-30:quarter",
-    reportDate: "2026-06-30",
-    triggerRef: "memory-job-1:4",
-  }] });
   const result = await runCompanyAnalysisSweep({
     ...env,
+    DB: companyAnalysisDb([{
+      ticker: "MSFT",
+      memoryJobId: "memory-job-1",
+      memoryVersion: 4,
+      periodId: "MSFT:2026-06-30:quarter",
+      reportDate: "2026-06-30",
+      triggerRef: "memory-job-1:4",
+    }]),
     COMPANY_ANALYSIS_WORKFLOW: {
       async create(options) {
         started.push({ id: options.id, ticker: options.params.ticker, triggerRef: options.params.triggerRef });
         return { id: options.id };
       },
     },
-  }, candidates);
+  });
 
   assert.deepEqual(result, { candidates: 1, started: ["MSFT"], failed: [] });
   assert.equal(started[0]?.ticker, "MSFT");
@@ -65,10 +75,9 @@ test("force backfill requests incomplete candidates and creates a fresh workflow
   const ids: string[] = [];
   const triggerRefs: string[] = [];
   const analysisIds: Array<string | undefined> = [];
-  const requestBodies: string[] = [];
-  const candidates: typeof fetch = async (_input, init) => {
-    requestBodies.push(String(init?.body));
-    return Response.json({ candidates: [{
+  const sweepEnv = {
+    ...env,
+    DB: companyAnalysisDb([{
       ticker: "MSFT",
       analysisId: "company:MSFT:existing",
       memoryJobId: "memory-job-1",
@@ -76,10 +85,7 @@ test("force backfill requests incomplete candidates and creates a fresh workflow
       periodId: "MSFT:2026-06-30:quarter",
       reportDate: "2026-06-30",
       triggerRef: "memory-job-1:4",
-    }] });
-  };
-  const sweepEnv = {
-    ...env,
+    }]),
     COMPANY_ANALYSIS_WORKFLOW: {
       async create(options) {
         ids.push(options.id);
@@ -90,16 +96,12 @@ test("force backfill requests incomplete candidates and creates a fresh workflow
     },
   } as SecCronEnv;
 
-  await runCompanyAnalysisSweep(sweepEnv, candidates, { forceIncomplete: true });
-  await runCompanyAnalysisSweep(sweepEnv, candidates, { forceIncomplete: true });
+  await runCompanyAnalysisSweep(sweepEnv, { forceIncomplete: true });
+  await runCompanyAnalysisSweep(sweepEnv, { forceIncomplete: true });
 
   assert.equal(new Set(ids).size, 2);
   assert.deepEqual(triggerRefs, ["memory-job-1:4", "memory-job-1:4"]);
   assert.deepEqual(analysisIds, ["company:MSFT:existing", "company:MSFT:existing"]);
-  assert.deepEqual(requestBodies.map((body) => JSON.parse(body)), [
-    { limit: 100, includeIncomplete: true },
-    { limit: 100, includeIncomplete: true },
-  ]);
 });
 
 test("continues starting remaining workflows after one failure", async () => {
@@ -111,7 +113,7 @@ test("continues starting remaining workflows after one failure", async () => {
       return { id: options.id };
     },
   };
-  assert.deepEqual(await runSecRefresh({ ...env, SEC_ANALYSIS_WORKFLOW: binding }, watchlist, 1_786_000_000_000), { started: ["NOK"], failed: ["MSFT"] });
+  assert.deepEqual(await runSecRefresh({ ...env, SEC_ANALYSIS_WORKFLOW: binding }, 1_786_000_000_000), { started: ["NOK"], failed: ["MSFT"] });
   assert.deepEqual(started, ["NOK"]);
 });
 
@@ -121,13 +123,12 @@ test("accepts authenticated manual jobs without running analysis in the request"
     new Request("https://worker.example/jobs/MSFT", { method: "POST", headers: { "x-sec-refresh-key": "refresh-key" } }),
     { ...env, SEC_ANALYSIS_WORKFLOW: workflowBinding(started) },
     1_786_000_000_000,
-    watchlist,
   );
 
   assert.equal(response.status, 202);
   assert.deepEqual(started, ["MSFT"]);
   assert.equal((await response.json() as { status: string }).status, "queued");
-  assert.equal((await handleSecAnalysisRequest(new Request("https://worker.example/jobs/MSFT", { method: "POST" }), env, 1_786_000_000_000, watchlist)).status, 401);
+  assert.equal((await handleSecAnalysisRequest(new Request("https://worker.example/jobs/MSFT", { method: "POST" }), env, 1_786_000_000_000)).status, 401);
 });
 
 test("creates a distinct workflow for each manual force refresh", async () => {
@@ -143,8 +144,8 @@ test("creates a distinct workflow for each manual force refresh", async () => {
     headers: { "x-sec-refresh-key": "refresh-key" },
   });
 
-  await handleSecAnalysisRequest(request(), { ...env, SEC_ANALYSIS_WORKFLOW: binding }, 1_786_000_000_000, watchlist);
-  await handleSecAnalysisRequest(request(), { ...env, SEC_ANALYSIS_WORKFLOW: binding }, 1_786_000_000_000, watchlist);
+  await handleSecAnalysisRequest(request(), { ...env, SEC_ANALYSIS_WORKFLOW: binding }, 1_786_000_000_000);
+  await handleSecAnalysisRequest(request(), { ...env, SEC_ANALYSIS_WORKFLOW: binding }, 1_786_000_000_000);
 
   assert.equal(new Set(ids).size, 2);
 });
@@ -157,27 +158,7 @@ test("fails the refresh when no workflow could be started at all", async () => {
   };
 
   await assert.rejects(
-    runSecRefresh({ ...env, SEC_ANALYSIS_WORKFLOW: binding }, watchlist, 1_786_000_000_000),
+    runSecRefresh({ ...env, SEC_ANALYSIS_WORKFLOW: binding }, 1_786_000_000_000),
     /started no workflows \(watchlist: 2, failed: 2\)/,
   );
-});
-
-test("routes the watchlist through the Service Binding rather than the Web Worker's hostname", async () => {
-  const seen: string[] = [];
-  const web: NonNullable<SecCronEnv["WEB"]> = {
-    fetch: async (input) => {
-      seen.push(String(input));
-      return Response.json({ tickers: ["MSFT"] });
-    },
-  };
-  const started: string[] = [];
-
-  // Called the way the Cron handler calls it, with no fetcher: the binding has to come off the env,
-  // because a plain fetch to that hostname is answered by the edge with a 404 that never lands.
-  assert.deepEqual(
-    await runSecRefresh({ ...env, WEB: web, SEC_ANALYSIS_WORKFLOW: workflowBinding(started) }),
-    { started: ["MSFT"], failed: [] },
-  );
-  assert.deepEqual(seen, ["https://web.example/api/internal/sec/watchlist"]);
-  assert.deepEqual(started, ["MSFT"]);
 });
