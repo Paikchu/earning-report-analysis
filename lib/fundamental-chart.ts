@@ -7,7 +7,7 @@ import type {
 import type {
   PublicFundamentalPeriod,
   PublicFundamentalSeries,
-} from "./fundamentals-api.ts";
+} from "./analysis-contract/fundamentals.ts";
 
 export const FUNDAMENTAL_CHART_SPEC_VERSION = "fundamental-chart.v1";
 export const FUNDAMENTAL_CHART_MAX_SERIES = 4;

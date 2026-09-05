@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { encodePageCursor } from "../lib/sec-config.ts";
 import { getPublicFilingPage } from "../lib/sec-public-api.ts";
+import { AnalysisRequestError } from "../lib/analysis-contract/errors.ts";
 
 test("maps migrated filings to the public contract without generation", async () => {
   const fakeRepository = {
@@ -28,7 +29,16 @@ test("maps migrated filings to the public contract without generation", async ()
 });
 
 test("rejects malformed public ticker paths instead of rewriting them", async () => {
-  await assert.rejects(() => getPublicFilingPage({} as never, "MS/FT", null, "20"), /invalid ticker/i);
+  // The rejection now carries the machine code the HTTP contract publishes, so the router maps it
+  // to 400 INVALID_TICKER without matching on prose.
+  await assert.rejects(
+    () => getPublicFilingPage({} as never, "MS/FT", null, "20"),
+    (error: unknown) => error instanceof AnalysisRequestError && error.code === "INVALID_TICKER",
+  );
+  await assert.rejects(
+    () => getPublicFilingPage({} as never, "MSFT", "not-a-cursor!", "20"),
+    (error: unknown) => error instanceof AnalysisRequestError && error.code === "INVALID_CURSOR",
+  );
 });
 
 test("pages past the cache window without hydrating filings it cannot serve", async () => {

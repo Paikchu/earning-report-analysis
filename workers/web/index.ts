@@ -3,7 +3,9 @@
 import handler from "vinext/server/app-router-entry";
 
 interface Env {
-  DB: D1Database;
+  /** The analysis backend. Every financial read this Worker performs goes through it; there is
+   *  deliberately no database binding here to fall back to. */
+  PIPELINE?: { fetch: typeof fetch };
   /** Only present when the generated config declares an `assets.binding`. The App Router
    *  handler treats it as optional and serves without it. */
   ASSETS?: { fetch(request: Request): Promise<Response> | Response };

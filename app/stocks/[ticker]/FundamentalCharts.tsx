@@ -32,7 +32,7 @@ import {
   type FundamentalChartPoint,
 } from "@/lib/fundamental-chart";
 import type { FundamentalMetricKey, FundamentalTransform } from "@/lib/fundamental-metrics";
-import { FUNDAMENTALS_DEFAULT_PERIOD_COUNT, type PublicFundamentalsResponse } from "@/lib/fundamentals-api";
+import { FUNDAMENTALS_DEFAULT_PERIOD_COUNT, type PublicFundamentalsResponse } from "@/lib/analysis-contract/fundamentals";
 
 // The panel reads as two questions: how the quarter went, and what the market
 // paid for it. Grouping keeps seventeen rows scannable in a narrow column.

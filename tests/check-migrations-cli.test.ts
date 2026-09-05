@@ -46,7 +46,7 @@ function appliedStub(applied: string[]): string {
 function runCheck({ configPath, wranglerPath }: Fixture) {
   return execFileAsync(process.execPath, [
     "--experimental-strip-types",
-    "workers/web/scripts/check-migrations.ts",
+    "workers/pipeline/scripts/check-migrations.ts",
   ], {
     cwd: projectRoot,
     env: { ...process.env, SEC_WEB_WRANGLER_CONFIG: configPath, SEC_WEB_WRANGLER_BIN: wranglerPath },

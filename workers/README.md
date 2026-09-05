@@ -7,7 +7,11 @@ Root directory 都设置为 `/`；不要让 Wrangler 自动猜测配置文件。
 | Cloudflare Worker | 仓库目录 | 源配置 | 生产部署命令 |
 | --- | --- | --- | --- |
 | `earning-report-analysis-sec-web` | [`web/`](web/) | `workers/web/wrangler.jsonc` | `npm run worker:web:deploy:built` |
-| `earning-report-analysis-sec-pipeline` | [`pipeline/`](pipeline/) | `workers/pipeline/wrangler.jsonc` | `npm run worker:pipeline:deploy` |
+| `earning-report-analysis-sec-pipeline`（分析后端） | [`pipeline/`](pipeline/) | `workers/pipeline/wrangler.jsonc` | `npm run worker:pipeline:deploy` |
+
+职责边界：Pipeline Worker 拥有分析数据模型、migrations、Workflows、Cron 和只读 API；Web
+Worker 是它的一个客户端，没有任何直接访问分析存储的能力。完整的架构决策、API 契约、凭据
+流程与上线/回滚手册见 [`../docs/analysis-backend.md`](../docs/analysis-backend.md)。
 
 ## Cloudflare Dashboard
 
@@ -24,13 +28,20 @@ Non-production branch deploy command: npm run worker:web:version:built
 
 Build variables 至少配置：
 
-- `SEC_WEB_D1_DATABASE_ID`：Web Worker 使用的真实 D1 database id。
-- `SEC_WEB_D1_DATABASE_NAME`：建议为 `earning-report-analysis-sec-web`。
 - `SEC_WEB_WORKER_NAME`：`earning-report-analysis-sec-web`。
-- `SEC_PIPELINE_ORIGIN`：Pipeline Worker 的生产 URL。
+- `SEC_PIPELINE_ORIGIN`：Pipeline Worker（分析后端）的生产 URL。
 
-Web 不再持有白名单——它对 D1 里的分析数据只读，`SEC_TRACKED_TICKERS` 只配在 Pipeline
-上，见下方 Pipeline Worker 一节。
+**Web Worker 不再绑定 D1**：分析数据全部通过 Pipeline Worker 的只读 API 读取，走
+`PIPELINE` Service Binding，并携带一个服务端持有的读凭据。因此
+`SEC_WEB_D1_DATABASE_ID` / `SEC_WEB_D1_DATABASE_NAME` 这两个 Build variable 已经不需要了，
+可以从 Dashboard 删除；`worker:web:prepare` 会主动剥掉生成配置里的 D1 binding，
+`worker:web:check` 会拒绝任何仍然带着 D1/R2 binding 的配置。
+
+Web 的 runtime secrets：`ANALYSIS_READ_TOKEN`（读凭据，格式 `<keyId>.<secret>`）、
+`SEC_ADMIN_TOKEN`、`SEC_REFRESH_KEY`。凭据的创建、轮换与吊销见
+[`../docs/analysis-backend.md`](../docs/analysis-backend.md#3-credentials)。
+
+Web 不再持有白名单——`SEC_TRACKED_TICKERS` 只配在 Pipeline 上，见下方 Pipeline Worker 一节。
 
 ### Pipeline Worker
 
@@ -44,8 +55,10 @@ Non-production branch deploy command: npm run worker:pipeline:version
 Pipeline 不需要 Build variables：它直接从 committed 的 `wrangler.jsonc` 部署，D1 id 就写在里面
 （account 内的标识符，不是凭据，和同一份配置里的 bucket 名、Worker 名同级）。
 
-Pipeline 的 `SEC_REFRESH_KEY`、`AI_API_KEY`、`SEC_TRACKED_TICKERS` 都是 Worker runtime
-secrets/vars，不是 Build variables，直接在 Dashboard 或用 `wrangler secret put` 配置。
+Pipeline 的 `SEC_REFRESH_KEY`、`AI_API_KEY`、`SEC_TRACKED_TICKERS`、`ANALYSIS_READ_KEYS`
+都是 Worker runtime secrets/vars，不是 Build variables，直接在 Dashboard 或用
+`wrangler secret put` 配置。`ANALYSIS_READ_KEYS` 是只读 API 的凭据列表；没有配置它，只读
+API 会**直接拒绝所有请求**（503 `READ_AUTH_NOT_CONFIGURED`），不会退化成开放访问。
 `SEC_TRACKED_TICKERS` 就是白名单——Pipeline 自己决定分析谁，不问 Web 要这份名单，改一个
 股票代码只需要改这一个值，不需要重新部署。生产部署命令使用 `--keep-vars`，避免覆盖
 Dashboard 中现有 runtime vars/secrets。
@@ -77,7 +90,7 @@ Pipeline Worker：
 ```text
 lib/*
 workers/pipeline/*
-workers/web/migrations/*
+workers/pipeline/migrations/*
 workers/web/scripts/check-migrations.ts
 tsconfig.json
 package.json

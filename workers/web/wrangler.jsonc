@@ -6,19 +6,31 @@
   "compatibility_flags": ["nodejs_compat"],
   // Runtime vars are injected into the generated config by scripts/prepare-config.ts.
   // Runtime secrets remain in Cloudflare and are preserved with --keep-vars.
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "earning-report-analysis-sec-web",
-      // Build-only prepare-config.ts replaces this value in dist/server/wrangler.json.
-      "database_id": "00000000-0000-4000-8000-000000000000",
-      "migrations_dir": "migrations"
-    }
-  ],
-  // Same constraint in reverse: admin refresh and backfill call the Pipeline Worker, whose public
-  // hostname 404s from in here. vinext copies this binding into the generated deploy config.
+  //
+  // No D1 binding. This Worker has no direct access to analysis storage at all: every read goes
+  // through the Pipeline Worker's read API over the Service Binding below, with a server-held read
+  // credential (ANALYSIS_READ_TOKEN). The database holds only analysis tables, so nothing else in
+  // the site lost anything when the binding went away. `tests/analysis-boundary.test.ts` fails the
+  // build if a binding or a backend import comes back.
+  //
+  // Two Workers on one workers.dev subdomain cannot reach each other over their public hostnames —
+  // the edge answers the subrequest with a 404 — so both the control-plane calls (admin refresh,
+  // backfill) and the read API go through this binding. vinext copies it into the generated config.
   "services": [
     { "binding": "PIPELINE", "service": "earning-report-analysis-sec-pipeline" }
+  ],
+  // Public front-door limit for the proxied /api/v1 routes, keyed on the browser's IP. The backend
+  // limits per credential, and every anonymous reader shares this Worker's one credential, so
+  // without this a single client could spend the quota the whole site reads through.
+  "ratelimits": [
+    {
+      "name": "PUBLIC_API_RATE_LIMIT",
+      "namespace_id": "1002",
+      "simple": {
+        "limit": 120,
+        "period": 60
+      }
+    }
   ],
   "observability": {
     "enabled": true

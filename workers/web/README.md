@@ -2,21 +2,32 @@
 
 Cloudflare Worker：`earning-report-analysis-sec-web`
 
-这个目录归属 Web Worker 的部署边界：
+这个 Worker 是**分析后端的一个客户端**，不是数据的拥有者。它没有 D1 绑定，也没有 R2 绑定：
+所有财务分析读取——包括服务端渲染——都通过 `PIPELINE` Service Binding 调用 Pipeline Worker
+的只读 API，并携带一个服务端持有的读凭据（`ANALYSIS_READ_TOKEN`）。
 
-- `wrangler.jsonc`：受版本控制的源配置，供 Vite/Cloudflare 插件读取。
+服务边界、API 契约与凭据流程见
+[`../../docs/analysis-backend.md`](../../docs/analysis-backend.md)。
+
+## 目录内容
+
+- `wrangler.jsonc`：受版本控制的源配置，供 Vite/Cloudflare 插件读取。包含 `PIPELINE`
+  Service Binding 和公开 API 的 rate limit binding，**不包含任何 D1 或 R2 绑定**。
 - `index.ts`：Vinext App Router Worker 入口。
-- `migrations/`：仅属于 Web Worker 的 D1 migrations。
-- `drizzle.config.ts`：生成上述 migrations 的 Drizzle 配置。
-- `worker-configuration.d.ts`：Web Worker 的 D1 ambient type。
+- `worker-configuration.d.ts`：Web Worker 的 ambient bindings type。
 - `.dev.vars.example`：Web Worker 本地 runtime variables/secrets 模板。
 - `scripts/`：把构建生成的 `dist/server/wrangler.json` 准备成可部署配置并执行门禁。
+
+D1 migrations 和 Drizzle 配置已经随数据所有权迁到
+[`../pipeline/migrations/`](../pipeline/migrations/) 和
+[`../pipeline/drizzle.config.ts`](../pipeline/drizzle.config.ts)。
 
 Vinext 会把源配置转换为 `dist/server/wrangler.json`。Cloudflare Builds 的 deploy 和
 non-production branch deploy 命令必须使用根目录 `package.json` 中的
 `worker:web:*:built` scripts；不要直接部署源 `wrangler.jsonc`，也不要使用不带
 `--config` 的默认 Wrangler 命令。
 
-源配置中的 D1 id 故意使用不可部署的占位值。`prepare-config.ts` 只从 Build variable
-`SEC_WEB_D1_DATABASE_ID` 注入真实 id，`check-config.ts` 会在部署前拒绝占位值或配置漂移，
-`check-migrations.ts` 会拒绝 migration 落后于本次构建的 D1。
+`prepare-config.ts` 会**剥掉**生成配置里的任何 D1 binding（Vinext 的生成器可能仍会写入
+一个），并确认 `PIPELINE` binding 存在；`check-config.ts` 会拒绝任何仍带 D1/R2 binding、
+缺少 `PIPELINE` binding、缺 `nodejs_compat`，或与 Pipeline 兼容性日期漂移的配置。
+Web 侧不再有 migration 门禁——它没有数据库可以落后。

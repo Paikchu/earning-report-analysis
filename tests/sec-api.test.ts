@@ -1,41 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  buildSecWatchlist,
-  handleSecFeedRequest,
-  hasInternalSecAccess,
-  requestSecAnalysis,
-} from "../lib/sec-api.ts";
-import type { SecRepository } from "../lib/sec-types.ts";
-
-const emptyRepository: SecRepository = {
-  async getCache() { return null; },
-  async setCache() {},
-  async getSummary() { return null; },
-  async setSummary() {},
-};
+import { hasInternalSecAccess, hasSecAdminAccess, requestSecAnalysis, requestSecBackfill } from "../lib/sec-api.ts";
 
 test("requires the exact internal refresh key", async () => {
   assert.equal(await hasInternalSecAccess(new Request("https://site.test"), "secret"), false);
   assert.equal(await hasInternalSecAccess(new Request("https://site.test", { headers: { "x-sec-refresh-key": "wrong" } }), "secret"), false);
   assert.equal(await hasInternalSecAccess(new Request("https://site.test", { headers: { "x-sec-refresh-key": "secret" } }), "secret"), true);
   assert.equal(await hasInternalSecAccess(new Request("https://site.test", { headers: { "x-sec-refresh-key": "secret" } }), ""), false);
-});
-
-test("deduplicates stock underlyings and excludes ETFs from the watchlist", () => {
-  const securityTypes = new Map<string, "stock" | "etf">([
-    ["MSFT", "stock"],
-    ["NOK", "stock"],
-    ["BOXX", "etf"],
-  ]);
-  const watchlist = buildSecWatchlist(
-    ["MSFT", "MSFT", "BOXX"],
-    ["NOK", "BOXX"],
-    (ticker) => securityTypes.get(ticker) ?? null,
-  );
-
-  assert.deepEqual(watchlist, ["MSFT", "NOK"]);
 });
 
 test("queues analysis through the independent worker and returns immediately", async () => {
@@ -57,27 +29,37 @@ test("queues analysis through the independent worker and returns immediately", a
   assert.equal(captured[0].headers.get("x-sec-refresh-key"), "secret");
 });
 
-test("protects filing feeds and returns a specific ETF state", async () => {
-  const unauthorized = await handleSecFeedRequest({
-    user: null,
-    ticker: "MSFT",
-    security: { symbol: "MSFT", type: "stock" },
-    repository: emptyRepository,
-  });
-  const etf = await handleSecFeedRequest({
-    user: { email: "max@example.com" },
-    ticker: "BOXX",
-    security: { symbol: "BOXX", type: "etf" },
-    repository: emptyRepository,
-  });
-  const pending = await handleSecFeedRequest({
-    user: { email: "max@example.com" },
-    ticker: "MSFT",
-    security: { symbol: "MSFT", type: "stock" },
-    repository: emptyRepository,
-  });
+test("requires an exact admin bearer token", async () => {
+  const bearer = (value: string) => new Request("https://site.test", { headers: { authorization: `Bearer ${value}` } });
+  assert.equal(await hasSecAdminAccess(bearer("admin-token"), "admin-token"), true);
+  assert.equal(await hasSecAdminAccess(bearer("wrong"), "admin-token"), false);
+  assert.equal(await hasSecAdminAccess(new Request("https://site.test"), "admin-token"), false);
+  // Fails closed when no admin token is configured, rather than accepting anything.
+  assert.equal(await hasSecAdminAccess(bearer("anything"), ""), false);
+});
 
-  assert.equal(unauthorized.status, 401);
-  assert.equal((await etf.json() as { status: string }).status, "not_applicable");
-  assert.equal((await pending.json() as { status: string }).status, "pending");
+test("backfill forwards to its own backend path with the same administrative key", async () => {
+  const captured: Request[] = [];
+  const response = await requestSecBackfill({
+    ticker: "MSFT",
+    pipelineOrigin: "https://sec-worker.example/",
+    refreshKey: "secret",
+    fetcher: async (input, init) => {
+      captured.push(new Request(input, init));
+      return Response.json({ status: "queued" }, { status: 202 });
+    },
+  });
+  assert.equal(response.status, 202);
+  assert.equal(captured[0]!.url, "https://sec-worker.example/backfill/MSFT");
+  assert.equal(captured[0]!.headers.get("x-sec-refresh-key"), "secret");
+});
+
+test("an unconfigured backend is reported, not silently skipped", async () => {
+  const response = await requestSecAnalysis({
+    ticker: "MSFT",
+    pipelineOrigin: "",
+    refreshKey: "",
+    fetcher: async () => { throw new Error("must not be called"); },
+  });
+  assert.equal(response.status, 503);
 });

@@ -51,13 +51,24 @@ function publication(inputHash = "input-hash-123") {
   };
 }
 
-test("requires exactly four evidence-backed highlights and hides evidence metadata publicly", () => {
+/**
+ * Evidence references used to be stripped from the public overview. They are published now: a
+ * consumer that has to re-derive which observation backs a claim by reading the prose does not have
+ * a usable contract. Everything internal to *how* the analysis was produced still stays inside.
+ */
+test("requires exactly four highlights and publishes the evidence backing each one", () => {
   const normalized = normalizeCompanyAnalysisPublication(publication());
   assert.equal(normalized.overview.highlights.length, 4);
   const publicValue = toPublicCompanyAnalysis(normalized);
   assert.equal(publicValue.overview?.highlights.length, 4);
-  assert.equal("evidenceRefs" in publicValue.overview!.highlights[0]!, false);
+  assert.deepEqual(
+    publicValue.overview!.highlights.map((highlight) => highlight.evidenceRefs),
+    normalized.overview.highlights.map((highlight) => highlight.evidenceRefs),
+  );
   assert.equal("sourceLabel" in publicValue.overview!.highlights[0]!, false);
+  // Internal pipeline versions are labels, reported under their own key — never a prompt.
+  assert.equal(publicValue.versions.prompt, normalized.promptVersion);
+  assert.equal(publicValue.versions.contentRevision, normalized.inputHash);
   assert.throws(() => normalizeCompanyAnalysisPublication({
     ...publication(),
     overview: { ...overview(), highlights: overview().highlights.slice(0, 3) },
@@ -67,7 +78,7 @@ test("requires exactly four evidence-backed highlights and hides evidence metada
 test("publishes immutable analysis rows and reads the latest ready version", async () => {
   const database = new SqliteD1Database();
   try {
-    await applySqlMigration(database, "../../workers/web/migrations/0009_company_analysis.sql");
+    await applySqlMigration(database, "../../workers/pipeline/migrations/0009_company_analysis.sql");
     const repository = new D1CompanyAnalysisRepository(database);
     const first = await repository.publish(publication());
     const duplicate = await repository.publish(publication());
@@ -83,7 +94,7 @@ test("publishes immutable analysis rows and reads the latest ready version", asy
 test("promotes the same in-progress analysis row to an immutable publication", async () => {
   const database = new SqliteD1Database();
   try {
-    await applySqlMigration(database, "../../workers/web/migrations/0009_company_analysis.sql");
+    await applySqlMigration(database, "../../workers/pipeline/migrations/0009_company_analysis.sql");
     const repository = new D1CompanyAnalysisRepository(database);
     await repository.upsertRun({
       analysisId: publication().analysisId,
@@ -110,7 +121,7 @@ test("promotes the same in-progress analysis row to an immutable publication", a
 test("backfill selects only the latest completed Memory version without an analysis run", async () => {
   const database = new SqliteD1Database();
   try {
-    await applySqlMigration(database, "../../workers/web/migrations/0009_company_analysis.sql");
+    await applySqlMigration(database, "../../workers/pipeline/migrations/0009_company_analysis.sql");
     database.raw.exec(`
       CREATE TABLE sec_periods (period_id TEXT PRIMARY KEY, ticker TEXT NOT NULL, end_date TEXT NOT NULL);
       CREATE TABLE sec_memory_jobs (

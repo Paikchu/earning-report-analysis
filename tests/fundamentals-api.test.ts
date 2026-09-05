@@ -5,10 +5,10 @@ import test from "node:test";
 import {
   FUNDAMENTALS_API_SCHEMA_VERSION,
   FUNDAMENTALS_STALE_AFTER_MS,
-  FundamentalApiQueryError,
   getPublicFundamentals,
   parseFundamentalApiQuery,
 } from "../lib/fundamentals-api.ts";
+import { AnalysisRequestError } from "../lib/analysis-contract/errors.ts";
 import { FUNDAMENTAL_METRIC_CATALOG_VERSION } from "../lib/fundamental-metrics.ts";
 import { normalizeYahooFundamentals } from "../lib/fundamental-normalization.ts";
 import type {
@@ -162,7 +162,7 @@ test("returns a pending contract when D1 has no last-good snapshot", async () =>
 test("rejects malformed tickers, metric lists, repeated parameters, and period bounds", () => {
   assert.throws(
     () => parseFundamentalApiQuery("AC/ME", new URLSearchParams()),
-    (error: unknown) => error instanceof FundamentalApiQueryError && error.code === "INVALID_TICKER",
+    (error: unknown) => error instanceof AnalysisRequestError && error.code === "INVALID_TICKER",
   );
   for (const query of [
     "metrics=unknown_metric",
@@ -171,13 +171,13 @@ test("rejects malformed tickers, metric lists, repeated parameters, and period b
   ]) {
     assert.throws(
       () => parseFundamentalApiQuery("ACME", new URLSearchParams(query)),
-      (error: unknown) => error instanceof FundamentalApiQueryError && error.code === "INVALID_METRICS",
+      (error: unknown) => error instanceof AnalysisRequestError && error.code === "INVALID_METRICS",
     );
   }
   for (const query of ["periodCount=1", "periodCount=13", "periodCount=5.5", "periodCount=5&periodCount=6"]) {
     assert.throws(
       () => parseFundamentalApiQuery("ACME", new URLSearchParams(query)),
-      (error: unknown) => error instanceof FundamentalApiQueryError && error.code === "INVALID_PERIOD_COUNT",
+      (error: unknown) => error instanceof AnalysisRequestError && error.code === "INVALID_PERIOD_COUNT",
     );
   }
 });

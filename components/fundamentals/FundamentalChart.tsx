@@ -15,7 +15,7 @@ import type { FundamentalMetricKey } from "@/lib/fundamental-metrics";
 import type {
   PublicFundamentalsResponse,
   PublicFundamentalSeries,
-} from "@/lib/fundamentals-api";
+} from "@/lib/analysis-contract/fundamentals";
 import {
   FUNDAMENTAL_CHART_HEIGHT,
   FUNDAMENTAL_CHART_MAX_SERIES,

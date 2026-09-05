@@ -2,159 +2,90 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { handlePublicFundamentalsRequest } from "../lib/fundamentals-api.ts";
-import { FUNDAMENTAL_METRIC_CATALOG_VERSION } from "../lib/fundamental-metrics.ts";
-import type {
-  FundamentalLastGoodSnapshot,
-  FundamentalsRepository,
-} from "../lib/fundamentals-d1.ts";
+import { handleAnalysisReadRequest } from "../workers/pipeline/read-api/router.ts";
+import { createAnalysisDatabase, readEnv, readRequest } from "./helpers/analysis-backend.ts";
+import { ETF_TICKER, FIXTURE_TICKER, seedFundamentals } from "./helpers/analysis-fixtures.ts";
+import type { PublicFundamentalsResponse } from "../lib/analysis-contract/fundamentals.ts";
 
-function repository(snapshot: FundamentalLastGoodSnapshot | null): FundamentalsRepository {
-  return {
-    async claimRun() {},
-    async failRun() {},
-    async commitSuccessfulRun() { return { inserted: 0, confirmed: 0, revised: 0 }; },
-    async getLastGoodSnapshot() { return snapshot; },
-  };
+/**
+ * This file used to test `handlePublicFundamentalsRequest` on the Web Worker, whose defining
+ * behaviour was scheduling a background refresh whenever a read found stale data. That behaviour is
+ * gone — a read must not enqueue work (§4.1) — and the endpoint moved to the analysis backend, so
+ * the same scenarios are covered here against their new home, with the refresh expectations
+ * inverted: what used to be asserted to happen is now asserted not to.
+ */
+async function fundamentals(path: string, database: unknown) {
+  return handleAnalysisReadRequest(readRequest(path), readEnv(database));
 }
 
-function minimalSnapshot(fetchedAt: string): FundamentalLastGoodSnapshot {
-  return {
-    ticker: "ACME",
-    runId: "run-1",
-    fetchedAt,
-    qualityStatus: "complete",
-    parserVersion: "parser.v1",
-    catalogVersion: FUNDAMENTAL_METRIC_CATALOG_VERSION,
-    payloadHash: "payload-1",
-    issueCount: 0,
-    observations: [{
-      observationId: "observation-1",
-      periodId: "period-1",
-      ticker: "ACME",
-      periodType: "3M",
-      periodEnd: "2026-03-31",
-      metricKey: "total_revenue",
-      sourceField: "quarterlyTotalRevenue",
-      valueDecimal: "1400000000",
-      unitFamily: "currency",
-      unit: "USD",
-      currency: "USD",
-      basis: "reported",
-      derivationFormula: null,
-      derivationVersion: null,
-      sourceRunId: "run-1",
-      revision: 1,
-      updatedAt: fetchedAt,
-    }],
-  };
-}
-
-test("returns stale last-good immediately and schedules one eligible background refresh", async () => {
-  const refreshes: string[] = [];
-  const response = await handlePublicFundamentalsRequest(
-    new Request("https://example.test/api/v1/companies/ACME/fundamentals?metrics=total_revenue&periodCount=2"),
-    "ACME",
-    {
-      getRepository: async () => repository(minimalSnapshot("2026-08-26T00:00:00.000Z")),
-      isRefreshEligible: () => true,
-      scheduleRefresh: async (ticker) => { refreshes.push(ticker); return true; },
-      clock: () => new Date("2026-08-28T00:00:00.000Z"),
-    },
-  );
-  const payload = await response.json() as { stale: boolean; refresh: { scheduled: boolean } };
+test("stale last-good data is returned immediately and schedules nothing", async () => {
+  const database = await createAnalysisDatabase();
+  seedFundamentals(database, { fetchedAt: "2020-01-01T00:00:00.000Z" });
+  const response = await fundamentals(`/api/v1/companies/${FIXTURE_TICKER}/fundamentals?metrics=total_revenue&periodCount=2`, database);
+  const payload = await response.json() as PublicFundamentalsResponse;
 
   assert.equal(response.status, 200);
-  assert.match(response.headers.get("cache-control") ?? "", /stale-while-revalidate/);
+  assert.equal(payload.status, "ready");
   assert.equal(payload.stale, true);
-  assert.equal(payload.refresh.scheduled, true);
-  assert.deepEqual(refreshes, ["ACME"]);
-});
-
-test("does not schedule a refresh for fresh data", async () => {
-  let refreshCount = 0;
-  const response = await handlePublicFundamentalsRequest(
-    new Request("https://example.test/api/v1/companies/ACME/fundamentals"),
-    "ACME",
-    {
-      getRepository: async () => repository(minimalSnapshot("2026-08-28T00:00:00.000Z")),
-      isRefreshEligible: () => true,
-      scheduleRefresh: async () => { refreshCount += 1; return true; },
-      clock: () => new Date("2026-08-28T01:00:00.000Z"),
-    },
-  );
-  const payload = await response.json() as { refresh: { scheduled: boolean } };
-
-  assert.equal(response.status, 200);
+  // Staleness is still reported; acting on it is the scheduled sweep's job, not a reader's.
+  assert.equal(payload.refresh.recommended, true);
   assert.equal(payload.refresh.scheduled, false);
-  assert.equal(refreshCount, 0);
+  assert.equal(payload.refresh.mode, "backend_scheduled");
+  database.close();
 });
 
-test("returns no-store pending data for an eligible first fetch and rejects ineligible misses", async () => {
-  const eligible = await handlePublicFundamentalsRequest(
-    new Request("https://example.test/api/v1/companies/ACME/fundamentals"),
-    "ACME",
-    {
-      getRepository: async () => repository(null),
-      isRefreshEligible: () => true,
-      scheduleRefresh: async () => true,
-    },
-  );
-  const eligiblePayload = await eligible.json() as { status: string; refresh: { scheduled: boolean } };
+test("fresh data is not stale and is briefly cacheable", async () => {
+  const database = await createAnalysisDatabase();
+  seedFundamentals(database, { fetchedAt: new Date().toISOString() });
+  const response = await fundamentals(`/api/v1/companies/${FIXTURE_TICKER}/fundamentals`, database);
+  const payload = await response.json() as PublicFundamentalsResponse;
+  assert.equal(payload.stale, false);
+  assert.equal(payload.refresh.recommended, false);
+  assert.match(response.headers.get("cache-control") ?? "", /max-age=30/);
+  database.close();
+});
+
+test("an eligible first fetch is a no-store pending payload; an ineligible one is a 404", async () => {
+  const database = await createAnalysisDatabase();
+  const eligible = await fundamentals(`/api/v1/companies/${FIXTURE_TICKER}/fundamentals`, database);
+  const eligiblePayload = await eligible.json() as PublicFundamentalsResponse;
   assert.equal(eligible.status, 200);
   assert.equal(eligible.headers.get("cache-control"), "no-store");
   assert.equal(eligiblePayload.status, "pending");
-  assert.equal(eligiblePayload.refresh.scheduled, true);
+  assert.equal(eligiblePayload.refresh.scheduled, false);
 
-  const ineligible = await handlePublicFundamentalsRequest(
-    new Request("https://example.test/api/v1/companies/UNKNOWN/fundamentals"),
-    "UNKNOWN",
-    {
-      getRepository: async () => repository(null),
-      isRefreshEligible: () => false,
-      scheduleRefresh: async () => { throw new Error("must not schedule"); },
-    },
-  );
+  // An ETF has no fundamentals to collect, and says so rather than reporting an empty pending set.
+  const ineligible = await fundamentals(`/api/v1/companies/${ETF_TICKER}/fundamentals`, database);
   assert.equal(ineligible.status, 404);
   assert.equal((await ineligible.json() as { code: string }).code, "FUNDAMENTALS_NOT_AVAILABLE");
+  database.close();
 });
 
-test("maps query and database failures to bounded public errors", async () => {
-  const invalid = await handlePublicFundamentalsRequest(
-    new Request("https://example.test/api/v1/companies/ACME/fundamentals?metrics=unknown"),
-    "ACME",
-    {
-      getRepository: async () => { throw new Error("must not query"); },
-      isRefreshEligible: () => true,
-      scheduleRefresh: async () => true,
-    },
-  );
+test("query and storage failures map to bounded errors that leak no internal detail", async () => {
+  const database = await createAnalysisDatabase();
+  const invalid = await fundamentals(`/api/v1/companies/${FIXTURE_TICKER}/fundamentals?metrics=unknown`, database);
   assert.equal(invalid.status, 400);
   assert.equal((await invalid.json() as { code: string }).code, "INVALID_METRICS");
 
-  const failed = await handlePublicFundamentalsRequest(
-    new Request("https://example.test/api/v1/companies/ACME/fundamentals"),
-    "ACME",
-    {
-      getRepository: async () => { throw new Error("D1 internal detail"); },
-      isRefreshEligible: () => true,
-      scheduleRefresh: async () => true,
-    },
+  const failed = await handleAnalysisReadRequest(
+    readRequest(`/api/v1/companies/${FIXTURE_TICKER}/fundamentals`),
+    readEnv({ prepare() { throw new Error("D1 internal detail"); }, batch() { throw new Error("D1 internal detail"); } }),
   );
-  const failedBody = JSON.stringify(await failed.json());
-  assert.equal(failed.status, 500);
-  assert.match(failedBody, /FUNDAMENTALS_QUERY_FAILED/);
+  const failedBody = await failed.text();
+  // A storage failure is 503, not the 500 the old Web handler returned, and not an empty success.
+  assert.equal(failed.status, 503);
+  assert.match(failedBody, /STORAGE_UNAVAILABLE/);
   assert.doesNotMatch(failedBody, /D1 internal detail/);
+  database.close();
 });
 
-test("exposes the public route without importing the Yahoo adapter into the read path", async () => {
+test("the public Web route is a proxy that neither queries a database nor schedules a refresh", async () => {
   const source = await readFile(
     new URL("../app/api/v1/companies/[ticker]/fundamentals/route.ts", import.meta.url),
     "utf8",
   );
-
-  assert.match(source, /handlePublicFundamentalsRequest/);
-  assert.match(source, /scheduleFundamentalRefresh/);
-  assert.match(source, /findSecurity/);
+  assert.match(source, /proxyAnalysisRead/);
+  assert.match(source, /getFundamentals/);
+  assert.doesNotMatch(source, /scheduleFundamentalRefresh|getD1|D1FundamentalsRepository/);
   assert.doesNotMatch(source, /yahoo-fundamentals-client|fetchYahooFundamentals/);
 });

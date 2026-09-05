@@ -12,7 +12,7 @@ import {
   type FundamentalMetricKey,
   type FundamentalTransform,
 } from "./fundamental-metrics.ts";
-import type { PublicFundamentalsResponse } from "./fundamentals-api.ts";
+import type { PublicFundamentalsResponse } from "./analysis-contract/fundamentals.ts";
 
 export const FUNDAMENTAL_CHART_PLAN_SCHEMA_VERSION = "fundamental-chart-plan.v1";
 export const FUNDAMENTAL_COMPANY_PROFILE_VERSION = "fundamental-company-profile.v1";

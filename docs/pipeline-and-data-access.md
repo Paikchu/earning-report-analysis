@@ -9,7 +9,9 @@
 
 ## 1. 系统总览
 
-> **2026-09-04 架构变更**：这一节和 §2.7、§3 已按 [`eb5570e`](https://github.com/Paikchu/earning-report-analysis/commit/eb5570e616b31a06da7b11b554837fdedb837ab1)（`refactor(pipeline): make Pipeline the sole writer, Web read-only for analysis data`）之后的状态重写。在此之前，Pipeline 不持有任何数据，每一步都要桥接到 Web Worker 读写 D1；现在方向反过来了——**Pipeline 直接绑定 D1 并且是唯一的写入方，Web Worker 对分析数据只读**。如果你看到的代码或旧文档里还有 `WEB_APP_ORIGIN`、`services: [{ binding: "WEB" }]`、`/api/internal/sec/context` 之类的桥接路径，那是这次重构之前的状态，已经不存在了。
+> **架构变更（分析后端重构）**：Pipeline Worker 现在是一个**可独立消费的财务分析后端**——它除了继续拥有写入、Cron 和 Workflows，还对外提供只读结果 API，并且是 D1 的**唯一绑定者**。Web Worker 不再绑定 D1，它的 `/api/v1/*` 变成了兼容代理。本文的 §1、§2.1、§2.7、§3、§4 已按重构后的状态更新；服务边界、API 契约、凭据与上线/回滚手册见 [`analysis-backend.md`](analysis-backend.md)。
+>
+> 更早一次变更（[`eb5570e`](https://github.com/Paikchu/earning-report-analysis/commit/eb5570e616b31a06da7b11b554837fdedb837ab1)）把写入方向从 Web 翻转到了 Pipeline。如果你看到的代码或旧文档里还有 `WEB_APP_ORIGIN`、`services: [{ binding: "WEB" }]`、`/api/internal/sec/context` 之类的桥接路径，那是那次重构之前的状态，已经不存在了。
 
 系统由两个独立部署的 Cloudflare Worker 组成，现在职责按“谁拥有数据”而不是“谁面向公众”来划分：
 
@@ -22,17 +24,17 @@ flowchart LR
         WF3["CompanyAnalysisWorkflow"]
         WF4["CompanyAnalysisBackfillWorkflow"]
         PFetch["/(jobs|backfill)/:ticker\n/fundamentals/refresh/:ticker"]
+        ReadAPI["只读 API\n/api/v1/companies/..."]
         R2[("R2\nSEC_FILINGS")]
     end
 
     subgraph Web["Web Worker（workers/web/）"]
-        API["/api/v1/* 公开只读 API"]
+        API["/api/v1/* 公开兼容代理"]
         Admin["/api/v1/admin/*\n/api/internal/sec/refresh/:ticker"]
-        D1W[("D1（只读）")]
         SSR["Vinext SSR 页面"]
     end
 
-    D1[("D1\nearning-report-analysis-sec-web\nPipeline 直接写")]
+    D1[("D1\nearning-report-analysis-sec-web\n只被 Pipeline 绑定")]
     Model["外部大模型 API\napi.b.ai"]
     SEC["SEC EDGAR / data.sec.gov"]
     Yahoo["Yahoo Finance"]
@@ -44,22 +46,23 @@ flowchart LR
     WF1 --> SEC
     WF3 --> Yahoo
     Admin -->|Service Binding PIPELINE\n控制面请求，不传数据| PFetch
-    API -.fundamentals 数据过期时\n同一条 Service Binding.-> PFetch
-    D1W -.同一个数据库.- D1
-    API --> D1W
-    SSR --> D1W
-    Consumer["外部项目 / 前端"] -->|HTTPS| API
+    API -->|Service Binding + 读凭据| ReadAPI
+    SSR -->|Service Binding + 读凭据| ReadAPI
+    ReadAPI -->|SQL 只读| D1
+    Cron -->|Cron 巡检基本面过期| PFetch
+    Consumer["外部项目 / 前端"] -->|HTTPS，匿名| API
+    Service["其他后端服务"] -->|HTTPS + 读凭据| ReadAPI
 ```
 
 关键约束：
 
-- **两个 Worker 都直接绑定同一个 D1 数据库**（`earning-report-analysis-sec-web`），但角色不对称：**Pipeline 是唯一的写入方**，`SEC_TRACKED_TICKERS` 白名单也只存在于 Pipeline 上；**Web Worker 对分析/基本面表严格只读**——这不是靠代码审查约定的，而是 [`tests/sec-write-boundary.test.ts`](../tests/sec-write-boundary.test.ts) 硬性检查：扫描整个 `app/` 目录，只要出现 `saveFilingBlocks`/`saveAnalysis`/`commitFinalPublication`/`setSummary`/`upsertAnalysisJob`/`claimMemoryJob`/`commitMemoryJob`/`setCache`/`upsertFilingIndex`/`saveHistory`/`upsertRun` 这些仓储写方法调用就测试失败。
+- **只有 Pipeline Worker 绑定 D1**（`earning-report-analysis-sec-web`）：它既是唯一的写者也是唯一的读者，`SEC_TRACKED_TICKERS` 白名单同样只存在于它这边。**Web Worker 没有任何直接访问分析存储的能力**——不是靠代码审查约定，而是 [`tests/analysis-boundary.test.ts`](../tests/analysis-boundary.test.ts) 遍历 Web 每个入口的完整 import 图，任何直接或间接触到仓储、执行器或存储绑定的依赖都会让测试失败；[`tests/sec-write-boundary.test.ts`](../tests/sec-write-boundary.test.ts) 继续守住"`app/` 下不出现任何仓储写方法"这条更窄的规则。
 - **依赖只剩一个方向**：Web 可以调 Pipeline（管理员触发分析/回填、按需刷新基本面，都是"控制面"请求——只传一个 ticker，不传数据），Pipeline 的 `wrangler.jsonc` 里**没有任何指向 Web 的绑定或地址**，物理上调不回去。两个 Worker 部署在同一个 `workers.dev` 子域下，互相用公网 hostname 访问会在边缘直接 404，所以 Web → Pipeline 这唯一剩下的方向也必须走 `services` 里配置的 Service Binding（`PIPELINE`），而不是 `fetch("https://...")`。
 - Pipeline Worker 独占 R2 桶 `SEC_FILINGS`：filing 原文、分析中间产物（brief / node 结果 / manager review）都落在这里，D1 只存结构化的最终结果和任务状态，不存长文本。
-- D1 的 `database_id` 现在**直接提交在 Pipeline 的 `wrangler.jsonc` 里**（account 内的标识符，不是凭据，跟同一份配置里的 bucket 名、Worker 名同级对待），`migrations_dir` 指向 `../web/migrations`——两个 Worker 共享同一份 migration 源，没有第二份 schema 定义。Web Worker 的 `wrangler.jsonc` 里那个 D1 id 仍然是构建期占位符，由 `prepare-config.ts` 在部署前替换成真实值。
+- D1 的 `database_id` **直接提交在 Pipeline 的 `wrangler.jsonc` 里**（account 内的标识符，不是凭据，跟同一份配置里的 bucket 名、Worker 名同级对待），`migrations_dir` 指向它自己的 `migrations/`。Web Worker 的配置里已经没有 D1 binding，`prepare-config.ts` 会主动剥掉生成器写入的任何一个，`check-config.ts` 会拒绝仍带 D1/R2 binding 的配置。
 - 生产环境入口：
   - Web Worker：`https://earning-report-analysis-sec-web.max-zhangyuchen.workers.dev`
-  - Pipeline Worker：`https://earning-report-analysis-sec-pipeline.<subdomain>.workers.dev`（无公开用途，见 §2.1）
+  - Pipeline Worker（分析后端）：`https://earning-report-analysis-sec-pipeline.<subdomain>.workers.dev`（对外提供只读 API，需要读凭据，见 §4）
 
 ## 2. Pipeline Worker 运行方式
 
@@ -69,10 +72,12 @@ Pipeline Worker 只有两种触发方式：
 
 | 入口 | 用途 |
 | --- | --- |
-| `scheduled`（Cron） | 生产配置目前是 `*/10 * * * *`——这是[临时提高的频率](../workers/pipeline/wrangler.jsonc)，为了排查一个失联的定时任务，让失败能在几分钟内暴露而不是等到下一个整点；正常配置应为美东交易时段内每小时一次（`0 13-23 * * 1-5` + `0 0-3 * * 2-6`，覆盖 09:00–23:00 ET 周一至周五）。依次跑 `runSecRefresh` → `runSecMemorySweep` → `runCompanyAnalysisSweep`，`Promise.allSettled` 收集结果，任一失败就 `throw AggregateError`，让失败在 Cloudflare 的调用记录里可见可告警。 |
-| `fetch` | `GET /health` 返回健康检查（`watchlistConfigured` 现在直接读 `env.SEC_TRACKED_TICKERS` 是否非空，不再要探测别的 Worker）；`POST /(jobs\|backfill)/:ticker` 是分析/回填的手动触发入口；`POST /fundamentals/refresh/:ticker` 触发一次 Yahoo 基本面同步。三者都必须带 header `x-sec-refresh-key: $SEC_REFRESH_KEY`，且 ticker 必须在 **Pipeline 自己持有**的白名单（`SEC_TRACKED_TICKERS`）里，见 §1 和 §2.7。这个 HTTP 面只服务于 Web Worker 的管理接口（`/api/v1/admin/...`）和按需刷新逻辑转发过来的请求，不面向外部直接调用。 |
+| `scheduled`（Cron） | 生产配置目前是 `*/10 * * * *`——这是[临时提高的频率](../workers/pipeline/wrangler.jsonc)，为了排查一个失联的定时任务，让失败能在几分钟内暴露而不是等到下一个整点；正常配置应为美东交易时段内每小时一次（`0 13-23 * * 1-5` + `0 0-3 * * 2-6`，覆盖 09:00–23:00 ET 周一至周五）。依次跑 `runSecRefresh` → `runSecMemorySweep` → `runCompanyAnalysisSweep` → `runFundamentalsStalenessSweep`，`Promise.allSettled` 收集结果，任一失败就 `throw AggregateError`，让失败在 Cloudflare 的调用记录里可见可告警。**Cron 表达式本身没有因为这次重构改动。** |
+| `fetch` — 只读 API | `GET /api/v1/companies/:ticker/{filings,filings/:accession,analysis,fundamentals}`：对外的结果查询，用 `Authorization: Bearer <keyId>.<secret>` 认证（凭据来自 `ANALYSIS_READ_KEYS`）。**读取路径绝不写入**：不调模型、不抓外部数据、不起 Workflow、不排刷新。`GET /api/v1/openapi.json` 是公开的机器可读契约。见 §4 和 [`analysis-backend.md`](analysis-backend.md)。 |
+| `fetch` — 控制面 | `POST /(jobs\|backfill)/:ticker` 是分析/回填的手动触发入口；`POST /fundamentals/refresh/:ticker` 触发一次 Yahoo 基本面同步。三者都必须带 header `x-sec-refresh-key: $SEC_REFRESH_KEY`，且 ticker 必须在 **Pipeline 自己持有**的白名单里。**读凭据无法触发其中任何一个**——控制端点只认 `SEC_REFRESH_KEY`。 |
+| `fetch` — 探针 | `GET /health` 只报存活（`{"status":"ok"}`）；`GET /ready` 报依赖就绪，只读绑定和配置**是否存在**的布尔值，不发查询也不回显任何值。读取路径不需要模型凭据，所以 `AI_API_KEY` 缺失不会让 `/ready` 变红。 |
 
-Pipeline Worker 没有对外公开的读数据接口——它是纯粹的生成/编排单元。
+只读 API 的路由前缀 `/api/v1` 由读路由**整体接管**，并且它自己拒绝 GET/HEAD 之外的任何方法——所以这个前缀下的请求不可能落到下面的控制面 handler 上。
 
 ### 2.2 四个 Workflow
 
@@ -181,7 +186,11 @@ memory-claim（D1SecRepository.claimMemoryJob：租约式领取一个 pending jo
 | `POST /api/v1/admin/companies/:ticker/refresh`（`Authorization: Bearer $SEC_ADMIN_TOKEN`） | `POST /jobs/:ticker` | 管理员手动触发一次分析 |
 | `POST /api/v1/admin/companies/:ticker/backfill`（`Authorization: Bearer $SEC_ADMIN_TOKEN`） | `POST /backfill/:ticker` | 管理员手动触发一次回填 |
 | `POST /api/internal/sec/refresh/[ticker]`（`x-sec-refresh-key`） | `POST /jobs/:ticker` | 供内部运维直接按 key 触发单个 ticker 的刷新，不需要 admin token；目前仓库里没有别的代码调用它，只在测试里出现，是留给运维脚本用的入口 |
-| `/api/v1/companies/:ticker/fundamentals` 判断数据过期时的按需刷新（`scheduleFundamentalRefresh`，[`lib/fundamentals-runtime.ts`](../lib/fundamentals-runtime.ts)） | `POST /fundamentals/refresh/:ticker` | 请求页面被访问且数据太旧时，异步（`waitUntil`）请 Pipeline 抓一次最新 Yahoo 数据；Web 自己不再跑 `FundamentalSyncService`，也不再写 D1 |
+
+
+**按需刷新这条路径已经删除。** 读取 fundamentals 不再触发任何刷新——那是一次藏在读请求里的写操作，而且频率由"有多少人打开页面"决定。刷新改由两处负责：Pipeline 自己的 Cron 巡检（[`fundamentals-sweep.ts`](../workers/pipeline/fundamentals-sweep.ts)，只覆盖白名单里超过 24 小时未成功抓取的股票，每次最多 2 个），以及上表最后一行那个受认证的端点。
+
+除了上面的控制面转发，Web 还会通过同一条 Service Binding 调用 Pipeline 的**只读 API**取数据（`/api/v1/*` 代理和 SSR 页面）。那条路径携带的是读凭据 `ANALYSIS_READ_TOKEN`，不是 `SEC_REFRESH_KEY`；**走 Service Binding 本身不构成任何身份证明**——Pipeline 的 fetch handler 公网可达，所以它只看 `Authorization`，对 Web 和对外部服务一视同仁。
 
 三个转发点用的都是 `hasSecAdminAccess` / `hasInternalSecAccess` 做的 header 校验，**已经不在 Web 这边做白名单检查**——两次检查活在两个地方正是旧架构的 bug 根源（白名单可能在两侧不一致，导致同一个请求在一边通过、另一边被拒），现在唯一的校验点是 Pipeline 收到请求后的 `assertTrackedTicker`。
 
@@ -189,7 +198,7 @@ memory-claim（D1SecRepository.claimMemoryJob：租约式领取一个 pending jo
 
 ## 3. 数据落在哪：D1 表结构总览
 
-D1（`earning-report-analysis-sec-web`，SQLite）现在被两个 Worker 直接绑定——**Pipeline 写，Web 只读**（见 §1）。migrations 只有一份，放在 [`workers/web/migrations/`](../workers/web/migrations/)，Pipeline 的 `wrangler.jsonc` 用 `migrations_dir: "../web/migrations"` 指回同一份源，不会出现两份 schema 定义漂移的问题。Drizzle schema 定义在 [`db/schema.ts`](../db/schema.ts) 和 [`db/fundamentals-schema.ts`](../db/fundamentals-schema.ts)。按用途分组：
+D1（`earning-report-analysis-sec-web`，SQLite）现在**只被 Pipeline Worker 绑定**——它既是唯一的写者，也是唯一的读者；Web Worker 通过 Pipeline 的只读 API 取数据，没有任何直接访问分析存储的能力（见 [`analysis-backend.md`](analysis-backend.md)）。migrations 随数据所有权一起搬到了 [`workers/pipeline/migrations/`](../workers/pipeline/migrations/)，`migrations_dir: "migrations"`；文件名和内容在迁移过程中逐字节未变，所以已经应用过的数据库不会重跑任何一条。Drizzle schema 定义在 [`db/schema.ts`](../db/schema.ts) 和 [`db/fundamentals-schema.ts`](../db/fundamentals-schema.ts)。按用途分组：
 
 | 分组 | 主要表 | 存的是什么 |
 | --- | --- | --- |
@@ -208,21 +217,36 @@ D1（`earning-report-analysis-sec-web`，SQLite）现在被两个 Worker 直接�
 
 ### 4.1 为什么不能像 Postgres 那样直连数据库
 
-Cloudflare D1 是 **Workers Binding 型**数据库：它没有对外网络端口、没有连接字符串，应用代码只能通过 Worker 里配置的 `d1_databases` binding 访问——现在 Pipeline 和 Web 两个 Worker 都绑定了它（§3），但这仍然是账号内部的绑定关系，不会因此多出一个对外网络入口。理论上仅有的外部访问路径是 Cloudflare 官方 **D1 HTTP API** 或 `wrangler d1 execute --remote`，而这两者都要求持有**这个 Cloudflare 账号**（`max-zhangyuchen`）的 API Token，且该 Token 拥有这个 D1 实例的读权限。
+Cloudflare D1 是 **Workers Binding 型**数据库：它没有对外网络端口、没有连接字符串，应用代码只能通过 Worker 里配置的 `d1_databases` binding 访问——现在只有 Pipeline Worker 绑定它（§3），这是账号内部的绑定关系，不会多出一个对外网络入口。理论上仅有的外部访问路径是 Cloudflare 官方 **D1 HTTP API** 或 `wrangler d1 execute --remote`，而这两者都要求持有**这个 Cloudflare 账号**（`max-zhangyuchen`）的 API Token，且该 Token 拥有这个 D1 实例的读权限。
 
 也就是说这条路本质上只对**本项目的维护者**开放，"别的项目"默认不会有、也不应该去申请这个账号权限。就算拿到了权限，直接跑 SQL 也会绕开应用层的缓存失效逻辑、发布门禁（比如 `sec_published_reports` 里可能同时存在多个 `reportVersion`，哪个是"当前有效版本"是应用逻辑而不是一个列）和 schema 版本管理，migrations 还在持续变动，直接依赖表结构很脆弱。
 
-**结论：外部项目请走下面的公开 REST API；不要直连 D1。** 如果 API 覆盖不到你需要的数据，正确做法是提需求加一个新的 `/api/v1` 端点，而不是绕过应用层查表。
+**结论：外部项目请走只读 REST API；不要直连 D1。** 如果 API 覆盖不到你需要的数据，正确做法是提需求加一个新的 `/api/v1` 端点，而不是绕过应用层查表。
 
-### 4.2 推荐路径：公开只读 REST API
+### 4.2 两个入口：分析后端本身，或这个网站的公开代理
 
-Base URL（生产环境）：
+同一批数据现在有两条读取路径，选哪条取决于你是谁：
 
-```
-https://earning-report-analysis-sec-web.max-zhangyuchen.workers.dev
-```
+| | **分析后端（推荐给后端服务）** | **网站的公开代理（浏览器 / 现有消费者）** |
+| --- | --- | --- |
+| Base URL | `https://earning-report-analysis-sec-pipeline.<subdomain>.workers.dev` | `https://earning-report-analysis-sec-web.max-zhangyuchen.workers.dev` |
+| 认证 | `Authorization: Bearer <keyId>.<secret>` | 匿名 |
+| CORS | 无（服务端调用） | `access-control-allow-origin: *` |
+| 缓存 | `private, max-age=30, must-revalidate` + `ETag` | `public, max-age=30, stale-while-revalidate=300` |
+| 依赖 | 只依赖这套 HTTP 契约 | 依赖这个网站在线 |
+| 契约 | `GET /api/v1/openapi.json` | 同上（后端提供） |
 
-所有 `/api/v1/*` 只读端点**无需任何鉴权**，且都带 `access-control-allow-origin: *`，可以直接从浏览器前端跨域调用。响应普遍带 `cache-control: public, max-age=30, stale-while-revalidate=300`（搜索接口是 `max-age=300`），建议消费方也做一层 HTTP 缓存，不要每次都打穿到源。
+两条路径**返回同一份领域数据**——代理逐字转发后端的响应体，不会再包一层。差别只在传输和调用者身份上。
+
+**后端路径**是这次重构的重点：它不依赖这个网站，也不依赖数据库 schema。凭据的创建/轮换/吊销、状态与版本语义、完整错误码表、以及一个不 import 本仓库任何代码的独立消费者示例，都在 [`analysis-backend.md`](analysis-backend.md)；示例脚本本体是 [`examples/analysis-backend-consumer.mjs`](../examples/analysis-backend-consumer.mjs)。
+
+下面按端点列出的响应结构对两条路径都适用。**重构后新增的字段**（都是加字段，没有改动任何已有字段的含义或类型）：
+
+- `apiSchemaVersion`：HTTP 契约版本，和各资源自己的 `schemaVersion`、内容修订号 `reportVersion` 是三件不同的事。
+- 每篇 filing 上的 `analysisRun`：**最近一次执行**的状态（`none` / `queued` / `running` / `failed` / `succeeded` / `unknown`），和描述**已发布结果**的 `analysisStatus` 分开。一次已知的失败不会再被当成"从没收录过"。
+- `provenance`、`periodId`、`analysisSchemaVersion`、`contentRevision`：数据来源、报告期、以及被拆开的两半版本号。
+- 公司分析上的 `latestRun` 和 `versions`，以及重新公开的 `overview.highlights[].evidenceRefs`（证据引用）。
+- fundamentals 的 `refresh.scheduled` 现在**恒为 `false`**，并新增 `refresh.mode: "backend_scheduled"`——读取不再触发刷新。字段保留只为兼容。
 
 #### `GET /api/v1/search?q=<关键词>&types=<可选>`
 
@@ -379,3 +403,5 @@ https://earning-report-analysis-sec-web.max-zhangyuchen.workers.dev
 - **基本面数据（`fundamentals`）**：走的是另一套判断——`findSecurity(ticker)?.type === "stock"`（本地证券目录里的类型），跟 `SEC_TRACKED_TICKERS` 没有关系。不满足这个条件、又从没抓过数据的 ticker 会直接 404（`FUNDAMENTALS_NOT_AVAILABLE`），不触发抓取。
 
 所以拿一个陌生 ticker 去测试这套 API，大概率只会看到空结果，这是预期行为，不是 bug。
+
+**读取永远不会扩大白名单。** 无论查哪个 ticker、查多少次，都不会让它进入自动生成的范围——读路径根本不读 `SEC_TRACKED_TICKERS`。反过来，一个曾经在白名单里、现在不在了的公司，它的历史结果仍然完整可读。
