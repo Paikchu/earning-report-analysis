@@ -32,9 +32,10 @@
 
 ```mermaid
 flowchart LR
-    User["用户浏览器"] -->|HTTPS| Web["Web Worker\nearning-report-analysis-sec-web\n(Next.js SSR + /api/v1 + D1)"]
-    Web -->|SQL| D1[("Cloudflare D1\nSQLite")]
-    Web <-->|Service Binding\nSEC_REFRESH_KEY| Pipeline["Pipeline Worker\nearning-report-analysis-sec-pipeline\n(Cron + Workflows)"]
+    User["用户浏览器"] -->|HTTPS| Web["Web Worker\nearning-report-analysis-sec-web\n(Next.js SSR + /api/v1，D1 只读)"]
+    Web -->|SQL 只读| D1[("Cloudflare D1\nSQLite")]
+    Web -->|Service Binding\n控制面：触发分析/回填、按需刷新基本面| Pipeline["Pipeline Worker\nearning-report-analysis-sec-pipeline\n(Cron + Workflows，D1 全部写入)"]
+    Pipeline -->|SQL 读写| D1
     Pipeline -->|读写原文/证据块/XBRL| R2[("Cloudflare R2\nSEC 原文与证据")]
     Pipeline -->|调用模型| AI["AI 模型 API\nSEC_ANALYSIS_MODEL"]
     Pipeline -->|抓取| EDGAR["SEC EDGAR"]
@@ -45,18 +46,23 @@ flowchart LR
 
 | Cloudflare Worker | 仓库目录 | 源配置 | 职责 |
 | --- | --- | --- | --- |
-| `earning-report-analysis-sec-web` | [`workers/web/`](workers/web/) | `workers/web/wrangler.jsonc` | Next.js SSR 页面、公开 `/api/v1` 读取接口、管理/内部接口、D1 读写、D1 migrations 源目录 |
-| `earning-report-analysis-sec-pipeline` | [`workers/pipeline/`](workers/pipeline/) | `workers/pipeline/wrangler.jsonc` | Cron 调度、`SecAnalysisWorkflow` / `SecMemoryWorkflow` / `CompanyAnalysisWorkflow` / `CompanyAnalysisBackfillWorkflow`、模型调用、R2 读写 |
+| `earning-report-analysis-sec-web` | [`workers/web/`](workers/web/) | `workers/web/wrangler.jsonc` | Next.js SSR 页面、公开 `/api/v1` 读取接口、管理接口；对 D1 **严格只读**——只服务已经写好的分析数据，不生成任何东西 |
+| `earning-report-analysis-sec-pipeline` | [`workers/pipeline/`](workers/pipeline/) | `workers/pipeline/wrangler.jsonc` | Cron 调度、`SecAnalysisWorkflow` / `SecMemoryWorkflow` / `CompanyAnalysisWorkflow` / `CompanyAnalysisBackfillWorkflow`、模型调用、R2 读写、**D1 的全部写入**（直接读写同一个数据库，不经过 Web 转手） |
 
-两个 Worker 之间**不能通过公网域名互相访问**（同一个 `workers.dev` 子域下会在边缘先 404），所有跨 Worker 调用都走 Service Binding：Web Worker 声明 `PIPELINE` binding 触发生成任务，Pipeline Worker 声明 `WEB` binding 回读白名单、写入 D1 上下文、发布最终报告。两侧通过共享密钥 `SEC_REFRESH_KEY` 互相认证。
+**依赖只朝一个方向**：Web 可以调用 Pipeline，反过来不允许。这不是靠约定维持的——Pipeline 的 `wrangler.jsonc` 里没有任何指向 Web 的 `services` 绑定，代码里也没有 `WEB_APP_ORIGIN`，物理上就调不到 Web；它需要的一切要么来自自己的运行时配置（`SEC_TRACKED_TICKERS`），要么直接读写 D1，要么自己抓外部数据源（EDGAR、Yahoo）。Web → Pipeline 只用于两类控制面请求，都经过 Service Binding `PIPELINE`（`lib/sec-runtime.ts` 的 `pipelineFetch`，两个 Worker 在同一个 `workers.dev` 子域下，公网域名互相调用会在边缘被拒）：
+
+- 管理员手动触发分析/回填：`admin/*/refresh`、`admin/*/backfill`、`internal/sec/refresh/[ticker]` 转发到 Pipeline 的 `/jobs/:ticker`、`/backfill/:ticker`。
+- 按需刷新某支股票的基本面：公开页面发现数据过期时，`lib/fundamentals-runtime.ts` 的 `scheduleFundamentalRefresh` 请求 Pipeline 的 `/fundamentals/refresh/:ticker`，Pipeline 自己完成抓取和写库，Web 全程不碰 D1。
+
+两侧通过共享密钥 `SEC_REFRESH_KEY` 互相认证。
 
 ### 目录结构
 
 ```
 app/                    Next.js App Router 页面与路由
   api/v1/               公开只读 API（搜索、申报列表、基本面、AI 研报）
-  api/v1/admin/         管理接口（触发刷新/回填，Bearer SEC_ADMIN_TOKEN 鉴权）
-  api/internal/         Web ↔ Pipeline 内部桥接接口（SEC_REFRESH_KEY 鉴权）
+  api/v1/admin/         管理接口（触发刷新/回填，Bearer SEC_ADMIN_TOKEN 鉴权，转发给 Pipeline）
+  api/internal/         Web → Pipeline 控制面转发（唯一保留：SEC 刷新），SEC_REFRESH_KEY 鉴权
   stocks/[ticker]/      个股页面：基本面图表 + AI 研报
   positions/[ticker]/   SEC 申报列表与原文阅读页
 components/fundamentals/  基本面图表组件
@@ -90,7 +96,7 @@ docs/                   架构与部署详细文档
 - `POST /api/v1/admin/companies/:ticker/refresh`，`Authorization: Bearer $SEC_ADMIN_TOKEN`
 - `POST /api/v1/admin/companies/:ticker/backfill`，`Authorization: Bearer $SEC_ADMIN_TOKEN`
 
-`app/api/internal/*` 是 Web ↔ Pipeline 之间的桥接接口，用 `SEC_REFRESH_KEY` 鉴权，不面向外部使用者。
+`app/api/internal/*`（现在只剩 `sec/refresh/[ticker]`）是 Web 转发给 Pipeline 的控制面请求，用 `SEC_REFRESH_KEY` 鉴权，不面向外部使用者；方向只能是 Web → Pipeline。
 
 ## 本地开发
 
@@ -103,9 +109,9 @@ npm run db:local:apply
 npm run test:sec
 ```
 
-`SEC_TRACKED_TICKERS`（在 `workers/web/.dev.vars` 里配置）只放需要自动生成或回填的股票代码，例如 `MSFT,NVDA`。解析会 trim、转大写、校验、去重；任意非法值会让整次 Pipeline 任务失败，空值不生成任何公司。
+`SEC_TRACKED_TICKERS`（在 `workers/pipeline/.dev.vars` 里配置）只放需要自动生成或回填的股票代码，例如 `MSFT,NVDA`。解析会 trim、转大写、校验、去重；任意非法值会让整次 Pipeline 任务失败，空值不生成任何公司。
 
-**生产环境里这个变量只配置在 Web Worker 上**：Pipeline Worker 不再持有副本，而是在每次任务开始时通过 `/api/internal/sec/watchlist` 向 Web Worker 读取；改白名单只需要重新部署 Web Worker。
+**生产环境里这个变量只配置在 Pipeline Worker 上**，作为 runtime var/secret，不进代码也不进 `wrangler.jsonc`。Pipeline 自己决定分析谁；Web 不再持有、也不再校验白名单。改白名单不需要重新部署任何一个 Worker，直接在 Cloudflare Dashboard 改这一个值即可。
 
 ```bash
 npm run dev            # 启动本地 Web Worker（Vinext dev server, :3000）
@@ -122,6 +128,8 @@ npx wrangler d1 create earning-report-analysis-sec-web
 npx wrangler r2 bucket create earning-report-analysis-sec-filings
 npx wrangler r2 bucket create earning-report-analysis-sec-filings-staging   # Pipeline staging 用
 ```
+
+同一个 D1 数据库被两个 Worker 用两种方式接入：Web Worker 的 `workers/web/wrangler.jsonc` 里是占位 id，构建时由 Build variable `SEC_WEB_D1_DATABASE_ID` 注入；Pipeline Worker 直接把这个 D1 id **提交进** `workers/pipeline/wrangler.jsonc`（它是账号内的标识符，不是凭据，跟同一份配置里的 bucket 名、Worker 名同级），部署时不需要任何 Build variable。
 
 ### Cloudflare Dashboard 配置
 
@@ -144,7 +152,8 @@ Build variables：
 | `SEC_WEB_D1_DATABASE_NAME` | 建议 `earning-report-analysis-sec-web` |
 | `SEC_WEB_WORKER_NAME` | `earning-report-analysis-sec-web` |
 | `SEC_PIPELINE_ORIGIN` | Pipeline Worker 的生产 URL |
-| `SEC_TRACKED_TICKERS` | 需要自动生成/回填报告的股票白名单 |
+
+Web 不再持有白名单——它对 D1 里的分析数据只读，`SEC_TRACKED_TICKERS` 只配在 Pipeline 上。
 
 **Pipeline Worker**
 
@@ -155,13 +164,13 @@ Deploy command: npm run worker:pipeline:deploy
 Non-production branch deploy command: npm run worker:pipeline:version
 ```
 
-`AI_API_KEY` 与 `SEC_REFRESH_KEY` 是 **Worker runtime secrets**，不是 Build variable，只能用 `wrangler secret put` 写入，不进代码、不进 vars。生产部署命令都带 `--keep-vars`，避免覆盖 Dashboard 里已有的 runtime vars。
+Pipeline **不需要任何 Build variable**：它直接从 committed 的 `wrangler.jsonc` 部署，D1 id 已经写在配置里。`SEC_REFRESH_KEY`、`AI_API_KEY`、`SEC_TRACKED_TICKERS` 都是 **Worker runtime secrets/vars**，不是 Build variable，只能用 `wrangler secret put`（或 Dashboard）写入，不进代码。生产部署命令都带 `--keep-vars`，避免覆盖 Dashboard 里已有的 runtime vars/secrets；`worker:pipeline:deploy` 部署前还会自动跑一次 migration 门禁（`worker:pipeline:check:migrations`），因为现在写 D1 的主力是 Pipeline。
 
 Build watch paths（共享路径改动时两个 Worker 都要重新构建）：
 
 | Web Worker | Pipeline Worker |
 | --- | --- |
-| `app/*` `components/*` `data/*` `db/*` `lib/*` `public/*` `workers/web/*` `next.config.ts` `postcss.config.mjs` `tsconfig.json` `vite.config.ts` `package.json` `package-lock.json` | `lib/*` `workers/pipeline/*` `tsconfig.json` `package.json` `package-lock.json` |
+| `app/*` `components/*` `data/*` `db/*` `lib/*` `public/*` `workers/web/*` `next.config.ts` `postcss.config.mjs` `tsconfig.json` `vite.config.ts` `package.json` `package-lock.json` | `lib/*` `workers/pipeline/*` `workers/web/migrations/*` `workers/web/scripts/check-migrations.ts` `tsconfig.json` `package.json` `package-lock.json` |
 
 ### 部署命令
 
@@ -197,33 +206,34 @@ printf %s "$SEC_ADMIN_TOKEN" | npx wrangler secret put SEC_ADMIN_TOKEN --config 
 printf %s "$SEC_REFRESH_KEY" | npx wrangler secret put SEC_REFRESH_KEY --config dist/server/wrangler.json
 ```
 
-**Pipeline Worker**：先部署关闭 Cron 的 staging（独立 Worker、Workflow 和 R2），验证通过后再上生产。
+**Pipeline Worker**：先部署关闭 Cron 的 staging（独立 Worker、Workflow 和 R2），验证通过后再上生产。**staging 没有 D1 绑定**——它绝不能写生产库，而它自己还没有库；显式 POST 的 canary 如果走到基本面同步，会拿到明确的 "Pipeline has no D1 binding" 报错，而不是静默写错地方。
 
 ```bash
 npm run worker:pipeline:deploy:staging
 printf %s "$SEC_REFRESH_KEY" | npx wrangler secret put SEC_REFRESH_KEY --config workers/pipeline/wrangler.jsonc --env staging
 printf %s "$AI_API_KEY" | npx wrangler secret put AI_API_KEY --config workers/pipeline/wrangler.jsonc --env staging
 
-# staging 的 Cron 列表为空，只能显式 POST 触发做 canary 验证
+# staging 的 Cron 列表为空，只能显式 POST 打 canary
 
 npm run worker:pipeline:deploy
 printf %s "$SEC_REFRESH_KEY" | npx wrangler secret put SEC_REFRESH_KEY --config workers/pipeline/wrangler.jsonc
 printf %s "$AI_API_KEY" | npx wrangler secret put AI_API_KEY --config workers/pipeline/wrangler.jsonc
+printf %s "$SEC_TRACKED_TICKERS" | npx wrangler secret put SEC_TRACKED_TICKERS --config workers/pipeline/wrangler.jsonc
 ```
 
-`npm run worker:pipeline:check` 是不落地的干跑，部署前可以先确认绑定解析正确。
+`npm run worker:pipeline:check` 是不落地的干跑，部署前可以先确认绑定解析正确；`worker:pipeline:deploy` 会自动先跑 `worker:pipeline:check:migrations`，确认这份构建带的 migration 都已在远端 D1 apply 过。
 
 ### 白名单管理
 
-`SEC_TRACKED_TICKERS` 只配置在 Web Worker 上，改白名单只需要重新部署 Web Worker：
+`SEC_TRACKED_TICKERS` 只配置在 Pipeline Worker 上，作为 runtime variable（不进 `wrangler.jsonc`，不进代码，也不是 Build variable）。Pipeline 自己决定分析谁，不问 Web 要这份名单；Web 侧不再做任何白名单校验——`admin/*/refresh`、`admin/*/backfill` 把请求原样转给 Pipeline，Pipeline 的 `handleSecAnalysisRequest` 会在真正起 workflow 之前自己检查一遍（`workers/pipeline/core.ts` 的 `assertTrackedTicker`）。
+
+直接在 Cloudflare Dashboard 的 Pipeline Worker → Settings → Variables and Secrets 里编辑这一个值即可，**不需要重新构建或部署**；`--keep-vars` 保证之后的部署不会覆盖它。也可以用命令行：
 
 ```bash
-export SEC_WEB_D1_DATABASE_ID="<real-d1-id>"
-export SEC_TRACKED_TICKERS="MSFT,NVDA"
-npm run web:deploy
+npx wrangler secret put SEC_TRACKED_TICKERS --config workers/pipeline/wrangler.jsonc
 ```
 
-两边各存一份白名单时不会报错，只会表现为任务反复失败——Pipeline 的 `/health` 只报告 `watchlistConfigured`（是否配好了读取白名单所需的 `WEB_APP_ORIGIN` 与 `SEC_REFRESH_KEY`），不知道白名单具体内容。Web Worker 不可用时整轮 Cron 会失败，不会回退到任何本地副本。
+（用 `secret` 而非普通 var 只是因为这是 Wrangler 唯一能不触发部署直接改运行时值的命令；ticker 列表本身不敏感，跟 `SEC_REFRESH_KEY` 那种真正的密钥不是一回事。）Pipeline 的 `/health` 报的 `watchlistConfigured` 表示"这个 Worker 自己有没有配好 `SEC_TRACKED_TICKERS`"，不涉及任何跨 Worker 依赖。
 
 ### 回滚
 
