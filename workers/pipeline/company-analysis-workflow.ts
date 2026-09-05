@@ -4,13 +4,14 @@ import {
   normalizeCompanyAnalysisPublication,
 } from "../../lib/company-analysis/contracts.ts";
 import { COMPANY_FEATURE_FORMULA_VERSION } from "../../lib/company-analysis/feature-engine.ts";
-import type { CompanyAnalysisPacket } from "../../lib/company-analysis/packet.ts";
+import { buildCompanyAnalysisPacket, type CompanyAnalysisPacket } from "../../lib/company-analysis/packet.ts";
+import { D1CompanyAnalysisRepository, type CompanyAnalysisRunUpdate } from "../../lib/company-analysis/repository.ts";
 import { sha256 } from "../../lib/company-analysis/api.ts";
 import { hashString } from "../../lib/sec-analysis.ts";
-import { serviceFetcher } from "../../lib/service-binding.ts";
-import type { CompanyAnalysisWorkflowParams } from "./core.ts";
+import { assertTrackedTicker, requireDb, type CompanyAnalysisWorkflowParams } from "./core.ts";
 import { runCompanyAnalysisAgent } from "./company-analysis-agent.ts";
-import { sitePost, type SecPipelineEnv } from "./operations.ts";
+import { syncFundamentals } from "./fundamentals.ts";
+import type { SecPipelineEnv } from "./operations.ts";
 
 const READINESS_DELAYS = [0, 15 * 60_000, 2 * 60 * 60_000, 8 * 60 * 60_000, 24 * 60 * 60_000, 48 * 60 * 60_000] as const;
 
@@ -46,7 +47,6 @@ export async function executeCompanyAnalysisWorkflow(
   step: CompanyWorkflowStep,
   env: SecPipelineEnv,
   fetcher: typeof fetch = fetch,
-  siteFetch: typeof fetch = serviceFetcher(env.WEB, fetcher),
 ) {
   const analysisId = params.analysisId || `company:${params.ticker}:${hashString(`${params.triggerRef}:${workflowInstanceId}`)}`;
   const modelVersion = env.SEC_REASONING_MODEL || env.SEC_ANALYSIS_MODEL || "glm-5.3-flash";
@@ -60,23 +60,24 @@ export async function executeCompanyAnalysisWorkflow(
     promptVersion: COMPANY_ANALYSIS_PROMPT_VERSION,
   };
   try {
-    await step.do("company-run-created", () => updateStatus(env, siteFetch, { ...statusBase, status: "waiting_fundamentals" }));
+    await step.do("company-run-created", () => updateStatus(env, { ...statusBase, status: "waiting_fundamentals" }));
     let currentPacket: CompanyAnalysisPacket | null = null;
     for (let index = 0; index < READINESS_DELAYS.length; index += 1) {
       const delay = READINESS_DELAYS[index]!;
       if (delay > 0) {
         await step.sleepUntil(`yahoo-readiness-${readinessLabel(delay)}`, createdAt.getTime() + delay);
       }
-      await step.do(`yahoo-refresh-${String(index).padStart(2, "0")}`, () => sitePost(env, siteFetch, "/api/internal/fundamentals/refresh", {
-        ticker: params.ticker,
-        targetPeriodEnd: params.reportDate,
-        triggerRef: params.triggerRef,
-      }));
-      currentPacket = await step.do(`current-quarter-packet-${String(index).padStart(2, "0")}`, () => readPacket(env, siteFetch, params, "current_quarter"));
+      await step.do(`yahoo-refresh-${String(index).padStart(2, "0")}`, () => {
+        // Only staging reaches this: it deliberately has no D1 binding, because it must never write
+        // the production database and has no database of its own.
+        if (!env.DB) throw new Error("Pipeline has no D1 binding — fundamentals cannot be synced from this environment");
+        return syncFundamentals(env.DB, params.ticker);
+      });
+      currentPacket = await step.do(`current-quarter-packet-${String(index).padStart(2, "0")}`, () => readPacket(env, params, "current_quarter"));
       if (currentPacket.ready) break;
     }
     if (!currentPacket?.ready || !currentPacket.features || !currentPacket.fundamentalsDataVersion) {
-      await step.do("company-run-insufficient", () => updateStatus(env, siteFetch, {
+      await step.do("company-run-insufficient", () => updateStatus(env, {
         ...statusBase,
         status: "insufficient_data",
         errorCode: currentPacket?.reason || "yahoo_target_period_missing",
@@ -84,7 +85,7 @@ export async function executeCompanyAnalysisWorkflow(
       return { status: "insufficient_data", reason: currentPacket?.reason ?? "yahoo_target_period_missing" };
     }
 
-    const crossPeriodPacket = await step.do("cross-period-packet", () => readPacket(env, siteFetch, params, "cross_period"));
+    const crossPeriodPacket = await step.do("cross-period-packet", () => readPacket(env, params, "cross_period"));
     if (!crossPeriodPacket.ready || !crossPeriodPacket.features) throw new Error("Cross-period packet is not ready.");
     const inputHash = await sha256(JSON.stringify({
       ticker: params.ticker,
@@ -97,7 +98,7 @@ export async function executeCompanyAnalysisWorkflow(
       schemaVersion: COMPANY_ANALYSIS_SCHEMA_VERSION,
     }));
     const generatedAt = new Date().toISOString();
-    await step.do("company-run-analyzing", () => updateStatus(env, siteFetch, {
+    await step.do("company-run-analyzing", () => updateStatus(env, {
       ...statusBase,
       analysisId,
       inputHash,
@@ -113,7 +114,7 @@ export async function executeCompanyAnalysisWorkflow(
       generatedAt,
       runStage: (stage, callback) => step.do(`company-agent-${stage}`, COMPANY_AGENT_MODEL_STEP_CONFIG, callback),
     });
-    await step.do("company-run-validating", () => updateStatus(env, siteFetch, {
+    await step.do("company-run-validating", () => updateStatus(env, {
       ...statusBase,
       analysisId,
       inputHash,
@@ -151,15 +152,13 @@ export async function executeCompanyAnalysisWorkflow(
       promptVersion: COMPANY_ANALYSIS_PROMPT_VERSION,
       generatedAt,
     });
-    const published = await step.do("company-publish", () => sitePost<{ status: string; analysisId: string }>(
-      env,
-      siteFetch,
-      "/api/internal/company-analysis/publish",
-      publication,
-    ));
-    return { status: published.status, analysisId, inputHash, rounds: output.rounds };
+    const published = await step.do("company-publish", () => {
+      assertTrackedTicker(env, publication.ticker);
+      return new D1CompanyAnalysisRepository(requireDb(env)).publish(publication);
+    });
+    return { status: published.duplicate ? "duplicate" : "ready", analysisId, inputHash, rounds: output.rounds };
   } catch (error) {
-    await step.do("company-run-failed", () => updateStatus(env, siteFetch, {
+    await step.do("company-run-failed", () => updateStatus(env, {
       ...statusBase,
       status: "failed",
       errorCode: error instanceof Error ? error.name : "COMPANY_ANALYSIS_FAILED",
@@ -171,23 +170,22 @@ export async function executeCompanyAnalysisWorkflow(
 
 function readPacket(
   env: SecPipelineEnv,
-  fetcher: typeof fetch,
   params: CompanyAnalysisWorkflowParams,
   packetStage: "current_quarter" | "cross_period",
 ): Promise<CompanyAnalysisPacket> {
-  return sitePost<{ packet: CompanyAnalysisPacket }>(env, fetcher, "/api/internal/company-analysis/packet", {
-    ticker: params.ticker,
+  assertTrackedTicker(env, params.ticker);
+  return buildCompanyAnalysisPacket({
+    database: requireDb(env),
+    rawTicker: params.ticker,
     periodId: params.periodId,
     memoryVersion: params.memoryVersion,
-    packetStage,
-  }).then((result) => result.packet);
+    stage: packetStage,
+  });
 }
 
-function updateStatus(env: SecPipelineEnv, fetcher: typeof fetch, value: Record<string, unknown>): Promise<void> {
-  return sitePost(env, fetcher, "/api/internal/company-analysis/status", {
-    ...value,
-    updatedAt: new Date().toISOString(),
-  }).then(() => undefined);
+function updateStatus(env: SecPipelineEnv, value: Omit<CompanyAnalysisRunUpdate, "updatedAt">): Promise<void> {
+  assertTrackedTicker(env, value.ticker);
+  return new D1CompanyAnalysisRepository(requireDb(env)).upsertRun({ ...value, updatedAt: new Date().toISOString() });
 }
 
 function readinessLabel(delay: number): string {

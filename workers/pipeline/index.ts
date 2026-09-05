@@ -2,6 +2,7 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloud
 
 import { handleSecAnalysisRequest, runCompanyAnalysisSweep, runSecMemorySweep, runSecRefresh, type CompanyAnalysisBackfillParams, type CompanyAnalysisWorkflowParams, type SecMemoryWorkflowParams, type SecWorkflowParams } from "./core.ts";
 import { executeCompanyAnalysisWorkflow, type CompanyWorkflowStep } from "./company-analysis-workflow.ts";
+import { handleFundamentalsRefreshRequest } from "./fundamentals.ts";
 import { executeSecMemoryWorkflow } from "./memory-workflow.ts";
 import { createSecPipelineOperations, type SecPipelineEnv } from "./operations.ts";
 import { retryDelayForAttempt } from "./retry-policy.ts";
@@ -60,7 +61,6 @@ export class CompanyAnalysisBackfillWorkflow extends WorkflowEntrypoint<SecPipel
       : await durable.do("backfill-latest-sec", () => runSecRefresh(this.env));
     const company = await durable.do("backfill-company-analysis", () => runCompanyAnalysisSweep(
       this.env,
-      undefined,
       { forceIncomplete: event.payload.forceIncomplete === true },
     ));
     return { sec, company };
@@ -80,9 +80,11 @@ function describeSettled(result: PromiseSettledResult<unknown>) {
 
 const worker = {
   async fetch(request: Request, env: SecPipelineEnv) {
-    if (new URL(request.url).pathname === "/health") {
-      return Response.json({ status: "ok", executor: "workflow", modelConfigured: Boolean(env.AI_API_KEY), watchlistConfigured: Boolean(env.WEB_APP_ORIGIN?.trim() && env.SEC_REFRESH_KEY?.trim()) }, { headers: { "cache-control": "no-store" } });
+    const path = new URL(request.url).pathname;
+    if (path === "/health") {
+      return Response.json({ status: "ok", executor: "workflow", modelConfigured: Boolean(env.AI_API_KEY), watchlistConfigured: Boolean(env.SEC_TRACKED_TICKERS?.trim()) }, { headers: { "cache-control": "no-store" } });
     }
+    if (path.startsWith("/fundamentals/refresh/")) return handleFundamentalsRefreshRequest(request, env);
     return handleSecAnalysisRequest(request, env);
   },
 
