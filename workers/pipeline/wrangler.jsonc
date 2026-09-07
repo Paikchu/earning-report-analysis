@@ -1,13 +1,15 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "earning-report-analysis-sec-pipeline",
-  "main": "index.ts",
+  "main": "src/index.ts",
   "compatibility_date": "2026-08-26",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "vars": {
-    "WEB_APP_ORIGIN": "https://earning-report-analysis-sec-web.max-zhangyuchen.workers.dev",
     "SEC_USER_AGENT": "earning-report-analysis/1.0 max.zhangyuchen@gmail.com",
-    "SEC_ANALYSIS_MODEL": "glm-5.3-flash"
+    "SEC_ANALYSIS_MODEL": "glm-5.3-flash",
+    "SEC_TRACKED_TICKERS": ""
   },
   "workflows": [
     {
@@ -45,9 +47,9 @@
     "staging": {
       "name": "earning-report-analysis-sec-pipeline-staging",
       "vars": {
-        "WEB_APP_ORIGIN": "https://earning-report-analysis-sec-web-staging.max-zhangyuchen.workers.dev",
         "SEC_USER_AGENT": "earning-report-analysis/1.0 max.zhangyuchen@gmail.com",
-        "SEC_ANALYSIS_MODEL": "glm-5.3-flash"
+        "SEC_ANALYSIS_MODEL": "glm-5.3-flash",
+        "SEC_TRACKED_TICKERS": ""
       },
       "workflows": [
         {
@@ -75,12 +77,35 @@
           "bucket_name": "earning-report-analysis-sec-filings-staging"
         }
       ],
-      "triggers": { "crons": [] }
+      "triggers": {
+        "crons": []
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "earning-report-analysis-sec-pipeline-staging",
+          "database_id": "00000000-0000-4000-8000-000000000000",
+          "migrations_dir": "migrations"
+        }
+      ]
     }
   },
   "observability": {
     "enabled": true,
-    "logs": { "head_sampling_rate": 1 },
-    "traces": { "enabled": true, "head_sampling_rate": 0.05 }
-  }
+    "logs": {
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.05
+    }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "earning-report-analysis-sec-web",
+      "database_id": "00000000-0000-4000-8000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ]
 }

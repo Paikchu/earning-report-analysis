@@ -3,8 +3,8 @@ import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { FundamentalChartsView } from "../app/stocks/[ticker]/FundamentalCharts";
-import { resolveFundamentalPresentation } from "../lib/fundamental-chart-plan.ts";
-import type { FundamentalPageState } from "../lib/fundamental-page-state.ts";
+import { resolveFundamentalPresentation } from "../lib/web/fundamental-chart-plan.ts";
+import type { FundamentalPageState } from "../lib/web/fundamental-page-state.ts";
 import { makeChartResponse, makeChartSeries } from "./fixtures/fundamental-chart.ts";
 
 const pageState: FundamentalPageState = {

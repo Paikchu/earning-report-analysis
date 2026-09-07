@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { scheduleFundamentalRefresh } from "../lib/fundamentals-runtime.ts";
-import { FundamentalSyncInProgressError } from "../lib/fundamentals-d1.ts";
+import { scheduleFundamentalRefresh } from "../workers/pipeline/src/fundamentals/fundamentals-runtime.ts";
+import { FundamentalSyncInProgressError } from "../workers/pipeline/src/fundamentals/fundamentals-d1.ts";
 
 test("hands background refresh work to waitUntil without blocking the response path", async () => {
   const calls: string[] = [];

@@ -3,7 +3,7 @@
 import handler from "vinext/server/app-router-entry";
 
 interface Env {
-  DB: D1Database;
+  ANALYSIS_SERVICE: { fetch(request: Request): Promise<Response> };
   /** Only present when the generated config declares an `assets.binding`. The App Router
    *  handler treats it as optional and serves without it. */
   ASSETS?: { fetch(request: Request): Promise<Response> | Response };

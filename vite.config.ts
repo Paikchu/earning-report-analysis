@@ -1,6 +1,5 @@
 import vinext from "vinext";
 import { defineConfig } from "vite";
-import { cloudflareArtifacts } from "./workers/web/cloudflare-artifacts";
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
@@ -21,7 +20,6 @@ export default defineConfig(async () => {
       : undefined,
     plugins: [
       vinext(),
-      cloudflareArtifacts(),
       cloudflare({
         configPath: "workers/web/wrangler.jsonc",
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },

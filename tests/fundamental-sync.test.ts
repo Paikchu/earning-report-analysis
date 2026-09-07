@@ -5,19 +5,19 @@ import test from "node:test";
 import {
   FundamentalSyncService,
   type FundamentalSyncServiceOptions,
-} from "../lib/fundamental-sync.ts";
+} from "../workers/pipeline/src/fundamentals/fundamental-sync.ts";
 import type {
   FundamentalLastGoodSnapshot,
   FundamentalSyncCommit,
   FundamentalSyncRunClaim,
   FundamentalsRepository,
-} from "../lib/fundamentals-d1.ts";
+} from "../workers/pipeline/src/fundamentals/fundamentals-d1.ts";
 import {
   YahooFundamentalsRequestError,
   type YahooFundamentalsFetchResult,
   type YahooFundamentalsRequest,
-} from "../lib/yahoo-fundamentals-client.ts";
-import { parseYahooFundamentalsPayload } from "../lib/yahoo-fundamentals-schema.ts";
+} from "../workers/pipeline/src/fundamentals/yahoo-fundamentals-client.ts";
+import { parseYahooFundamentalsPayload } from "../workers/pipeline/src/fundamentals/yahoo-fundamentals-schema.ts";
 
 const fixture = JSON.parse(await readFile(
   new URL("./fixtures/yahoo-fundamentals-timeseries.json", import.meta.url),

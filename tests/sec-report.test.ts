@@ -7,8 +7,8 @@ import {
   normalizeSecNodePlan,
   normalizeSecNodeResult,
   type SecOutlineSection,
-} from "../lib/sec-report.ts";
-import type { SecNodeSpec } from "../lib/sec.ts";
+} from "../workers/pipeline/src/sec/report.ts";
+import type { SecNodeSpec } from "../workers/pipeline/src/sec/sec.ts";
 
 /** The Manager always fills these; a test only spells out the parts it exercises. */
 function nodeSpec(spec: Pick<SecNodeSpec, "id" | "title" | "question" | "sectionIds"> & Partial<SecNodeSpec>): SecNodeSpec {

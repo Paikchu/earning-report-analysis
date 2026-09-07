@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getPublicFilingPage } from "../lib/sec-public-api.ts";
+import { getPublicFilingPage } from "../workers/pipeline/src/sec/public-api.ts";
 
 test("maps migrated filings to the public contract without generation", async () => {
   const fakeRepository = {

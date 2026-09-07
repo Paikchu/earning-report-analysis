@@ -8,14 +8,14 @@ import {
   FundamentalApiQueryError,
   getPublicFundamentals,
   parseFundamentalApiQuery,
-} from "../lib/fundamentals-api.ts";
-import { FUNDAMENTAL_METRIC_CATALOG_VERSION } from "../lib/fundamental-metrics.ts";
-import { normalizeYahooFundamentals } from "../lib/fundamental-normalization.ts";
+} from "../workers/pipeline/src/fundamentals/fundamentals-api.ts";
+import { FUNDAMENTAL_METRIC_CATALOG_VERSION } from "../workers/pipeline/src/fundamentals/fundamental-metrics.ts";
+import { normalizeYahooFundamentals } from "../workers/pipeline/src/fundamentals/fundamental-normalization.ts";
 import type {
   FundamentalLastGoodSnapshot,
   FundamentalsRepository,
-} from "../lib/fundamentals-d1.ts";
-import { parseYahooFundamentalsPayload } from "../lib/yahoo-fundamentals-schema.ts";
+} from "../workers/pipeline/src/fundamentals/fundamentals-d1.ts";
+import { parseYahooFundamentalsPayload } from "../workers/pipeline/src/fundamentals/yahoo-fundamentals-schema.ts";
 
 const fixture = JSON.parse(await readFile(
   new URL("./fixtures/yahoo-fundamentals-timeseries.json", import.meta.url),

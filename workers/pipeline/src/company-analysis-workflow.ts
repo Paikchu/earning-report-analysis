@@ -1,0 +1,183 @@
+import { readCompanyAnalysisPacket } from "./services/company-analysis-packet.ts";
+import { updateCompanyAnalysisStatus } from "./services/company-analysis-status.ts";
+import { publishCompanyAnalysis } from "./services/company-analysis-publish.ts";
+import { refreshFundamentals } from "./services/fundamentals-refresh.ts";
+import { runCommand } from "./services/result.ts";
+import {
+  COMPANY_ANALYSIS_PROMPT_VERSION,
+  COMPANY_ANALYSIS_SCHEMA_VERSION,
+  normalizeCompanyAnalysisPublication,
+} from "./company-analysis/contracts.ts";
+import { COMPANY_FEATURE_FORMULA_VERSION } from "./company-analysis/feature-engine.ts";
+import type { CompanyAnalysisPacket } from "./company-analysis/packet.ts";
+import { sha256 } from "./company-analysis/api.ts";
+import { hashString } from "./sec/analysis.ts";
+import type { CompanyAnalysisWorkflowParams } from "./core.ts";
+import { runCompanyAnalysisAgent } from "./company-analysis-agent.ts";
+import { type SecPipelineEnv } from "./operations.ts";
+
+const READINESS_DELAYS = [0, 15 * 60_000, 2 * 60 * 60_000, 8 * 60 * 60_000, 24 * 60 * 60_000, 48 * 60 * 60_000] as const;
+
+export type CompanyWorkflowStep = {
+  do<T>(name: string, callback: () => Promise<T>): Promise<T>;
+  sleepUntil(name: string, timestamp: Date | number): Promise<void>;
+};
+
+export async function executeCompanyAnalysisWorkflow(
+  params: CompanyAnalysisWorkflowParams,
+  workflowInstanceId: string,
+  createdAt: Date,
+  step: CompanyWorkflowStep,
+  env: SecPipelineEnv,
+  fetcher: typeof fetch = fetch,
+) {
+  const analysisId = `company:${params.ticker}:${hashString(`${params.triggerRef}:${workflowInstanceId}`)}`;
+  const modelVersion = env.SEC_REASONING_MODEL || env.SEC_ANALYSIS_MODEL || "glm-5.3-flash";
+  const statusBase = {
+    analysisId,
+    ticker: params.ticker,
+    triggerRef: params.triggerRef,
+    periodId: params.periodId,
+    memoryVersion: params.memoryVersion,
+    modelVersion,
+    promptVersion: COMPANY_ANALYSIS_PROMPT_VERSION,
+  };
+  try {
+    await step.do("company-run-created", () => updateStatus(env, fetcher, { ...statusBase, status: "waiting_fundamentals" }));
+    let currentPacket: CompanyAnalysisPacket | null = null;
+    for (let index = 0; index < READINESS_DELAYS.length; index += 1) {
+      const delay = READINESS_DELAYS[index]!;
+      if (delay > 0) {
+        await step.sleepUntil(`yahoo-readiness-${readinessLabel(delay)}`, createdAt.getTime() + delay);
+      }
+      await step.do(`yahoo-refresh-${String(index).padStart(2, "0")}`, () => runCommand(refreshFundamentals, env, {
+        ticker: params.ticker,
+        targetPeriodEnd: params.reportDate,
+        triggerRef: params.triggerRef,
+      }));
+      currentPacket = await step.do(`current-quarter-packet-${String(index).padStart(2, "0")}`, () => readPacket(env, fetcher, params, "current_quarter"));
+      if (currentPacket.ready) break;
+    }
+    if (!currentPacket?.ready || !currentPacket.features || !currentPacket.fundamentalsDataVersion) {
+      await step.do("company-run-insufficient", () => updateStatus(env, fetcher, {
+        ...statusBase,
+        status: "insufficient_data",
+        errorCode: currentPacket?.reason || "yahoo_target_period_missing",
+      }));
+      return { status: "insufficient_data", reason: currentPacket?.reason ?? "yahoo_target_period_missing" };
+    }
+
+    const crossPeriodPacket = await step.do("cross-period-packet", () => readPacket(env, fetcher, params, "cross_period"));
+    if (!crossPeriodPacket.ready || !crossPeriodPacket.features) throw new Error("Cross-period packet is not ready.");
+    const inputHash = await sha256(JSON.stringify({
+      ticker: params.ticker,
+      periodId: params.periodId,
+      memoryVersion: params.memoryVersion,
+      fundamentalsDataVersion: currentPacket.fundamentalsDataVersion,
+      featureFormulaVersion: COMPANY_FEATURE_FORMULA_VERSION,
+      skillVersion: COMPANY_ANALYSIS_PROMPT_VERSION,
+      modelVersion,
+      schemaVersion: COMPANY_ANALYSIS_SCHEMA_VERSION,
+    }));
+    const generatedAt = new Date().toISOString();
+    await step.do("company-run-analyzing", () => updateStatus(env, fetcher, {
+      ...statusBase,
+      analysisId,
+      inputHash,
+      fundamentalsDataVersion: currentPacket!.fundamentalsDataVersion!,
+      status: "analyzing",
+    }));
+    const output = await step.do("company-agent", () => runCompanyAnalysisAgent({
+      env,
+      fetcher,
+      currentPacket: currentPacket!,
+      crossPeriodPacket,
+      analysisId,
+      generatedAt,
+    }));
+    await step.do("company-run-validating", () => updateStatus(env, fetcher, {
+      ...statusBase,
+      analysisId,
+      inputHash,
+      fundamentalsDataVersion: currentPacket!.fundamentalsDataVersion!,
+      status: "validating",
+    }));
+
+    const runKey = `company-analysis/${params.ticker}/${analysisId}/run.json`;
+    await step.do("company-artifact", () => env.SEC_FILINGS.put(runKey, JSON.stringify({
+      params,
+      inputHash,
+      currentPacket,
+      crossPeriodPacket,
+      diagnostic: output.diagnostic,
+      decision: output.decision,
+      overview: output.overview,
+      rounds: output.rounds,
+      generatedAt,
+    }), { httpMetadata: { contentType: "application/json" } }).then(() => undefined));
+    const publication = normalizeCompanyAnalysisPublication({
+      schemaVersion: COMPANY_ANALYSIS_SCHEMA_VERSION,
+      analysisId,
+      ticker: params.ticker,
+      triggerRef: params.triggerRef,
+      periodId: params.periodId,
+      periodEnd: currentPacket.targetPeriodEnd,
+      reportLabel: formatReportLabel(currentPacket.targetPeriodEnd!),
+      inputHash,
+      memoryVersion: params.memoryVersion,
+      fundamentalsDataVersion: currentPacket.fundamentalsDataVersion,
+      status: "ready",
+      coverageStatus: currentPacket.features.missingMetricKeys.length ? "partial" : "complete",
+      overview: output.overview,
+      modelVersion,
+      promptVersion: COMPANY_ANALYSIS_PROMPT_VERSION,
+      generatedAt,
+    });
+    const published = await step.do("company-publish", () => runCommand<{ status: string; analysisId: string }>(publishCompanyAnalysis, env,
+      publication,
+    ));
+    return { status: published.status, analysisId, inputHash, rounds: output.rounds };
+  } catch (error) {
+    await step.do("company-run-failed", () => updateStatus(env, fetcher, {
+      ...statusBase,
+      status: "failed",
+      errorCode: error instanceof Error ? error.name : "COMPANY_ANALYSIS_FAILED",
+      errorDetail: error instanceof Error ? error.message : String(error),
+    })).catch(() => undefined);
+    throw error;
+  }
+}
+
+function readPacket(
+  env: SecPipelineEnv,
+  fetcher: typeof fetch,
+  params: CompanyAnalysisWorkflowParams,
+  packetStage: "current_quarter" | "cross_period",
+): Promise<CompanyAnalysisPacket> {
+  return runCommand<{ packet: CompanyAnalysisPacket }>(readCompanyAnalysisPacket, env, {
+    ticker: params.ticker,
+    periodId: params.periodId,
+    memoryVersion: params.memoryVersion,
+    packetStage,
+  }).then((result) => result.packet);
+}
+
+function updateStatus(env: SecPipelineEnv, fetcher: typeof fetch, value: Record<string, unknown>): Promise<void> {
+  return runCommand(updateCompanyAnalysisStatus, env, {
+    ...value,
+    updatedAt: new Date().toISOString(),
+  }).then(() => undefined);
+}
+
+function readinessLabel(delay: number): string {
+  if (delay === 15 * 60_000) return "15m";
+  if (delay === 2 * 60 * 60_000) return "02h";
+  if (delay === 8 * 60 * 60_000) return "08h";
+  if (delay === 24 * 60 * 60_000) return "24h";
+  return "48h";
+}
+
+function formatReportLabel(periodEnd: string): string {
+  const [year, month, day] = periodEnd.split("-");
+  return `截至 ${year}年${Number(month)}月${Number(day)}日`;
+}

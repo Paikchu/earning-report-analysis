@@ -1,14 +1,7 @@
-# Pipeline Worker
+# Pipeline：财报分析微服务
 
-Cloudflare Worker：`earning-report-analysis-sec-pipeline`
+`src/` 包含所有分析实现、读 API、本地写命令及 Workflow。`migrations/` 与 `src/db/` 归本服务；`drizzle.config.ts` 生成迁移。共享代码仅限 `shared/analysis-contract/` 的公开协议。
 
-这个目录包含 Pipeline Worker 的完整部署单元：
+Pipeline 不导入 Web，不回调 Web。`SEC_TRACKED_TICKERS`、D1、R2、模型与工作流由自身拥有。
 
-- `wrangler.jsonc`：Worker、两个 Workflows、R2、Cron、staging 与 observability。
-- `index.ts`：HTTP、Cron 与 Workflow entrypoints。
-- `core.ts` / `operations.ts` / `workflow-core.ts` / `memory-workflow.ts`：任务编排。
-- `worker-configuration.d.ts`：由 Pipeline Wrangler config 生成的 bindings type。
-- `.dev.vars.example`：本地 secret 模板；真实 `.dev.vars` 不进入 Git。
-
-Pipeline 会引用仓库根目录的共享 `lib/`，因此 Cloudflare Builds 的 Root directory 仍为
-`/`。部署和非生产版本上传都必须显式使用 `workers/pipeline/wrangler.jsonc`。
+`wrangler.jsonc` 是源配置；正式部署先通过 `scripts/prepare-config.ts` 注入真实数据库 id 和白名单。参见 [部署文档](../../docs/deploy.md)。

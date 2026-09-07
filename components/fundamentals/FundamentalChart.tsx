@@ -11,11 +11,11 @@ import {
   type ReactNode,
 } from "react";
 
-import type { FundamentalMetricKey } from "@/lib/fundamental-metrics";
+import type { FundamentalMetricKey } from "@/lib/web/fundamental-metrics";
 import type {
   PublicFundamentalsResponse,
   PublicFundamentalSeries,
-} from "@/lib/fundamentals-api";
+} from "@/lib/web/fundamentals-api";
 import {
   FUNDAMENTAL_CHART_HEIGHT,
   FUNDAMENTAL_CHART_MAX_SERIES,
@@ -33,7 +33,7 @@ import {
   type FundamentalChartModel,
   type FundamentalChartSeriesSpec,
   type FundamentalSeriesVisual,
-} from "@/lib/fundamental-chart";
+} from "../../lib/web/fundamental-chart.ts";
 
 export type FundamentalChartRendererProps = {
   title: string;

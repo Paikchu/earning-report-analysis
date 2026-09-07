@@ -1,13 +1,13 @@
 import {
   FUNDAMENTAL_METRIC_CATALOG,
   type FundamentalMetricKey,
-} from "../../lib/fundamental-metrics.ts";
+} from "../../workers/pipeline/src/fundamentals/fundamental-metrics.ts";
 import {
   FUNDAMENTALS_API_SCHEMA_VERSION,
   type PublicFundamentalsResponse,
   type PublicFundamentalSeries,
-} from "../../lib/fundamentals-api.ts";
-import { FUNDAMENTAL_METRIC_CATALOG_VERSION } from "../../lib/fundamental-metrics.ts";
+} from "../../workers/pipeline/src/fundamentals/fundamentals-api.ts";
+import { FUNDAMENTAL_METRIC_CATALOG_VERSION } from "../../workers/pipeline/src/fundamentals/fundamental-metrics.ts";
 
 export const CHART_FIXTURE_PERIOD_ENDS = [
   "2024-03-31",

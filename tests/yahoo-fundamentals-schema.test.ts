@@ -5,7 +5,7 @@ import test from "node:test";
 import {
   YahooFundamentalsPayloadError,
   parseYahooFundamentalsPayload,
-} from "../lib/yahoo-fundamentals-schema.ts";
+} from "../workers/pipeline/src/fundamentals/yahoo-fundamentals-schema.ts";
 
 const fixture = JSON.parse(await readFile(
   new URL("./fixtures/yahoo-fundamentals-timeseries.json", import.meta.url),

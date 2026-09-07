@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import type { SecurityType } from "@/lib/symbol-directory";
+import type { SecurityType } from "../lib/web/symbol-directory.ts";
 
 type SearchResult = { symbol: string; name: string; exchange: string; type: SecurityType };
 

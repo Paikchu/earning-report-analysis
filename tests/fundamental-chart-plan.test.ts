@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildFundamentalChartModel } from "../lib/fundamental-chart.ts";
+import { buildFundamentalChartModel } from "../lib/web/fundamental-chart.ts";
 import {
   FUNDAMENTAL_AI_CHART_PLAN_JSON_SCHEMA,
   FUNDAMENTAL_CHART_PLAN_SCHEMA_VERSION,
@@ -10,7 +10,7 @@ import {
   resolveFundamentalPresentation,
   sliceFundamentalsForChart,
   validateAiFundamentalChartPlan,
-} from "../lib/fundamental-chart-plan.ts";
+} from "../lib/web/fundamental-chart-plan.ts";
 import { makeChartResponse, makeChartSeries } from "./fixtures/fundamental-chart.ts";
 
 function heavyInvestmentData() {

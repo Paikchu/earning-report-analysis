@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { YAHOO_QUARTERLY_FUNDAMENTAL_FIELDS } from "../lib/fundamental-metrics.ts";
+import { YAHOO_QUARTERLY_FUNDAMENTAL_FIELDS } from "../workers/pipeline/src/fundamentals/fundamental-metrics.ts";
 import {
   YahooFundamentalsRequestError,
   buildYahooFundamentalsRequest,
   fetchYahooFundamentals,
-} from "../lib/yahoo-fundamentals-client.ts";
+} from "../workers/pipeline/src/fundamentals/yahoo-fundamentals-client.ts";
 
 const fixtureText = await readFile(
   new URL("./fixtures/yahoo-fundamentals-timeseries.json", import.meta.url),

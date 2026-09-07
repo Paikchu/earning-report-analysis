@@ -6,8 +6,8 @@ import {
   buildSecAnalysisBrief,
   normalizeAnalysisFacts,
   type SecHistorySnapshot,
-} from "../lib/sec-analysis.ts";
-import { formatSecMetricLabel, formatSecMetricValue } from "../lib/sec-metric-format.ts";
+} from "../workers/pipeline/src/sec/analysis.ts";
+import { formatSecMetricLabel, formatSecMetricValue } from "../lib/web/sec-metric-format.ts";
 
 const blocks = buildFilingBlocks([
   "Item 1. Business",

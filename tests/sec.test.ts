@@ -10,7 +10,7 @@ import {
   normalizeSecSummary,
   parseSecSubmissions,
   SEC_SUMMARY_VERSION,
-} from "../lib/sec.ts";
+} from "../workers/pipeline/src/sec/sec.ts";
 
 test("accepts domestic and foreign issuer business filings", () => {
   for (const form of ["10-K", "10-Q", "8-K", "20-F", "6-K", "10-K/A", "20-F/A"]) {

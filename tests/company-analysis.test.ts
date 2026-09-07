@@ -5,10 +5,10 @@ import {
   COMPANY_ANALYSIS_SCHEMA_VERSION,
   normalizeCompanyAnalysisPublication,
   toPublicCompanyAnalysis,
-} from "../lib/company-analysis/contracts.ts";
-import { buildCompanyFeaturePack } from "../lib/company-analysis/feature-engine.ts";
-import { D1CompanyAnalysisRepository } from "../lib/company-analysis/repository.ts";
-import type { FundamentalCurrentObservation } from "../lib/fundamentals-d1.ts";
+} from "../workers/pipeline/src/company-analysis/contracts.ts";
+import { buildCompanyFeaturePack } from "../workers/pipeline/src/company-analysis/feature-engine.ts";
+import { D1CompanyAnalysisRepository } from "../workers/pipeline/src/company-analysis/repository.ts";
+import type { FundamentalCurrentObservation } from "../workers/pipeline/src/fundamentals/fundamentals-d1.ts";
 import { applySqlMigration, SqliteD1Database } from "./helpers/sqlite-d1.ts";
 
 const generatedAt = "2026-09-03T08:00:00.000Z";
@@ -63,7 +63,7 @@ test("requires exactly four evidence-backed highlights and hides evidence metada
 test("publishes immutable analysis rows and reads the latest ready version", async () => {
   const database = new SqliteD1Database();
   try {
-    await applySqlMigration(database, "../../workers/web/migrations/0009_company_analysis.sql");
+    await applySqlMigration(database, "../../workers/pipeline/migrations/0009_company_analysis.sql");
     const repository = new D1CompanyAnalysisRepository(database);
     const first = await repository.publish(publication());
     const duplicate = await repository.publish(publication());
@@ -79,7 +79,7 @@ test("publishes immutable analysis rows and reads the latest ready version", asy
 test("promotes the same in-progress analysis row to an immutable publication", async () => {
   const database = new SqliteD1Database();
   try {
-    await applySqlMigration(database, "../../workers/web/migrations/0009_company_analysis.sql");
+    await applySqlMigration(database, "../../workers/pipeline/migrations/0009_company_analysis.sql");
     const repository = new D1CompanyAnalysisRepository(database);
     await repository.upsertRun({
       analysisId: publication().analysisId,

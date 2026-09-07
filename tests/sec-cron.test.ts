@@ -6,16 +6,16 @@ import {
   runSecRefresh,
   type SecCronEnv,
   type SecWorkflowBinding,
-} from "../workers/pipeline/core.ts";
+} from "../workers/pipeline/src/core.ts";
 
 const env: SecCronEnv = {
-  WEB_APP_ORIGIN: "https://web.example",
+  DB: {} as D1Database,
+  SEC_TRACKED_TICKERS: "MSFT,NOK",
   SEC_REFRESH_KEY: "refresh-key",
   SEC_ANALYSIS_WORKFLOW: workflowBinding(),
 };
 
-/** The whitelist is served by the Web Worker, so every entry point here has to go and read it. */
-const watchlist: typeof fetch = async () => Response.json({ tickers: ["MSFT", "NOK"] });
+/** No network request is allowed for collection policy. */
 
 function workflowBinding(started: string[] = []): SecWorkflowBinding {
   return {
@@ -28,7 +28,7 @@ function workflowBinding(started: string[] = []): SecWorkflowBinding {
 
 test("loads the watchlist and starts one independent workflow per ticker", async () => {
   const started: string[] = [];
-  const result = await runSecRefresh({ ...env, SEC_ANALYSIS_WORKFLOW: workflowBinding(started) }, watchlist, 1_786_000_000_000);
+  const result = await runSecRefresh({ ...env, SEC_ANALYSIS_WORKFLOW: workflowBinding(started) }, 1_786_000_000_000);
 
   assert.deepEqual(result, { started: ["MSFT", "NOK"], failed: [] });
   assert.deepEqual(started, ["MSFT", "NOK"]);
@@ -43,7 +43,7 @@ test("continues starting remaining workflows after one failure", async () => {
       return { id: options.id };
     },
   };
-  assert.deepEqual(await runSecRefresh({ ...env, SEC_ANALYSIS_WORKFLOW: binding }, watchlist, 1_786_000_000_000), { started: ["NOK"], failed: ["MSFT"] });
+  assert.deepEqual(await runSecRefresh({ ...env, SEC_ANALYSIS_WORKFLOW: binding }, 1_786_000_000_000), { started: ["NOK"], failed: ["MSFT"] });
   assert.deepEqual(started, ["NOK"]);
 });
 
@@ -53,13 +53,12 @@ test("accepts authenticated manual jobs without running analysis in the request"
     new Request("https://worker.example/jobs/MSFT", { method: "POST", headers: { "x-sec-refresh-key": "refresh-key" } }),
     { ...env, SEC_ANALYSIS_WORKFLOW: workflowBinding(started) },
     1_786_000_000_000,
-    watchlist,
   );
 
   assert.equal(response.status, 202);
   assert.deepEqual(started, ["MSFT"]);
   assert.equal((await response.json() as { status: string }).status, "queued");
-  assert.equal((await handleSecAnalysisRequest(new Request("https://worker.example/jobs/MSFT", { method: "POST" }), env, 1_786_000_000_000, watchlist)).status, 401);
+  assert.equal((await handleSecAnalysisRequest(new Request("https://worker.example/jobs/MSFT", { method: "POST" }), env, 1_786_000_000_000)).status, 401);
 });
 
 test("creates a distinct workflow for each manual force refresh", async () => {
@@ -75,8 +74,8 @@ test("creates a distinct workflow for each manual force refresh", async () => {
     headers: { "x-sec-refresh-key": "refresh-key" },
   });
 
-  await handleSecAnalysisRequest(request(), { ...env, SEC_ANALYSIS_WORKFLOW: binding }, 1_786_000_000_000, watchlist);
-  await handleSecAnalysisRequest(request(), { ...env, SEC_ANALYSIS_WORKFLOW: binding }, 1_786_000_000_000, watchlist);
+  await handleSecAnalysisRequest(request(), { ...env, SEC_ANALYSIS_WORKFLOW: binding }, 1_786_000_000_000);
+  await handleSecAnalysisRequest(request(), { ...env, SEC_ANALYSIS_WORKFLOW: binding }, 1_786_000_000_000);
 
   assert.equal(new Set(ids).size, 2);
 });

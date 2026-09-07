@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import type { PublicCompanyAnalysisResponse } from "@/lib/company-analysis/contracts";
+import type { PublicCompanyAnalysisResponse } from "@/shared/analysis-contract/company-analysis";
 
 type RequestStatus = "loading" | "ready" | "empty" | "error";
 

@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { mock, afterEach } from "node:test";
+import { D1SecRepository } from "../workers/pipeline/src/sec/d1.ts";
+afterEach(() => mock.restoreAll());
 
-import type { SecAnalysisArtifact } from "../lib/sec-types.ts";
-import type { SecFiling, SecNodeSpec } from "../lib/sec.ts";
-import { callWorkerSecModel, createSecPipelineOperations, modelForStage, type SecPipelineEnv } from "../workers/pipeline/operations.ts";
-import { executeSecMemoryWorkflow } from "../workers/pipeline/memory-workflow.ts";
-import { modelExecutionForAttempt, retryDelayForAttempt } from "../workers/pipeline/retry-policy.ts";
+import type { SecAnalysisArtifact } from "../workers/pipeline/src/sec/types.ts";
+import type { SecFiling, SecNodeSpec } from "../workers/pipeline/src/sec/sec.ts";
+import { callWorkerSecModel, createSecPipelineOperations, modelForStage, type SecPipelineEnv } from "../workers/pipeline/src/operations.ts";
+import { executeSecMemoryWorkflow } from "../workers/pipeline/src/memory-workflow.ts";
+import { modelExecutionForAttempt, retryDelayForAttempt } from "../workers/pipeline/src/retry-policy.ts";
 
 const filing: SecFiling = {
   ticker: "MSFT", cik: "0000789019", cikNumber: 789019, companyName: "Microsoft Corp", form: "10-K",
@@ -30,7 +32,9 @@ test("adds bounded jitter around 30, 90, and 180 second retry delays", () => {
 test("sends an explicit fallback model override to B.ai", async () => {
   let requestedModel = "";
   const env = {
-    WEB_APP_ORIGIN: "https://site.test",
+    DB: {} as D1Database,
+    SEC_TRACKED_TICKERS: "MSFT",
+    SEC_ANALYSIS_WORKFLOW: { async create() { return { id: "test" }; } },
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
     AI_API_KEY: "worker-model-secret",
@@ -48,7 +52,9 @@ test("sends an explicit fallback model override to B.ai", async () => {
 });
 
 const modelEnv = {
-  WEB_APP_ORIGIN: "https://site.test",
+  DB: {} as D1Database,
+    SEC_TRACKED_TICKERS: "MSFT",
+    SEC_ANALYSIS_WORKFLOW: { async create() { return { id: "test" }; } },
   SEC_REFRESH_KEY: "refresh-key",
   SEC_USER_AGENT: "test@example.com",
   AI_API_KEY: "worker-model-secret",
@@ -121,12 +127,15 @@ test("rejects a stream cut short by the output token limit", async () => {
 
 test("scheduled analysis does not overlap an already running filing job", async () => {
   const env = {
-    WEB_APP_ORIGIN: "https://site.test",
+    DB: {} as D1Database,
+    SEC_TRACKED_TICKERS: "MSFT",
+    SEC_ANALYSIS_WORKFLOW: { async create() { return { id: "test" }; } },
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
     SEC_FILINGS: { async get() { return null; }, async put() { return {}; } },
   } as unknown as SecPipelineEnv;
-  const operations = createSecPipelineOperations(env, async () => Response.json({ status: "running" }));
+  mock.method(D1SecRepository.prototype, "getAnalysisJobStatus", async () => "running");
+  const operations = createSecPipelineOperations(env, async () => { throw new Error("No Web call"); });
 
   assert.equal(await operations.shouldAnalyze(filing, "scheduled"), false);
   assert.equal(await operations.shouldAnalyze(filing, "manual"), true);
@@ -136,7 +145,9 @@ test("calls B.ai from the workflow worker when its shared AI secret is configure
   const objects = new Map<string, string>();
   const requests: string[] = [];
   const env = {
-    WEB_APP_ORIGIN: "https://site.test",
+    DB: {} as D1Database,
+    SEC_TRACKED_TICKERS: "MSFT",
+    SEC_ANALYSIS_WORKFLOW: { async create() { return { id: "test" }; } },
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
     AI_API_KEY: "worker-model-secret",
@@ -174,7 +185,9 @@ test("calls B.ai from the workflow worker when its shared AI secret is configure
 test("plans and runs dynamic nodes from the prepared R2 filing", async () => {
   const objects = new Map<string, string>();
   const env = {
-    WEB_APP_ORIGIN: "https://site.test",
+    DB: {} as D1Database,
+    SEC_TRACKED_TICKERS: "MSFT",
+    SEC_ANALYSIS_WORKFLOW: { async create() { return { id: "test" }; } },
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
     AI_API_KEY: "worker-model-secret",
@@ -211,11 +224,15 @@ test("plans and runs dynamic nodes from the prepared R2 filing", async () => {
   assert.match(node.narrative, /云需求/);
 });
 
-test("fetches XBRL during prepare and resolves context in one bridge call", async () => {
+test("fetches XBRL during prepare and resolves context locally", async () => {
   const objects = new Map<string, string>();
   const contextPosts: Array<Record<string, unknown>> = [];
+  mock.method(D1SecRepository.prototype, "saveHistory", async (_filing: SecFiling, history: unknown) => { contextPosts.push({ history }); });
+  mock.method(D1SecRepository.prototype, "getAnalysisContext", async () => ({ currentPeriodId: "MSFT:2026-06-30:annual", qoqPeriodId: null, yoyPeriodId: null }));
   const env = {
-    WEB_APP_ORIGIN: "https://site.test",
+    DB: {} as D1Database,
+    SEC_TRACKED_TICKERS: "MSFT",
+    SEC_ANALYSIS_WORKFLOW: { async create() { return { id: "test" }; } },
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
     AI_API_KEY: "worker-model-secret",
@@ -230,17 +247,13 @@ test("fetches XBRL during prepare and resolves context in one bridge call", asyn
       },
     },
   } as SecPipelineEnv;
-  const fetcher: typeof fetch = async (input, init) => {
+  const fetcher: typeof fetch = async (input) => {
     const url = String(input);
     if (url === filing.documentUrl) return new Response("<h1>Item 7. Management Discussion</h1><p>Revenue was 120 USDm.</p>");
     if (url.includes("/api/xbrl/companyfacts/")) {
       return Response.json({ facts: { "us-gaap": { Revenues: { units: { USD: [
         { start: "2025-07-01", end: "2026-06-30", val: 120, accn: "annual", fy: 2026, fp: "FY", form: "10-K", filed: "2026-07-30" },
       ] } } } } });
-    }
-    if (url.endsWith("/api/internal/sec/context")) {
-      contextPosts.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
-      return Response.json({ context: { currentPeriodId: "MSFT:2026-06-30:annual", qoqPeriodId: null, yoyPeriodId: null } });
     }
     throw new Error(`Unexpected request: ${url}`);
   };
@@ -262,7 +275,7 @@ test("fetches XBRL during prepare and resolves context in one bridge call", asyn
   assert.deepEqual(brief.currentFacts.map((fact) => [fact.metricKey, fact.value]), [["revenue", "120"]]);
 });
 
-test("publishes cited evidence in bounded D1 bridge calls", async () => {
+test("publishes cited evidence in bounded local D1 writes", async () => {
   const blocks = Array.from({ length: 20 }, (_, ordinal) => ({
     blockId: `block-${ordinal}`,
     ordinal,
@@ -286,7 +299,9 @@ test("publishes cited evidence in bounded D1 bridge calls", async () => {
     outline: [],
   };
   const env = {
-    WEB_APP_ORIGIN: "https://site.test",
+    DB: {} as D1Database,
+    SEC_TRACKED_TICKERS: "MSFT",
+    SEC_ANALYSIS_WORKFLOW: { async create() { return { id: "test" }; } },
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
     SEC_FILINGS: {
@@ -318,27 +333,26 @@ test("publishes cited evidence in bounded D1 bridge calls", async () => {
       dataQuality: { coverage: 1, verificationStatus: "verified" as const, warnings: [] },
     },
   } satisfies SecAnalysisArtifact;
-  const published: Array<{ artifact: SecAnalysisArtifact; summary: unknown }> = [];
-  const fetcher: typeof fetch = async (_input, init) => {
-    published.push(JSON.parse(String(init?.body)) as { artifact: SecAnalysisArtifact; summary: unknown });
-    return Response.json({ status: "ok" });
-  };
+  const storedBlocks: Array<Array<{ blockId: string }>> = [];
+  let saved: SecAnalysisArtifact | null = null;
+  mock.method(D1SecRepository.prototype, "saveFilingBlocks", async (_filing: SecFiling, values: Array<{ blockId: string }>) => { storedBlocks.push(values); });
+  mock.method(D1SecRepository.prototype, "saveAnalysis", async (value: SecAnalysisArtifact) => { saved = value; });
+  mock.method(D1SecRepository.prototype, "commitFinalPublication", async () => "memory-job");
+  const summary = { ticker: "MSFT", form: "10-K", filingDate: filing.filingDate, accessionNumber: filing.accessionNumber, headline: "ok", bullets: [], analystView: "ok", source: "deepseek" as const, generatedAt: new Date().toISOString() };
+  const result = await createSecPipelineOperations(env, async () => { throw new Error("No Web call"); }).publish(artifact, summary);
+  assert.equal(result?.memoryJobId, "memory-job");
+  assert.deepEqual(storedBlocks.flat().map((block) => block.blockId), citedBlocks.map((block) => block.blockId));
+  assert.ok(storedBlocks.every((blocks) => blocks.length <= 40));
+  assert.deepEqual((saved as unknown as SecAnalysisArtifact).blocks, []);
 
-  await createSecPipelineOperations(env, fetcher).publish(artifact, null);
-
-  assert.equal(published.length, 2);
-  const blockPosts = published.slice(0, -1) as unknown as Array<{ filing: SecFiling; blocks: Array<{ blockId: string }>; artifact?: unknown }>;
-  assert.deepEqual(blockPosts.flatMap((body) => body.blocks.map((block) => block.blockId)), citedBlocks.map((block) => block.blockId));
-  assert.ok(blockPosts.every((body) => body.artifact === undefined), "evidence posts must not resend the report");
-  assert.ok(blockPosts.every((body) => body.blocks.length <= 40));
-  assert.equal(published.at(-1)?.artifact.report.dataQuality.verificationStatus, "verified");
-  assert.deepEqual(published.at(-1)?.artifact.blocks, []);
 });
 
 test("publishes event summaries without creating a structured filing artifact", async () => {
   const requestBodies: Array<Record<string, unknown>> = [];
   const env = {
-    WEB_APP_ORIGIN: "https://site.test",
+    DB: {} as D1Database,
+    SEC_TRACKED_TICKERS: "MSFT",
+    SEC_ANALYSIS_WORKFLOW: { async create() { return { id: "test" }; } },
     SEC_REFRESH_KEY: "refresh-key",
     SEC_USER_AGENT: "test@example.com",
     SEC_FILINGS: { async get() { return null; }, async put() { return {}; } },
@@ -349,14 +363,11 @@ test("publishes event summaries without creating a structured filing artifact", 
     analystView: "事件改变短期预期。", source: "deepseek" as const, generatedAt: "2026-08-10T00:00:00.000Z",
   };
 
-  await createSecPipelineOperations(env, async (_input, init) => {
-    requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
-    return Response.json({ status: "published" });
-  }).publishEvent(summary);
-
+  mock.method(D1SecRepository.prototype, "setSummary", async (value: Record<string, unknown>) => { requestBodies.push(value); });
+  await createSecPipelineOperations(env, async () => { throw new Error("No Web call"); }).publishEvent(summary);
   assert.equal(requestBodies.length, 1);
-  assert.deepEqual(requestBodies[0].filing, { ticker: "MSFT", form: "8-K", filingDate: "2026-08-10", accessionNumber: "event" });
-  assert.equal("artifact" in requestBodies[0], false);
+  assert.deepEqual(requestBodies[0], summary);
+
 });
 
 test("routes planning, review, and synthesis to the reasoning model and leaves node work on the primary", () => {
@@ -402,7 +413,9 @@ test("memory extraction still receives this filing's claims and prior memory ids
   let committed: Record<string, unknown> | null = null;
   let createdCompanyAnalysis: Record<string, unknown> | null = null;
   const env = {
-    WEB_APP_ORIGIN: "https://site.test",
+    DB: {} as D1Database,
+    SEC_TRACKED_TICKERS: "MSFT",
+    SEC_ANALYSIS_WORKFLOW: { async create() { return { id: "test" }; } },
     SEC_REFRESH_KEY: "refresh-key",
     AI_API_KEY: "worker-model-secret",
     SEC_FILINGS: {
@@ -420,7 +433,6 @@ test("memory extraction still receives this filing's claims and prior memory ids
   } as unknown as SecPipelineEnv;
   const fetcher: typeof fetch = async (input, init) => {
     const url = String(input);
-    if (url.endsWith("/api/internal/sec/memory/claim")) return Response.json({ claim });
     if (url === "https://api.b.ai/v1/chat/completions") {
       modelPayload = JSON.parse(String(init?.body ?? "{}")).messages[1].content;
       return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [
@@ -428,21 +440,14 @@ test("memory extraction still receives this filing's claims and prior memory ids
         { candidateId: "c-2", memoryId: "memory:invented", kind: "fact", topicKey: "backlog", statement: "Backlog grew.", evidenceIds: ["ev:block-1"], materialityScore: 60, confidence: "medium", disposition: "active" },
       ] }) } }] });
     }
-    if (url.endsWith("/api/internal/sec/memory/commit")) {
-      committed = JSON.parse(String(init?.body ?? "{}"));
-      return Response.json({
-        status: "committed",
-        noOp: false,
-        itemCount: 2,
-        memoryVersion: 3,
-        periodId: claim.periodId,
-        filingId: claim.filingId,
-        reportDate: "2026-06-30",
-      });
-    }
     throw new Error(`Unexpected request: ${url}`);
   };
 
+  mock.method(D1SecRepository.prototype, "claimMemoryJob", async () => claim);
+  mock.method(D1SecRepository.prototype, "commitMemoryJob", async (value: unknown, extraction: unknown) => {
+    committed = { claim: value, extraction };
+    return { noOp: false, itemCount: 2, memoryVersion: 3 };
+  });
   const result = await executeSecMemoryWorkflow({ jobId: "job-1", ticker: "MSFT" }, "instance-1", { do: (_name, callback) => callback() }, env, fetcher);
 
   const payload = JSON.parse(modelPayload) as Record<string, unknown>;

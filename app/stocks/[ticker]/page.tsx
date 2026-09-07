@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import { SiteHeader } from "@/app/site-header";
-import { findSecurity } from "@/lib/site-data";
-import { normalizeTrackedTicker } from "@/lib/sec-config";
-import { SecFilingsSection } from "@/app/positions/[ticker]/SecFilingsSection";
+import { findSecurity } from "../../../lib/web/site-data.ts";
+import { normalizeTrackedTicker } from "@/lib/web/ticker";
+import { SecFilingsSection } from "@/app/stocks/[ticker]/SecFilingsSection";
 import { BusinessOutlook } from "./BusinessOutlook";
 import { FundamentalCharts } from "./FundamentalCharts";
 import {
@@ -10,7 +10,7 @@ import {
   parseFundamentalPageState,
   stockPageSearchParamsToUrlSearchParams,
   type StockPageSearchParams,
-} from "@/lib/fundamental-page-state";
+} from "../../../lib/web/fundamental-page-state.ts";
 
 export const dynamic = "force-dynamic";
 

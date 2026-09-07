@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { decodePageCursor, encodePageCursor, normalizeTrackedTicker, parseTrackedTickers } from "../lib/sec-config.ts";
+import { decodePageCursor, encodePageCursor, normalizeTrackedTicker, parseTrackedTickers } from "../workers/pipeline/src/sec/config.ts";
 
 test("normalizes and deduplicates tracked tickers", () => {
   assert.deepEqual(parseTrackedTickers(" msft, NVDA\nmsft "), ["MSFT", "NVDA"]);

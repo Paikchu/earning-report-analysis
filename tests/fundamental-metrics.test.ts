@@ -7,7 +7,7 @@ import {
   YAHOO_QUARTERLY_FUNDAMENTAL_FIELDS,
   getMetricKeyForYahooField,
   isFundamentalMetricKey,
-} from "../lib/fundamental-metrics.ts";
+} from "../workers/pipeline/src/fundamentals/fundamental-metrics.ts";
 
 test("registers each Yahoo field exactly once under a versioned metric catalog", () => {
   assert.equal(FUNDAMENTAL_METRIC_CATALOG_VERSION, "fundamental-metrics.v1");

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getPublicCompanyAnalysis } from "../lib/company-analysis/api.ts";
+import { getPublicCompanyAnalysis } from "../workers/pipeline/src/company-analysis/api.ts";
 import {
   COMPANY_ANALYSIS_SCHEMA_VERSION,
   normalizeCompanyAnalysisPublication,
-} from "../lib/company-analysis/contracts.ts";
+} from "../workers/pipeline/src/company-analysis/contracts.ts";
 
 function readyPublication() {
   return normalizeCompanyAnalysisPublication({

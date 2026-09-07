@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { handlePublicFundamentalsRequest } from "../lib/fundamentals-api.ts";
+import { handlePublicFundamentalsRequest } from "../workers/pipeline/src/fundamentals/fundamentals-api.ts";
 import type {
   FundamentalLastGoodSnapshot,
   FundamentalsRepository,
-} from "../lib/fundamentals-d1.ts";
+} from "../workers/pipeline/src/fundamentals/fundamentals-d1.ts";
 
 function repository(snapshot: FundamentalLastGoodSnapshot | null): FundamentalsRepository {
   return {
@@ -152,8 +152,8 @@ test("exposes the public route without importing the Yahoo adapter into the read
     "utf8",
   );
 
-  assert.match(source, /handlePublicFundamentalsRequest/);
-  assert.match(source, /scheduleFundamentalRefresh/);
-  assert.match(source, /findSecurity/);
+  assert.match(source, /proxyAnalysisRequest/);
+  assert.doesNotMatch(source, /scheduleFundamentalRefresh/);
+  assert.doesNotMatch(source, /D1FundamentalsRepository/);
   assert.doesNotMatch(source, /yahoo-fundamentals-client|fetchYahooFundamentals/);
 });

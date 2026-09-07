@@ -9,7 +9,7 @@ import {
   parseNasdaqListed,
   parseOtherListed,
   type SymbolDirectoryEntry,
-} from "../lib/symbol-directory.ts";
+} from "../lib/web/symbol-directory.ts";
 
 const NASDAQ_URL = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt";
 const OTHER_URL = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt";

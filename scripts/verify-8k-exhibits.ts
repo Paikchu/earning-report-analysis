@@ -8,8 +8,8 @@
  *
  * Run: node --experimental-strip-types scripts/verify-8k-exhibits.ts
  */
-import { buildFilingBlocks, type FilingBlock } from "../lib/sec-analysis.ts";
-import { htmlToSecDocument } from "../lib/sec.ts";
+import { buildFilingBlocks, type FilingBlock } from "../workers/pipeline/src/sec/analysis.ts";
+import { htmlToSecDocument } from "../workers/pipeline/src/sec/sec.ts";
 
 const USER_AGENT = "Max Research max@example.com";
 

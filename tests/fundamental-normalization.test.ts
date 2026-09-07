@@ -6,9 +6,9 @@ import {
   FUNDAMENTAL_CORE_METRICS,
   FundamentalDataQualityError,
   normalizeYahooFundamentals,
-} from "../lib/fundamental-normalization.ts";
-import { getFundamentalMetricDefinition } from "../lib/fundamental-metrics.ts";
-import { parseYahooFundamentalsPayload } from "../lib/yahoo-fundamentals-schema.ts";
+} from "../workers/pipeline/src/fundamentals/fundamental-normalization.ts";
+import { getFundamentalMetricDefinition } from "../workers/pipeline/src/fundamentals/fundamental-metrics.ts";
+import { parseYahooFundamentalsPayload } from "../workers/pipeline/src/fundamentals/yahoo-fundamentals-schema.ts";
 
 const fixture = JSON.parse(await readFile(
   new URL("./fixtures/yahoo-fundamentals-timeseries.json", import.meta.url),

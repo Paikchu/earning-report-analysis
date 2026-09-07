@@ -10,7 +10,7 @@ import {
   fundamentalObservationRevisions,
   fundamentalObservations,
   fundamentalPeriods,
-} from "../db/fundamentals-schema.ts";
+} from "../workers/pipeline/src/db/fundamentals-schema.ts";
 
 const tables = [
   fundamentalFetchRuns,

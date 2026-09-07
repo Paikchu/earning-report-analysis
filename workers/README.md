@@ -1,77 +1,16 @@
-# Cloudflare Workers
+# Worker 部署入口
 
-这个目录是仓库内唯一的 Cloudflare Worker 部署入口索引。两个 Worker 是独立的
-Cloudflare 项目，但共享根目录的 `package.json` 与 `lib/`，所以 Cloudflare Builds 的
-Root directory 都设置为 `/`；不要让 Wrangler 自动猜测配置文件。
+Web 与 Pipeline 独立拥有实现和部署配置，共用根 `package.json`。Cloudflare Builds 的 Root directory 均为 `/`。
 
-| Cloudflare Worker | 仓库目录 | 源配置 | 生产部署命令 |
+| 服务 | 源配置 | Build | Deploy |
 | --- | --- | --- | --- |
-| `earning-report-analysis-sec-web` | [`web/`](web/) | `workers/web/wrangler.jsonc` | `npm run worker:web:deploy:built` |
-| `earning-report-analysis-sec-pipeline` | [`pipeline/`](pipeline/) | `workers/pipeline/wrangler.jsonc` | `npm run worker:pipeline:deploy` |
+| Web | `workers/web/wrangler.jsonc` | `npm run build` | `npm run worker:web:deploy:built` |
+| Pipeline | `workers/pipeline/wrangler.jsonc` | `npm run worker:pipeline:check` | `npm run worker:pipeline:deploy` |
 
-## Cloudflare Dashboard
+非生产版本上传分别用 `worker:web:version:built` / `worker:pipeline:version`。这些命令显式选择配置，避免 Wrangler 自动发现到另一服务的构建产物。
 
-两个 Cloudflare Worker 分别连接同一个 GitHub repository，并使用下面的配置。
+Web watch paths：`app/*`、`components/*`、`lib/web/*`、`data/*`、`public/*`、`workers/web/*`、`shared/analysis-contract/*`、Vite/Next/PostCSS/TS 配置与根 package/lock。
 
-### Web Worker
+Pipeline watch paths：`workers/pipeline/*`、`shared/analysis-contract/*`、根 TS 配置与 package/lock。Pipeline 内部改动不需要重建 Web。
 
-```text
-Root directory: /
-Build command: npm run build
-Deploy command: npm run worker:web:deploy:built
-Non-production branch deploy command: npm run worker:web:version:built
-```
-
-Build variables 至少配置：
-
-- `SEC_WEB_D1_DATABASE_ID`：Web Worker 使用的真实 D1 database id。
-- `SEC_WEB_D1_DATABASE_NAME`：建议为 `earning-report-analysis-sec-web`。
-- `SEC_WEB_WORKER_NAME`：`earning-report-analysis-sec-web`。
-- `SEC_PIPELINE_ORIGIN`：Pipeline Worker 的生产 URL。
-- `SEC_TRACKED_TICKERS`：需要生成报告的股票白名单。
-
-### Pipeline Worker
-
-```text
-Root directory: /
-Build command: npm run worker:pipeline:check
-Deploy command: npm run worker:pipeline:deploy
-Non-production branch deploy command: npm run worker:pipeline:version
-```
-
-Pipeline 的 `SEC_REFRESH_KEY` 与 `AI_API_KEY` 是 Worker runtime secrets，不是 Build
-variables。生产部署命令使用 `--keep-vars`，避免覆盖 Dashboard 中现有 runtime vars。
-
-## Build watch paths
-
-两个 Worker 都会使用 `lib/` 和根依赖；共享路径有改动时必须同时构建。
-
-Web Worker：
-
-```text
-app/*
-components/*
-data/*
-db/*
-lib/*
-public/*
-workers/web/*
-next.config.ts
-postcss.config.mjs
-tsconfig.json
-vite.config.ts
-package.json
-package-lock.json
-```
-
-Pipeline Worker：
-
-```text
-lib/*
-workers/pipeline/*
-tsconfig.json
-package.json
-package-lock.json
-```
-
-详细的密钥、迁移、staging 与回滚顺序见 [`../docs/deploy.md`](../docs/deploy.md)。
+Pipeline 拥有分析 D1、迁移、白名单、R2、Cron 和三条 Workflow；Web 只使用一个分析服务 binding。配置变量与首次切换步骤见 [部署文档](../docs/deploy.md)，后续微服务路线见 [架构文档](../docs/service-architecture.md)。

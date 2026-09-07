@@ -21,19 +21,19 @@ import {
   writeFundamentalPageState,
   type FundamentalChartMode,
   type FundamentalPageState,
-} from "@/lib/fundamental-page-state";
+} from "../../../lib/web/fundamental-page-state.ts";
 import {
   resolveFundamentalPresentation,
   sliceFundamentalsForChart,
   type ResolvedFundamentalPresentation,
-} from "@/lib/fundamental-chart-plan";
+} from "../../../lib/web/fundamental-chart-plan.ts";
 import {
   buildFundamentalChartModel,
   formatFundamentalChartValue,
   formatFundamentalPeriod,
-} from "@/lib/fundamental-chart";
-import type { FundamentalMetricKey, FundamentalTransform } from "@/lib/fundamental-metrics";
-import type { PublicFundamentalsResponse } from "@/lib/fundamentals-api";
+} from "../../../lib/web/fundamental-chart.ts";
+import type { FundamentalMetricKey, FundamentalTransform } from "@/lib/web/fundamental-metrics";
+import type { PublicFundamentalsResponse } from "@/lib/web/fundamentals-api";
 
 const SNAPSHOT_METRICS_A: readonly FundamentalMetricKey[] = [
   "total_revenue",

@@ -9,22 +9,22 @@ import {
   unresolvedFingerprint,
   type CompanyMemoryItem,
   type HistoricalObservation,
-} from "../lib/sec-analysis.ts";
+} from "../workers/pipeline/src/sec/analysis.ts";
 import {
   COMPANY_FACTS_REGISTRY_VERSION,
   normalizeCompanyFacts,
-} from "../lib/sec-history.ts";
+} from "../workers/pipeline/src/sec/history.ts";
 import {
   buildCompanyMemorySummary,
   consolidateMemoryCandidates,
   normalizeMemoryExtraction,
   type MemoryConsolidationState,
-} from "../lib/sec-memory.ts";
-import { runManagerRepairLoop, type WorkflowStepLike } from "../workers/pipeline/workflow-core.ts";
-import type { SecFilingSummary, SecNodePlan, SecNodeResult } from "../lib/sec.ts";
-import type { SecAnalysisArtifact } from "../lib/sec-types.ts";
-import { planPreparedSecFiling, prepareSecFiling } from "../lib/sec-pipeline.ts";
-import { D1SecRepository } from "../lib/sec-d1.ts";
+} from "../workers/pipeline/src/sec/memory.ts";
+import { runManagerRepairLoop, type WorkflowStepLike } from "../workers/pipeline/src/workflow-core.ts";
+import type { SecFilingSummary, SecNodePlan, SecNodeResult } from "../workers/pipeline/src/sec/sec.ts";
+import type { SecAnalysisArtifact } from "../workers/pipeline/src/sec/types.ts";
+import { planPreparedSecFiling, prepareSecFiling } from "../workers/pipeline/src/sec/pipeline.ts";
+import { D1SecRepository } from "../workers/pipeline/src/sec/d1.ts";
 
 /** The sqlite-backed double hands its own richer statements to `batch`, so it is deliberately
  *  narrower than the repository's database parameter. */
@@ -417,7 +417,8 @@ test("commits the final report, summary, and pending Memory job in one D1 batch"
   const jobId = await new D1SecRepository(asDatabase(database)).commitFinalPublication(artifact, summary);
 
   assert.equal(batches.length, 1);
-  assert.equal(batches[0].length, 3);
+  assert.equal(batches[0].length, 4);
+  assert.match(batches[0][0].sql, /DELETE FROM sec_published_reports/);
   assert.ok(batches[0].some((statement) => /sec_published_reports/.test(statement.sql)));
   assert.ok(batches[0].some((statement) => /sec_memory_jobs/.test(statement.sql)));
   assert.match(jobId, /:memory$/);

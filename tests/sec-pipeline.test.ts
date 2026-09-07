@@ -12,10 +12,10 @@ import {
   summarizePreparedSecEvent,
   summarizePreparedSecFiling,
   type SecModelCall,
-} from "../lib/sec-pipeline.ts";
-import type { SecAnalysisContext } from "../lib/sec-types.ts";
-import type { SecHistorySnapshot } from "../lib/sec-analysis.ts";
-import { SEC_SUMMARY_VERSION, type SecFiling, type SecNodeSpec } from "../lib/sec.ts";
+} from "../workers/pipeline/src/sec/pipeline.ts";
+import type { SecAnalysisContext } from "../workers/pipeline/src/sec/types.ts";
+import type { SecHistorySnapshot } from "../workers/pipeline/src/sec/analysis.ts";
+import { SEC_SUMMARY_VERSION, type SecFiling, type SecNodeSpec } from "../workers/pipeline/src/sec/sec.ts";
 
 /** The Manager always fills these; a test only spells out the parts it exercises. */
 function nodeSpec(spec: Pick<SecNodeSpec, "id" | "title" | "question" | "sectionIds"> & Partial<SecNodeSpec>): SecNodeSpec {

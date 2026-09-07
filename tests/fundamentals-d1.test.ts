@@ -5,14 +5,14 @@ import test from "node:test";
 import {
   normalizeYahooFundamentals,
   type NormalizedFundamentalsSnapshot,
-} from "../lib/fundamental-normalization.ts";
+} from "../workers/pipeline/src/fundamentals/fundamental-normalization.ts";
 import {
   D1FundamentalsRepository,
   FundamentalSyncInProgressError,
   FundamentalSyncLeaseLostError,
   type FundamentalSyncRunClaim,
-} from "../lib/fundamentals-d1.ts";
-import { parseYahooFundamentalsPayload } from "../lib/yahoo-fundamentals-schema.ts";
+} from "../workers/pipeline/src/fundamentals/fundamentals-d1.ts";
+import { parseYahooFundamentalsPayload } from "../workers/pipeline/src/fundamentals/yahoo-fundamentals-schema.ts";
 import {
   applyFundamentalsMigrations,
   applySqlMigration,
@@ -56,7 +56,7 @@ test("migrates existing P1 rows into the leased run schema without breaking refe
   database.raw.exec("PRAGMA foreign_keys = ON");
 
   try {
-    await applySqlMigration(database, "../../workers/web/migrations/0007_yahoo_fundamentals_p1.sql");
+    await applySqlMigration(database, "../../workers/pipeline/migrations/0007_yahoo_fundamentals_p1.sql");
     database.raw.prepare(`
       INSERT INTO fundamental_fetch_runs (
         run_id, ticker, status, request_hash, payload_hash, parser_version,
@@ -81,7 +81,7 @@ test("migrates existing P1 rows into the leased run schema without breaking refe
       )
     `).run();
 
-    await applySqlMigration(database, "../../workers/web/migrations/0008_yahoo_fundamentals_sync.sql");
+    await applySqlMigration(database, "../../workers/pipeline/migrations/0008_yahoo_fundamentals_sync.sql");
     database.raw.exec("PRAGMA foreign_keys = ON");
 
     const migrated = database.raw.prepare(`

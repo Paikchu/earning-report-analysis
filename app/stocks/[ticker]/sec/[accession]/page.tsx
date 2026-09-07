@@ -1,17 +1,15 @@
 import { notFound } from "next/navigation";
-import { getD1 } from "@/db";
-import { D1SecRepository } from "@/lib/sec-d1";
-import { getPublicFiling } from "@/lib/sec-public-api";
-import { findSecurity } from "@/lib/site-data";
-import { normalizeTrackedTicker } from "@/lib/sec-config";
-import { SecReportDocument } from "@/app/positions/[ticker]/sec/[accession]/SecReportDocument";
+import { getPublicFiling } from "@/lib/web/analysis-client";
+import { findSecurity } from "../../../../../lib/web/site-data.ts";
+import { normalizeTrackedTicker } from "@/lib/web/ticker";
+import { SecReportDocument } from "@/app/stocks/[ticker]/sec/[accession]/SecReportDocument";
 
 export const dynamic = "force-dynamic";
 
 export default async function StockSecReportPage({ params }: { params: Promise<{ ticker: string; accession: string }> }) {
   const route = await params;
   const ticker = normalizeTrackedTicker(route.ticker);
-  const result = await getPublicFiling(new D1SecRepository(await getD1()), ticker, route.accession);
+  const result = await getPublicFiling(ticker, route.accession);
   if (!result) notFound();
   const security = findSecurity(ticker);
   const filing = result.filing;

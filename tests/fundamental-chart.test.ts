@@ -10,7 +10,7 @@ import {
   linePath,
   selectFundamentalPeriodTickIndexes,
   toggleFundamentalMetricSelection,
-} from "../lib/fundamental-chart.ts";
+} from "../lib/web/fundamental-chart.ts";
 import {
   makeChartResponse,
   makeChartSeries,

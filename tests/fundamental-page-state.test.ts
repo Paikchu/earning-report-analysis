@@ -10,7 +10,7 @@ import {
   reconcileFundamentalMetricSelection,
   stockPageSearchParamsToUrlSearchParams,
   writeFundamentalPageState,
-} from "../lib/fundamental-page-state.ts";
+} from "../lib/web/fundamental-page-state.ts";
 import { makeChartSeries } from "./fixtures/fundamental-chart.ts";
 
 test("page state parser keeps valid ordered metrics and clamps malformed values to defaults", () => {

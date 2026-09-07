@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { executeSecAnalysisWorkflow, type SecPipelineOperations, type WorkflowStepLike } from "../workers/pipeline/workflow-core.ts";
-import { SEC_ANALYSIS_SCHEMA_VERSION, type SecHistorySnapshot } from "../lib/sec-analysis.ts";
-import type { SecFiling, SecFilingSummary, SecNodeSpec } from "../lib/sec.ts";
+import { executeSecAnalysisWorkflow, type SecPipelineOperations, type WorkflowStepLike } from "../workers/pipeline/src/workflow-core.ts";
+import { SEC_ANALYSIS_SCHEMA_VERSION, type SecHistorySnapshot } from "../workers/pipeline/src/sec/analysis.ts";
+import type { SecFiling, SecFilingSummary, SecNodeSpec } from "../workers/pipeline/src/sec/sec.ts";
 
 /** The Manager always fills these; a test only spells out the parts it exercises. */
 function nodeSpec(spec: Pick<SecNodeSpec, "id" | "title" | "question" | "sectionIds"> & Partial<SecNodeSpec>): SecNodeSpec {

@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { D1SecRepository, type SecAnalysisJobUpdate } from "../lib/sec-d1.ts";
+import { D1SecRepository, type SecAnalysisJobUpdate } from "../workers/pipeline/src/sec/d1.ts";
 
 /** Each test mocks only the statement methods its own call path touches, so the doubles are
  *  deliberately narrower than the repository's database parameter. */
 type DatabaseMock = ConstructorParameters<typeof D1SecRepository>[0];
 const asDatabase = (mock: unknown) => mock as DatabaseMock;
-import type { SecFilingSummary } from "../lib/sec.ts";
-import type { SecAnalysisArtifact } from "../lib/sec-types.ts";
+import type { SecFilingSummary } from "../workers/pipeline/src/sec/sec.ts";
+import type { SecAnalysisArtifact } from "../workers/pipeline/src/sec/types.ts";
 
 test("reads and upserts SEC cache records through prepared D1 statements", async () => {
   const calls: Array<{ sql: string; values: unknown[]; action: string }> = [];
