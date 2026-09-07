@@ -3,6 +3,7 @@ import {
   COMPANY_ANALYSIS_MAX_BLOCKS_PER_HIGHLIGHT,
   COMPANY_ANALYSIS_MAX_HIGHLIGHTS,
   COMPANY_ANALYSIS_MIN_HIGHLIGHTS,
+  COMPANY_ANALYSIS_OVERVIEW_LABEL,
 } from "../../../../shared/analysis-contract/company-analysis.ts";
 import type { CompanyAnalysisBlock, CompanyAnalysisCoverageStatus, CompanyAnalysisOverview, PublicCompanyAnalysisResponse } from "../../../../shared/analysis-contract/company-analysis.ts";
 import type { ReportBlockImportance, ReportBlockTone } from "../../../../shared/analysis-contract/report-blocks.ts";
@@ -18,7 +19,7 @@ export const COMPANY_ANALYSIS_SCHEMA_VERSION = "company-analysis.v1";
  * run's input hash, so a company already analysed under the previous label would otherwise be
  * deduplicated against that publication and never see the new prompt's output at all.
  */
-export const COMPANY_ANALYSIS_PROMPT_VERSION = "company-analysis-skill.v4";
+export const COMPANY_ANALYSIS_PROMPT_VERSION = "company-analysis-skill.v5";
 
 export type CompanyAnalysisRunStatus =
   | "waiting_fundamentals"
@@ -167,7 +168,9 @@ export function normalizeCompanyAnalysisOverview(
   options: CompanyAnalysisOverviewOptions = {},
 ): CompanyAnalysisOverview {
   const item = record(value);
-  const label = bounded(item?.label, 80);
+  // Applied on the read path too, so a publication written under the old free-form label re-frames
+  // itself without waiting to be regenerated.
+  const label = COMPANY_ANALYSIS_OVERVIEW_LABEL;
   const headline = bounded(item?.headline, 180);
   const introduction = bounded(item?.introduction, 1_200);
   // A generation that runs long is trimmed rather than rejected: the judgments are ordered by
@@ -178,15 +181,17 @@ export function normalizeCompanyAnalysisOverview(
       const highlight = record(raw);
       const ordinal = String(index + 1).padStart(2, "0");
       const blocks = normalizeHighlightBlocks(highlight?.blocks, ordinal, options);
+      const watchFor = bounded(highlight?.watchFor, 240);
       return {
         ordinal,
         title: bounded(highlight?.title, 100),
         body: bounded(highlight?.body, 700),
         evidenceRefs: strings(highlight?.evidenceRefs, 16, 240),
+        ...(watchFor ? { watchFor } : {}),
         ...(blocks.length ? { blocks } : {}),
       };
     });
-  if (!label || !headline || !introduction
+  if (!headline || !introduction
     || highlights.length < COMPANY_ANALYSIS_MIN_HIGHLIGHTS
     || highlights.some((highlight) => !highlight.title || !highlight.body || !highlight.evidenceRefs.length)) {
     throw new CompanyAnalysisValidationError(`Company analysis overview must contain one headline, one introduction, and at least ${COMPANY_ANALYSIS_MIN_HIGHLIGHTS} evidence-backed highlights.`);

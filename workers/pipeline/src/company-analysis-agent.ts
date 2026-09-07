@@ -149,10 +149,11 @@ export async function runCompanyAnalysisAgent(input: {
         // way a block gets dropped, so the list is supplied rather than left to recall.
         chartMetricKeys: [...chartMetricKeys],
         outputSchema: {
-          label: "string",
-          headline: "string",
-          introduction: "string",
-          highlights: `${COMPANY_ANALYSIS_MIN_HIGHLIGHTS}-${COMPANY_ANALYSIS_MAX_HIGHLIGHTS} [{title,body,evidenceRefs,blocks?}], ordered by importance; the count is yours to choose`,
+          // No label: the section's name is fixed, so it is not something a run can restate.
+          headline: "string, a forward judgment and its condition",
+          introduction: "string, how the present position constrains the paths from here",
+          highlights: `${COMPANY_ANALYSIS_MIN_HIGHLIGHTS}-${COMPANY_ANALYSIS_MAX_HIGHLIGHTS} [{title,body,watchFor,evidenceRefs,blocks?}], ordered by importance; the count is yours to choose`,
+          watchFor: "string, the observation that would confirm or overturn this judgment next period",
           blocks: `optional, 0-${COMPANY_ANALYSIS_MAX_BLOCKS_PER_HIGHLIGHT} per highlight, rendered under its body`,
           blockTypes: blockVocabulary(),
         },
@@ -192,13 +193,27 @@ function editorialPrompt(): string {
   return [
     "You are the editorial phase of the same company-analysis Agent.",
     "The decision is locked. Do not add evidence, alter pillar states, or invent numbers.",
-    `Write natural Chinese investment-research prose: one judgment headline, one background paragraph, and ${COMPANY_ANALYSIS_MIN_HIGHLIGHTS}-${COMPANY_ANALYSIS_MAX_HIGHLIGHTS} highlights.`,
-    "Choose how many highlights this quarter earns: as many as the locked decision supports and no more. Never pad to a count, never split one judgment in two, never merge two to fit.",
+
+    // What this section is for. Everything below follows from it: the reasoning phases look
+    // backwards because that is where evidence lives, but the reader is here for what comes next.
+    "This section answers where this company and its industry are heading over the next several quarters to years. It is not a quarter recap and not earnings commentary.",
+    "The financials are evidence for that judgment, never its subject. Never open with the period's results, never structure the section around them, and never summarise them for their own sake.",
+    "Write natural Chinese investment-research prose.",
+    "The headline states a forward judgment and what it turns on — a direction and its condition — not what the quarter did.",
+    "The introduction says how the company's present position constrains the paths open to it from here.",
+    `Then write ${COMPANY_ANALYSIS_MIN_HIGHLIGHTS}-${COMPANY_ANALYSIS_MAX_HIGHLIGHTS} highlights. Each is one judgment about what changes from here: what the trajectory is, why the locked decision's evidence supports it, and what it would mean for the business.`,
+    "Choose how many the decision earns: as many as it supports and no more. Never pad to a count, never split one judgment in two, never merge two to fit.",
     "Order them by importance — a run that exceeds the maximum is truncated from the end.",
-    "Title each highlight yourself. A title names the judgment, not the topic: prefer 「毛利率扩张由结构而非价格驱动」 over 「毛利率」.",
+    "Title each highlight yourself. A title states the forward judgment, not the topic: prefer 「资本开支高峰将在两到三个季度内压制利润率」 over 「资本开支」 or 「利润率承压」.",
+    "Give each highlight a watchFor: the one observation that would confirm or overturn it. Take it from that pillar's falsifier or nextCheck, and write it as something a reader could actually check next period — not as a restatement of the judgment.",
+
+    // The two ways this section drifts back into a quarter recap, both observed in published copy.
+    "Never write about the sufficiency of your own evidence. A reader wants the judgment, or the honest absence of one, never a report on how much was observable.",
+    "An industry-level judgment is in scope when the locked decision supports it. A judgment that is true of the whole sector and says nothing about this company is not.",
+
     "Do not write a full report or source-label prose. Do not expose pillar names, scores, confidence badges, feature IDs, Memory IDs, or repeated revenue/gross-margin cards in public copy.",
     "Numbers may appear only when an approved Yahoo feature is indispensable to the explanation.",
-    "A highlight may add blocks under its body when prose alone reads worse: a list where the prose would enumerate, a callout for a caveat that interrupts the argument, a chart where the point is a trend across quarters. Most highlights need none — add one only when it replaces prose rather than repeating it.",
+    "A highlight may add blocks under its body when prose alone reads worse: a list where the prose would enumerate, a callout for a condition that interrupts the argument, a chart where the point is a trend the reader should extrapolate. Most highlights need none — add one only when it replaces prose rather than repeating it.",
     "A chart names series from the supplied chartMetricKeys and nothing else. Never write data points; the page draws them from verified fundamentals.",
     "Return one JSON object only.",
   ].join("\n");

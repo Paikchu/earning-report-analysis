@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { COMPANY_ANALYSIS_OVERVIEW_LABEL } from "../../../shared/analysis-contract/company-analysis.ts";
 import type { PublicCompanyAnalysisResponse } from "../../../shared/analysis-contract/company-analysis.ts";
 import type { PublicFundamentalsResponse } from "../../../shared/analysis-contract/fundamentals.ts";
 import { companyAnalysisNotice, shouldPollCompanyAnalysis } from "../../../lib/web/company-analysis-display-state.ts";
@@ -53,7 +54,7 @@ function BusinessOutlookContent({ ticker }: { ticker: string }) {
   if (status !== "ready" || !analysis?.overview) {
     return (
       <section className="stock-outlook stock-outlook--state" aria-labelledby="stock-outlook-heading">
-        <span className="stock-outlook__eyebrow" id="stock-outlook-heading">业务前瞻 · AI 综述</span>
+        <span className="stock-outlook__eyebrow" id="stock-outlook-heading">{COMPANY_ANALYSIS_OVERVIEW_LABEL}</span>
         {status === "loading" && <p className="stock-outlook__state" role="status">正在读取最新业务判断…</p>}
         {status === "empty" && (
           <div className="stock-outlook__state-row" role="status">
@@ -82,7 +83,7 @@ function BusinessOutlookContent({ ticker }: { ticker: string }) {
       <OutlookParagraph key={overview.introduction} className="stock-outlook__lede" text={overview.introduction} label="背景说明" />
       {companyAnalysisNotice(analysis.latestRun, true) && <p className="stock-outlook__updating" role="status">{companyAnalysisNotice(analysis.latestRun, true)}</p>}
 
-      <ol className="stock-outlook__clues" aria-label={`本次最重要的 ${overview.highlights.length} 项判断`}>
+      <ol className="stock-outlook__clues" aria-label={`未来走向的 ${overview.highlights.length} 项判断`}>
         {overview.highlights.map((highlight) => (
           // Title and body are direct children so a two-column row can align them through subgrid:
           // a judgment whose title runs to two lines would otherwise start its body a line below
@@ -104,6 +105,10 @@ function BusinessOutlookContent({ ticker }: { ticker: string }) {
                   <ReportBlockList blocks={highlight.blocks} context={{ metrics: [], fundamentals }} />
                 </div>
               ) : null}
+              {/* Last, as the closer: the argument, then what supports it, then what to check. */}
+              {highlight.watchFor && (
+                <p className="stock-outlook__clue-watch"><span>验证信号</span>{highlight.watchFor}</p>
+              )}
             </div>
           </li>
         ))}

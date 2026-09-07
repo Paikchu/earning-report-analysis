@@ -3,6 +3,16 @@ import type { ReportBlock } from "./report-blocks.ts";
 export type CompanyAnalysisCoverageStatus = "complete" | "partial";
 
 /**
+ * What this section is, fixed rather than written per run.
+ *
+ * The label used to be the editorial phase's to choose, and it drifted: a run would name its own
+ * output 「财报点评」 and the section became a quarter recap, because a heading that says so invites
+ * prose that reads so. The section's subject is a product decision — where this business and its
+ * industry are heading — so the name is not the model's to move.
+ */
+export const COMPANY_ANALYSIS_OVERVIEW_LABEL = "业务前瞻 · AI 综述";
+
+/**
  * How many judgments an overview may carry. The count used to be fixed at four, which made every
  * filing look equally eventful: a quarter with two things worth saying padded to four, and one with
  * six had two cut. The editorial phase now decides, within these bounds — below two there is no
@@ -33,6 +43,13 @@ export type CompanyAnalysisHighlight = {
   title: string;
   body: string;
   evidenceRefs: string[];
+  /**
+   * The observation that would confirm or overturn this judgment. A forward view without one is an
+   * opinion; with one it is a position that can be checked next quarter. The reasoning phase
+   * already produces a falsifier and a next check per pillar, so this carries that thinking into
+   * the public copy rather than asking for it twice.
+   */
+  watchFor?: string;
   /**
    * The forms this judgment chose beyond its prose, rendered under the body. Optional and additive:
    * an overview published before this existed carries none and renders exactly as it did, so the

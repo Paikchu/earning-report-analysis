@@ -9,6 +9,7 @@ import {
 } from "../workers/pipeline/src/company-analysis/contracts.ts";
 import {
   COMPANY_ANALYSIS_BLOCK_TYPES,
+  COMPANY_ANALYSIS_OVERVIEW_LABEL,
   COMPANY_ANALYSIS_MAX_BLOCKS_PER_HIGHLIGHT,
   COMPANY_ANALYSIS_MAX_HIGHLIGHTS,
   COMPANY_ANALYSIS_MIN_HIGHLIGHTS,
@@ -331,6 +332,16 @@ test("checkpoints one Agent's turns and retries invalid decisions inside the mod
   // The forms it may choose, and the only metrics a chart may name — both supplied, not recalled.
   assert.deepEqual(Object.keys(editorialSchema.blockTypes), [...COMPANY_ANALYSIS_BLOCK_TYPES]);
   assert.deepEqual(payloads.at(-1)!.chartMetricKeys, ["total_revenue"]);
+  // The section is briefed as a forward view. Both drifts seen in published copy are named: a
+  // quarter recap, and prose reporting on how much evidence the run managed to observe.
+  const editorial = systemPrompts.at(-1)!;
+  assert.match(editorial, /where this company and its industry are heading/);
+  assert.match(editorial, /not a quarter recap and not earnings commentary/);
+  assert.match(editorial, /evidence for that judgment, never its subject/);
+  assert.match(editorial, /Never write about the sufficiency of your own evidence/);
+  assert.match(editorial, /watchFor/);
+  // The name is not the model's to move, so it is not in the shape it is asked for.
+  assert.equal("label" in editorialSchema, false);
 });
 
 function observation(
@@ -427,4 +438,31 @@ test("a stored publication reads its blocks back without the feature pack that v
   const normalized = normalizeCompanyAnalysisPublication(stored);
   const blocks = toPublicCompanyAnalysis(normalized).overview!.highlights[0]!.blocks;
   assert.deepEqual(blocks?.map((block) => block.type), ["callout"]);
+});
+
+/**
+ * The section is a forward view on the business and its industry, not a quarter recap. Three things
+ * hold that: a name the run cannot restate, a judgment that has to say what would overturn it, and
+ * the briefing asserted in the Agent test below.
+ */
+test("the section names itself, including for an overview published under the old free-form label", () => {
+  const stored = { ...publication(), overview: { ...overview(), label: "财报点评" } };
+  const normalized = normalizeCompanyAnalysisPublication(stored);
+  assert.equal(normalized.overview.label, COMPANY_ANALYSIS_OVERVIEW_LABEL);
+  // Applied on the read path, so existing publications re-frame without being regenerated.
+  assert.equal(toPublicCompanyAnalysis(normalized).overview!.label, COMPANY_ANALYSIS_OVERVIEW_LABEL);
+});
+
+test("a judgment carries the observation that would overturn it, bounded and optional", () => {
+  const base = overview(["判断一", "判断二"]);
+  const withWatch = {
+    ...base,
+    highlights: base.highlights.map((highlight, index) => index === 0
+      ? { ...highlight, watchFor: "下季资本开支是否回落至折旧水平以下。" }
+      : { ...highlight, watchFor: "  " }),
+  };
+  const normalized = normalizeCompanyAnalysisOverview(withWatch);
+  assert.equal(normalized.highlights[0]!.watchFor, "下季资本开支是否回落至折旧水平以下。");
+  // Absent rather than empty, like blocks: an overview written before this reads identically.
+  assert.equal("watchFor" in normalized.highlights[1]!, false);
 });

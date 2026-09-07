@@ -301,6 +301,7 @@ export function overviewFixture() {
       title: `Synthetic highlight ${ordinal}`,
       body: "Synthetic highlight body.",
       evidenceRefs: [`evidence-${index + 1}`],
+      watchFor: "Synthetic observation that would overturn this judgment.",
       // One judgment composes extra forms, so every response these tests validate exercises the
       // block union on the wire rather than only the prose path.
       ...(ordinal === "01" ? { blocks: [
