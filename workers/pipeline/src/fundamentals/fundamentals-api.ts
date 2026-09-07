@@ -1,5 +1,3 @@
-import type { PublicFundamentalSeries, PublicFundamentalsResponse } from "../../../../shared/analysis-contract/fundamentals.ts";
-export type { PublicFundamentalPeriod, PublicFundamentalPoint, PublicFundamentalSeries, PublicFundamentalsResponse } from "../../../../shared/analysis-contract/fundamentals.ts";
 import {
   FUNDAMENTAL_METRIC_CATALOG,
   FUNDAMENTAL_METRIC_CATALOG_VERSION,
@@ -12,13 +10,37 @@ import type {
   FundamentalLastGoodSnapshot,
   FundamentalsRepository,
 } from "./fundamentals-d1.ts";
+import { AnalysisRequestError } from "../read-api/contract-support/errors.ts";
+import {
+  FUNDAMENTALS_API_SCHEMA_VERSION,
+  FUNDAMENTALS_DEFAULT_PERIOD_COUNT,
+  FUNDAMENTALS_MAX_PERIOD_COUNT,
+  FUNDAMENTALS_MIN_PERIOD_COUNT,
+  FUNDAMENTALS_STALE_AFTER_MS,
+  type PublicFundamentalSeries,
+  type PublicFundamentalsResponse,
+} from "../../../../shared/analysis-contract/fundamentals.ts";
+import { ANALYSIS_API_SCHEMA_VERSION } from "../read-api/contract-support/versions.ts";
 import { normalizeFundamentalTicker } from "./yahoo-fundamentals-schema.ts";
 
-export const FUNDAMENTALS_API_SCHEMA_VERSION = "fundamentals-api.v1";
-export const FUNDAMENTALS_DEFAULT_PERIOD_COUNT = 5;
-export const FUNDAMENTALS_MIN_PERIOD_COUNT = 2;
-export const FUNDAMENTALS_MAX_PERIOD_COUNT = 12;
-export const FUNDAMENTALS_STALE_AFTER_MS = 24 * 60 * 60 * 1_000;
+/**
+ * The fundamentals read query. It touches a repository, so it belongs to the analysis backend; the
+ * wire types it used to declare now live in `lib/analysis-contract/fundamentals.ts` and are
+ * re-exported here so existing importers keep resolving.
+ */
+export {
+  FUNDAMENTALS_API_SCHEMA_VERSION,
+  FUNDAMENTALS_DEFAULT_PERIOD_COUNT,
+  FUNDAMENTALS_MAX_PERIOD_COUNT,
+  FUNDAMENTALS_MIN_PERIOD_COUNT,
+  FUNDAMENTALS_STALE_AFTER_MS,
+};
+export type {
+  PublicFundamentalPeriod,
+  PublicFundamentalPoint,
+  PublicFundamentalSeries,
+  PublicFundamentalsResponse,
+} from "../../../../shared/analysis-contract/fundamentals.ts";
 
 export type FundamentalApiQuery = {
   ticker: string;
@@ -26,49 +48,24 @@ export type FundamentalApiQuery = {
   periodCount: number;
 };
 
-
-
-
-
-
-
-
-
-export type PublicFundamentalsHandlerDependencies = {
-  getRepository(): Promise<FundamentalsRepository>;
-  isRefreshEligible(ticker: string): boolean;
-  scheduleRefresh(repository: FundamentalsRepository, ticker: string): Promise<boolean>;
-  clock?: () => Date;
-};
-
-export class FundamentalApiQueryError extends Error {
-  readonly code: "INVALID_TICKER" | "INVALID_METRICS" | "INVALID_PERIOD_COUNT";
-
-  constructor(code: FundamentalApiQueryError["code"], message: string) {
-    super(message);
-    this.name = "FundamentalApiQueryError";
-    this.code = code;
-  }
-}
-
 export function parseFundamentalApiQuery(
   rawTicker: string,
   searchParams: URLSearchParams,
 ): FundamentalApiQuery {
   const ticker = normalizeFundamentalTicker(rawTicker);
   if (!ticker) {
-    throw new FundamentalApiQueryError("INVALID_TICKER", "Ticker is invalid.");
+    throw new AnalysisRequestError("INVALID_TICKER", "Ticker is invalid.");
   }
 
   const rawMetricQueries = searchParams.getAll("metrics");
   if (rawMetricQueries.length > 1) {
-    throw new FundamentalApiQueryError("INVALID_METRICS", "Metrics must be supplied once.");
+    throw new AnalysisRequestError("INVALID_METRICS", "Metrics must be supplied once.");
   }
   const metricKeys = rawMetricQueries.length === 0 ? null : parseMetricKeys(rawMetricQueries[0]!);
 
   const rawPeriodCounts = searchParams.getAll("periodCount");
   if (rawPeriodCounts.length > 1) {
-    throw new FundamentalApiQueryError("INVALID_PERIOD_COUNT", "Period count must be supplied once.");
+    throw new AnalysisRequestError("INVALID_PERIOD_COUNT", "Period count must be supplied once.");
   }
   const periodCount = rawPeriodCounts.length === 0
     ? FUNDAMENTALS_DEFAULT_PERIOD_COUNT
@@ -99,6 +96,7 @@ export async function getPublicFundamentals(
   const stale = catalogOutdated || fetchedAt === null || now.getTime() - fetchedAt.getTime() >= FUNDAMENTALS_STALE_AFTER_MS;
 
   return {
+    apiSchemaVersion: ANALYSIS_API_SCHEMA_VERSION,
     schemaVersion: FUNDAMENTALS_API_SCHEMA_VERSION,
     catalogVersion: FUNDAMENTAL_METRIC_CATALOG_VERSION,
     source: "yahoo_finance",
@@ -117,48 +115,13 @@ export async function getPublicFundamentals(
       currency: currencyForPeriod(selectedObservations, periodEnd),
     })),
     series: metricKeys.map((metricKey) => buildPublicSeries(metricKey, selectedPeriodEnds, selectedObservations)),
-    refresh: { recommended: stale, scheduled: false },
+    /**
+     * `recommended` still reports staleness, but nothing enqueues work from a read any more: a
+     * refresh is the backend's scheduled sweep or an authenticated admin request, never a side
+     * effect of somebody loading a page. `scheduled` is kept, always false, for wire compatibility.
+     */
+    refresh: { recommended: stale, scheduled: false, mode: "backend_scheduled" },
   };
-}
-
-export async function handlePublicFundamentalsRequest(
-  request: Request,
-  rawTicker: string,
-  dependencies: PublicFundamentalsHandlerDependencies,
-): Promise<Response> {
-  try {
-    const query = parseFundamentalApiQuery(rawTicker, new URL(request.url).searchParams);
-    const repository = await dependencies.getRepository();
-    const payload = await getPublicFundamentals(repository, query, dependencies.clock?.() ?? new Date());
-    const refreshEligible = dependencies.isRefreshEligible(query.ticker);
-    if (payload.status === "pending" && !refreshEligible) {
-      return jsonResponse(
-        { error: "Fundamentals are unavailable for this ticker.", code: "FUNDAMENTALS_NOT_AVAILABLE" },
-        404,
-        "no-store",
-      );
-    }
-
-    const scheduled = payload.refresh.recommended && refreshEligible
-      ? await dependencies.scheduleRefresh(repository, query.ticker)
-      : false;
-    return jsonResponse(
-      { ...payload, refresh: { ...payload.refresh, scheduled } },
-      200,
-      payload.status === "pending"
-        ? "no-store"
-        : "public, max-age=30, stale-while-revalidate=300",
-    );
-  } catch (error) {
-    if (error instanceof FundamentalApiQueryError) {
-      return jsonResponse({ error: error.message, code: error.code }, 400, "no-store");
-    }
-    return jsonResponse(
-      { error: "Fundamentals query failed.", code: "FUNDAMENTALS_QUERY_FAILED" },
-      500,
-      "no-store",
-    );
-  }
 }
 
 async function buildFundamentalDataVersion(snapshot: FundamentalLastGoodSnapshot): Promise<string> {
@@ -225,6 +188,7 @@ function buildPublicSeries(
 
 function pendingResponse(query: FundamentalApiQuery): PublicFundamentalsResponse {
   return {
+    apiSchemaVersion: ANALYSIS_API_SCHEMA_VERSION,
     schemaVersion: FUNDAMENTALS_API_SCHEMA_VERSION,
     catalogVersion: FUNDAMENTAL_METRIC_CATALOG_VERSION,
     source: "yahoo_finance",
@@ -239,7 +203,7 @@ function pendingResponse(query: FundamentalApiQuery): PublicFundamentalsResponse
     requestedPeriodCount: query.periodCount,
     periods: [],
     series: [],
-    refresh: { recommended: true, scheduled: false },
+    refresh: { recommended: true, scheduled: false, mode: "backend_scheduled" },
   };
 }
 
@@ -252,18 +216,18 @@ function availableMetricKeys(observations: FundamentalCurrentObservation[]): Fun
 function parseMetricKeys(rawValue: string): FundamentalMetricKey[] {
   const values = rawValue.split(",").map((value) => value.trim());
   if (values.length === 0 || values.some((value) => !value || !isFundamentalMetricKey(value))) {
-    throw new FundamentalApiQueryError("INVALID_METRICS", "Metrics contain an unknown metric key.");
+    throw new AnalysisRequestError("INVALID_METRICS", "Metrics contain an unknown metric key.");
   }
   return [...new Set(values as FundamentalMetricKey[])];
 }
 
 function parsePeriodCount(rawValue: string): number {
   if (!/^\d{1,2}$/.test(rawValue)) {
-    throw new FundamentalApiQueryError("INVALID_PERIOD_COUNT", "Period count is invalid.");
+    throw new AnalysisRequestError("INVALID_PERIOD_COUNT", "Period count is invalid.");
   }
   const value = Number(rawValue);
   if (value < FUNDAMENTALS_MIN_PERIOD_COUNT || value > FUNDAMENTALS_MAX_PERIOD_COUNT) {
-    throw new FundamentalApiQueryError(
+    throw new AnalysisRequestError(
       "INVALID_PERIOD_COUNT",
       `Period count must be between ${FUNDAMENTALS_MIN_PERIOD_COUNT} and ${FUNDAMENTALS_MAX_PERIOD_COUNT}.`,
     );
@@ -278,21 +242,11 @@ function currencyForPeriod(observations: FundamentalCurrentObservation[], period
 function defaultUnit(unitFamily: FundamentalUnitFamily): string {
   if (unitFamily === "percent") return "%";
   if (unitFamily === "shares") return "shares";
+  if (unitFamily === "multiple") return "x";
   return "";
 }
 
 function parseTimestamp(value: string): Date | null {
   const parsed = new Date(value);
   return Number.isFinite(parsed.getTime()) ? parsed : null;
-}
-
-function jsonResponse(value: unknown, status: number, cacheControl: string): Response {
-  return Response.json(value, {
-    status,
-    headers: {
-      "cache-control": cacheControl,
-      "access-control-allow-origin": "*",
-      vary: "Origin",
-    },
-  });
 }

@@ -1,8 +1,51 @@
 import { readFile } from "node:fs/promises";
+
 import { WEB_WORKER_CONFIG_PATH } from "../config.ts";
+
+/**
+ * Refuses to deploy a Web Worker config that could reach analysis storage directly, or that has
+ * lost the Service Binding every analysis read now depends on.
+ */
 const configPath = process.env.SEC_WEB_WRANGLER_CONFIG ?? WEB_WORKER_CONFIG_PATH;
-const config = JSON.parse(await readFile(configPath, "utf8"));
-if (config.d1_databases?.length) throw new Error("Web must not bind the analysis database");
-if (config.services?.length !== 1 || config.services[0].binding !== "ANALYSIS_SERVICE" || !config.services[0].service) throw new Error("Web requires one ANALYSIS_SERVICE binding");
-if (!config.compatibility_flags?.includes("nodejs_compat")) throw new Error("Missing nodejs_compat");
-console.log(`Validated ${config.name}`);
+
+const config = JSON.parse(await readFile(configPath, "utf8")) as {
+  name?: string;
+  compatibility_date?: string;
+  compatibility_flags?: string[];
+  d1_databases?: Array<{ binding: string; database_name?: string }>;
+  r2_buckets?: Array<{ binding: string; bucket_name?: string }>;
+  services?: Array<{ binding: string; service?: string }>;
+};
+
+const problems: string[] = [];
+
+if (config.d1_databases?.length) {
+  problems.push(
+    `still binds D1 (${config.d1_databases.map((binding) => binding.binding).join(", ")}) — the Web Worker reads analysis data through the PIPELINE service binding, not from a database`,
+  );
+}
+
+if (config.r2_buckets?.length) {
+  problems.push(`still binds R2 (${config.r2_buckets.map((binding) => binding.binding).join(", ")}) — analysis artefacts belong to the Pipeline Worker`);
+}
+
+if (!config.services?.some((binding) => binding.binding === "PIPELINE")) {
+  problems.push("has no PIPELINE service binding — every analysis read and every admin control request goes through it");
+}
+
+if (!config.compatibility_flags?.includes("nodejs_compat")) {
+  problems.push("is missing the nodejs_compat flag");
+}
+
+
+if (problems.length) {
+  throw new Error([`${configPath} is not deployable:`, ...problems.map((problem) => `  - ${problem}`)].join("\n"));
+}
+
+console.log(JSON.stringify({
+  configPath,
+  worker: config.name,
+  compatibilityDate: config.compatibility_date,
+  d1Bindings: 0,
+  pipelineServiceBinding: true,
+}));

@@ -1,10 +1,11 @@
-import type { CompanyAnalysisCoverageStatus, PublicCompanyAnalysisResponse } from "../../../../shared/analysis-contract/company-analysis.ts";
-export type { CompanyAnalysisCoverageStatus, PublicCompanyAnalysisResponse } from "../../../../shared/analysis-contract/company-analysis.ts";
+import type { CompanyAnalysisCoverageStatus, CompanyAnalysisHighlight, CompanyAnalysisOverview, PublicCompanyAnalysisResponse } from "../../../../shared/analysis-contract/company-analysis.ts";
+export type { CompanyAnalysisCoverageStatus, CompanyAnalysisHighlight, CompanyAnalysisOverview, PublicCompanyAnalysisResponse } from "../../../../shared/analysis-contract/company-analysis.ts";
 import { normalizeTrackedTicker } from "../sec/config.ts";
+import type { AnalysisRunSummary } from "../../../../shared/analysis-contract/filings.ts";
+import { ANALYSIS_API_SCHEMA_VERSION } from "../read-api/contract-support/versions.ts";
 
 export const COMPANY_ANALYSIS_SCHEMA_VERSION = "company-analysis.v1";
-export const COMPANY_ANALYSIS_PROMPT_VERSION = "company-analysis-skill.v1";
-
+export const COMPANY_ANALYSIS_PROMPT_VERSION = "company-analysis-skill.v2";
 
 export type CompanyAnalysisRunStatus =
   | "waiting_fundamentals"
@@ -14,10 +15,6 @@ export type CompanyAnalysisRunStatus =
   | "ready"
   | "insufficient_data"
   | "failed";
-
-
-
-
 
 export type CompanyAnalysisPublication = {
   schemaVersion: typeof COMPANY_ANALYSIS_SCHEMA_VERSION;
@@ -38,7 +35,9 @@ export type CompanyAnalysisPublication = {
   generatedAt: string;
 };
 
-
+/** Where a run summary comes from when the backend could not read run history at all. */
+export const UNKNOWN_ANALYSIS_RUN: AnalysisRunSummary = { state: "unknown", updatedAt: null, errorCode: null };
+export const NO_ANALYSIS_RUN: AnalysisRunSummary = { state: "none", updatedAt: null, errorCode: null };
 
 export class CompanyAnalysisValidationError extends Error {
   constructor(message: string) {
@@ -89,8 +88,12 @@ export function normalizeCompanyAnalysisPublication(value: unknown): CompanyAnal
   };
 }
 
-export function toPublicCompanyAnalysis(publication: CompanyAnalysisPublication): PublicCompanyAnalysisResponse {
+export function toPublicCompanyAnalysis(
+  publication: CompanyAnalysisPublication,
+  latestRun: AnalysisRunSummary = NO_ANALYSIS_RUN,
+): PublicCompanyAnalysisResponse {
   return {
+    apiSchemaVersion: ANALYSIS_API_SCHEMA_VERSION,
     schemaVersion: COMPANY_ANALYSIS_SCHEMA_VERSION,
     ticker: publication.ticker,
     status: "ready",
@@ -98,21 +101,26 @@ export function toPublicCompanyAnalysis(publication: CompanyAnalysisPublication)
     period: { periodId: publication.periodId, periodEnd: publication.periodEnd, label: publication.reportLabel },
     generatedAt: publication.generatedAt,
     coverageStatus: publication.coverageStatus,
-    overview: {
-      label: publication.overview.label,
-      headline: publication.overview.headline,
-      introduction: publication.overview.introduction,
-      highlights: publication.overview.highlights.map((highlight) => ({
-        ordinal: highlight.ordinal,
-        title: highlight.title,
-        body: highlight.body,
-      })),
+    // Evidence references travel with the highlight they support. They used to be stripped here,
+    // which left a consumer with prose and no way to reach the underlying observation.
+    overview: publication.overview,
+    latestRun,
+    versions: {
+      apiSchema: ANALYSIS_API_SCHEMA_VERSION,
+      payloadSchema: COMPANY_ANALYSIS_SCHEMA_VERSION,
+      contentRevision: publication.inputHash,
+      model: publication.modelVersion,
+      prompt: publication.promptVersion,
     },
   };
 }
 
-export function unavailableCompanyAnalysis(ticker: string): PublicCompanyAnalysisResponse {
+export function unavailableCompanyAnalysis(
+  ticker: string,
+  latestRun: AnalysisRunSummary = NO_ANALYSIS_RUN,
+): PublicCompanyAnalysisResponse {
   return {
+    apiSchemaVersion: ANALYSIS_API_SCHEMA_VERSION,
     schemaVersion: COMPANY_ANALYSIS_SCHEMA_VERSION,
     ticker,
     status: "unavailable",
@@ -121,6 +129,14 @@ export function unavailableCompanyAnalysis(ticker: string): PublicCompanyAnalysi
     generatedAt: null,
     coverageStatus: null,
     overview: null,
+    latestRun,
+    versions: {
+      apiSchema: ANALYSIS_API_SCHEMA_VERSION,
+      payloadSchema: COMPANY_ANALYSIS_SCHEMA_VERSION,
+      contentRevision: null,
+      model: null,
+      prompt: null,
+    },
   };
 }
 
@@ -181,23 +197,3 @@ function timestamp(value: unknown): string {
 function integer(value: unknown, min: number): number | null {
   return Number.isInteger(value) && Number(value) >= min ? Number(value) : null;
 }
-
-export type CompanyAnalysisHighlight = {
-  ordinal: "01" | "02" | "03" | "04";
-  title: string;
-  body: string;
-  evidenceRefs: string[];
-};
-
-export type CompanyAnalysisOverview = {
-  label: string;
-  headline: string;
-  introduction: string;
-  highlights: [
-    CompanyAnalysisHighlight,
-    CompanyAnalysisHighlight,
-    CompanyAnalysisHighlight,
-    CompanyAnalysisHighlight,
-  ];
-};
-

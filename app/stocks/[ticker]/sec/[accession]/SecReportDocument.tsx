@@ -1,8 +1,8 @@
-import type { PublishedSecReport } from "@/shared/analysis-contract/filings";
-import type { SecFilingWithSummary, SecNodeResult } from "@/shared/analysis-contract/filings";
+import type { PublishedSecReport } from "../../../../../shared/analysis-contract/report.ts";
+import type { SecFilingWithSummary, SecNodeResult } from "../../../../../shared/analysis-contract/report.ts";
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { SecReportNavigator, type ReportSectionLink } from "./SecReportNavigator";
+import { SecReportNavigator, type ReportSectionLink } from "./SecReportNavigator.tsx";
 
 type ReportSectionDefinition = ReportSectionLink & {
   className?: string;

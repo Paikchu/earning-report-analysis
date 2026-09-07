@@ -18,7 +18,7 @@ export type SecRepository = {
   getCache<T>(key: string): Promise<SecCacheRecord<T> | null>;
   setCache<T>(key: string, payload: T, fetchedAt: string): Promise<void>;
   getSummary(ticker: string, accessionNumber: string): Promise<SecFilingSummary | null>;
-  setSummary(summary: SecFilingSummary): Promise<void>;
+  setSummary(filing: Pick<SecFiling, "ticker" | "accessionNumber" | "form">, summary: SecFilingSummary): Promise<void>;
   getPublishedReport?(ticker: string, periodId: string): Promise<PublishedSecReport | null>;
   getAnalysisContext?(filing: SecFiling): Promise<SecAnalysisContext>;
   saveAnalysis?(artifact: SecAnalysisArtifact): Promise<void>;

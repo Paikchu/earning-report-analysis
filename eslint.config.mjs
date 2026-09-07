@@ -7,8 +7,6 @@ const eslintConfig = defineConfig([
   ...nextTs,
   // Override default ignores of eslint-config-next.
   globalIgnores([
-    // Separate agent worktrees are not part of this checkout.
-    ".claude/worktrees/**",
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",

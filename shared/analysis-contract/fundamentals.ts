@@ -1,24 +1,16 @@
-export type FundamentalMetricCategory =
-  | "income_statement"
-  | "cash_flow"
-  | "balance_sheet"
-  | "per_share"
-  | "ratio";
+import { ANALYSIS_API_SCHEMA_VERSION } from "./common.ts";
 
-export type FundamentalUnitFamily = "currency" | "percent" | "per_share" | "shares";
-
-export type FundamentalChartMark = "bar" | "line";
-
-export type FundamentalTransform =
-  | "value"
-  | "qoq_growth"
-  | "yoy_growth"
-  | "qoq_change"
-  | "yoy_change";
-
-export type FundamentalDisplaySign = "as_reported" | "outflow_magnitude";
-
-export type FundamentalMetricKey = "total_revenue" | "gross_profit" | "operating_income" | "net_income" | "diluted_eps" | "operating_cash_flow" | "capital_expenditure" | "free_cash_flow" | "stock_based_compensation" | "depreciation_and_amortization" | "research_and_development" | "cash_and_cash_equivalents" | "long_term_debt" | "total_assets" | "total_liabilities" | "stockholders_equity" | "inventory" | "accounts_receivable" | "ordinary_shares" | "gross_margin" | "operating_margin";
+/**
+ * Wire types for the fundamentals resource. Previously these sat in `lib/fundamentals-api.ts`
+ * next to the D1 handler; they were moved here unchanged so a consumer — including the Web
+ * Worker's client components — can type a response without importing anything that can reach a
+ * database binding. `lib/fundamentals-api.ts` re-exports them, so existing imports still resolve.
+ */
+export const FUNDAMENTALS_API_SCHEMA_VERSION = "fundamentals-api.v1";
+export const FUNDAMENTALS_DEFAULT_PERIOD_COUNT = 5;
+export const FUNDAMENTALS_MIN_PERIOD_COUNT = 2;
+export const FUNDAMENTALS_MAX_PERIOD_COUNT = 12;
+export const FUNDAMENTALS_STALE_AFTER_MS = 24 * 60 * 60 * 1_000;
 
 export type PublicFundamentalPeriod = {
   periodType: "3M";
@@ -49,8 +41,10 @@ export type PublicFundamentalSeries = {
 };
 
 export type PublicFundamentalsResponse = {
-  schemaVersion: "fundamentals-api.v1";
-  catalogVersion: "fundamental-metrics.v1";
+  apiSchemaVersion: typeof ANALYSIS_API_SCHEMA_VERSION;
+  schemaVersion: typeof FUNDAMENTALS_API_SCHEMA_VERSION;
+  catalogVersion: "fundamental-metrics.v2";
+  /** Real provenance. These numbers are Yahoo Finance's, not SEC filings'. */
   source: "yahoo_finance";
   ticker: string;
   status: "ready" | "pending";
@@ -65,6 +59,34 @@ export type PublicFundamentalsResponse = {
   series: PublicFundamentalSeries[];
   refresh: {
     recommended: boolean;
-    scheduled: boolean;
+    /**
+     * Always false. Reads used to enqueue a refresh from here; they no longer do (§4.1). The
+     * field is kept so existing readers do not break on a missing key.
+     */
+    scheduled: false;
+    /** Where refresh actually happens now: the backend's scheduled sweep and admin endpoint. */
+    mode: "backend_scheduled";
   };
 };
+
+export type FundamentalMetricCategory =
+  | "income_statement"
+  | "cash_flow"
+  | "balance_sheet"
+  | "per_share"
+  | "valuation"
+  | "ratio";
+
+export type FundamentalUnitFamily = "currency" | "percent" | "per_share" | "shares" | "multiple";
+
+export type FundamentalChartMark = "bar" | "line";
+
+export type FundamentalTransform =
+  | "value"
+  | "qoq_growth"
+  | "yoy_growth"
+  | "qoq_change"
+  | "yoy_change";
+
+export type FundamentalDisplaySign = "as_reported" | "outflow_magnitude";
+export type FundamentalMetricKey = "total_revenue" | "gross_profit" | "operating_income" | "net_income" | "diluted_eps" | "operating_cash_flow" | "capital_expenditure" | "free_cash_flow" | "stock_based_compensation" | "depreciation_and_amortization" | "research_and_development" | "cash_and_cash_equivalents" | "long_term_debt" | "total_assets" | "total_liabilities" | "stockholders_equity" | "inventory" | "accounts_receivable" | "ordinary_shares" | "market_cap" | "enterprise_value" | "pe_ratio" | "forward_pe_ratio" | "peg_ratio" | "price_to_sales" | "price_to_book" | "ev_to_revenue" | "ev_to_ebitda" | "gross_margin" | "operating_margin";

@@ -1,159 +1,38 @@
-export type SecComparisonType = "qoq" | "yoy" | "guidance_revision" | "disclosure_change";
+import type { SecFilingWithSummary } from "./report.ts";
+import { ANALYSIS_API_SCHEMA_VERSION } from "./common.ts";
 
-export type AnalysisFact = {
-  factId?: string;
-  metricKey: string;
-  value: string;
-  unit: string;
-  currency?: string;
-  periodScope?: string;
-  basis: "gaap" | "non_gaap" | "management_kpi" | "derived" | "unknown";
-  evidenceIds: string[];
-  confidence: "high" | "medium" | "low";
-  sourceLabel: "fact_source_reported" | "management_adjusted" | "derived_calculation" | "unknown";
-  definitionHash?: string;
-};
+/**
+ * Wire types for the filing resources. They live here rather than beside the D1 query code so the
+ * Web Worker — and any other consumer — can depend on the shape without dragging a repository, a
+ * database binding, or the analysis executor along with it.
+ */
 
-export type AnalysisClaim = {
-  claimId?: string;
-  topicKey: string;
-  claimType: "driver" | "guidance" | "risk" | "one_off" | "accounting" | "commitment" | "tone";
-  statement: string;
-  direction: "positive" | "negative" | "mixed" | "neutral" | "unknown";
-  horizon: "current" | "next_period" | "longer_term" | "unknown";
-  materialityScore: number;
-  confidence: "high" | "medium" | "low";
-  evidenceIds: string[];
-  targetPeriodId?: string;
-};
-
-export type ComparisonResult = {
-  comparisonType: SecComparisonType;
-  currentPeriodId: string;
-  priorPeriodId: string;
-  comparability: "full" | "partial" | "not_comparable";
-  metricDeltas: Array<{
-    metricKey: string;
-    currentValue: string;
-    priorValue: string;
-    absoluteDelta?: string;
-    percentageDelta?: string;
-    /** Set for ratio-unit series only, as the fraction the ratio moved. See `pointDelta`. */
-    percentagePointDelta?: string;
-    reason?: string;
-  }>;
-  narrativeDeltas: Array<{
-    topicKey: string;
-    changeType: "introduced" | "reaffirmed" | "strengthened" | "weakened" | "withdrawn" | "resolved" | "not_mentioned";
-    currentStatement?: string;
-    priorStatement?: string;
-    evidenceIds: string[];
-    materialityScore: number;
-  }>;
-};
-
-export type PublishedSecReport = {
-  ticker: string;
-  periodId: string;
-  reportVersion: string;
-  headline: string;
-  keyMetrics: Array<{
-    metricKey: string;
-    currentValue: string;
-    qoq?: string;
-    yoy?: string;
-    status: "verified" | "derived" | "not_comparable" | "not_disclosed";
-    evidenceIds: string[];
-  }>;
-  changes: {
-    qoq: ComparisonResult["narrativeDeltas"];
-    yoy: ComparisonResult["narrativeDeltas"];
-    guidance: AnalysisClaim[];
-    risks: AnalysisClaim[];
-  };
-  dataQuality: {
-    coverage: number;
-    verificationStatus: "verified" | "partial" | "failed";
-    warnings: string[];
-    analysisStatus?: "complete" | "partial";
-    unresolvedQuestions?: string[];
-    failedNodeIds?: string[];
-    stopReason?: "complete" | "max_rounds" | "no_progress" | "analysis_incomplete" | null;
-    managerCoverageScore?: number;
-  };
-};
-
-export type SecSummaryImportance = "high" | "medium" | "low";
-
-export type SecEventCategory = "earnings_update" | "guidance" | "m&a" | "executive" | "legal" | "other";
-
-export type SecSummaryBullet = {
-  label: string;
-  detail: string;
-  importance: SecSummaryImportance;
-};
-
-export type PublicFilingEvidence = {
-  start: number;
-  end: number;
-  score: number;
-  reasons: string[];
-  excerpt: string;
-};
-
-export type SecNodeResult = {
-  id: string;
-  title: string;
-  status: "complete" | "empty" | "error";
-  findings: SecSummaryBullet[];
-  narrative: string;
-  facts?: AnalysisFact[];
-  evidence: PublicFilingEvidence[];
-  evidenceIds?: string[];
-  error?: string;
-};
-
-export type SecFiling = {
-  ticker: string;
-  cik: string;
-  cikNumber: number;
-  companyName: string;
-  form: string;
-  filingDate: string;
-  reportDate: string;
-  accessionNumber: string;
-  primaryDocument: string;
-  description: string;
-  items: string;
-  documentUrl: string;
-  indexUrl: string;
-};
-
-export type SecFilingSummary = {
-  ticker: string;
-  form: string;
-  filingDate: string;
-  accessionNumber: string;
-  headline: string;
-  bullets: SecSummaryBullet[];
-  analystView: string;
-  /** Event filings only: what kind of 8-K/6-K this is. */
-  eventCategory?: SecEventCategory;
-  report?: string;
-  version?: number;
-  nodes?: SecNodeResult[];
-  repairRounds?: number;
-  source: "deepseek" | "error";
-  generatedAt: string;
-  error?: string;
-};
-
-export type SecFilingWithSummary = SecFiling & {
-  summary: SecFilingSummary | null;
-  analysis?: PublishedSecReport | null;
-};
-
+/**
+ * Unchanged from the pre-refactor contract, and deliberately so: existing readers branch on these
+ * four values. It describes the **published report**, not the latest run — `analysisRun` below is
+ * where a queued/failed execution shows up.
+ */
 export type PublicAnalysisStatus = "complete" | "partial" | "processing" | "not_collected";
+
+/**
+ * The latest analysis execution known for a resource, kept separate from the published result so
+ * the six situations in §4.4 of the refactor brief stay distinguishable:
+ *
+ * - `none` — the backend looked and there is genuinely no execution history.
+ * - `queued` / `running` — an execution is in flight.
+ * - `failed` — an execution ran and did not finish. Never collapsed into `none`.
+ * - `succeeded` — the newest execution finished and published.
+ * - `unknown` — run history could not be read. Absence of knowledge, not knowledge of absence.
+ */
+export type AnalysisRunState = "none" | "queued" | "running" | "failed" | "succeeded" | "unknown";
+
+export type AnalysisRunSummary = {
+  state: AnalysisRunState;
+  /** When that run last changed state. Null when unknown or when there is no run. */
+  updatedAt: string | null;
+  /** A short machine code, never a provider message or trace. Null unless the run failed. */
+  errorCode: string | null;
+};
 
 export type PublicSecFiling = {
   accessionNumber: string;
@@ -169,15 +48,37 @@ export type PublicSecFiling = {
   reportVersion: string | null;
   edgarUrl: string;
   documentUrl: string;
+  /** Added by the backend refactor. Everything below is additive; nothing above changed. */
+  provenance: "sec_edgar";
+  /** Reporting period the structured report belongs to, or null for a summary-only filing. */
+  periodId: string | null;
+  /** The `<analysis schema>` half of `reportVersion`. */
+  analysisSchemaVersion: string | null;
+  /** The content-hash half of `reportVersion` — which revision of the report this is. */
+  contentRevision: string | null;
+  analysisRun: AnalysisRunSummary;
 };
 
+export type PublicFilingCompany = { ticker: string; name: string; cik: string };
+
 export type PublicFilingPage = {
+  apiSchemaVersion: typeof ANALYSIS_API_SCHEMA_VERSION;
   ticker: string;
-  company: { ticker: string; name: string; cik: string } | null;
+  company: PublicFilingCompany | null;
   filings: PublicSecFiling[];
   nextCursor: string | null;
-  total: number;
+  /** Counted on the first page only; a later page reports null and the client keeps what it has. */
+  total: number | null;
   checkedAt: string | null;
 };
 
-export type PublicFilingResponse = { ticker: string; company: PublicFilingPage["company"]; filing: PublicSecFiling };
+export type PublicFilingDetail = {
+  apiSchemaVersion: typeof ANALYSIS_API_SCHEMA_VERSION;
+  ticker: string;
+  company: PublicFilingCompany | null;
+  filing: PublicSecFiling;
+};
+
+/** Bounds the backend enforces on a filing page request. Published so consumers can page safely. */
+export const ANALYSIS_FILING_PAGE_DEFAULT_LIMIT = 20;
+export const ANALYSIS_FILING_PAGE_MAX_LIMIT = 50;

@@ -77,15 +77,15 @@ test("reads requested security types and falls back to stocks only", () => {
   assert.deepEqual(parseSecurityTypes("etf, stock ,etf"), ["etf", "stock"]);
 });
 
-test("ranks company matches deterministically by symbol", () => {
+test("ranks held symbols before exact, symbol prefix, and company matches", () => {
   const entries: SymbolDirectoryEntry[] = [
     { symbol: "AAPL", name: "Apple Inc.", exchange: "NASDAQ", type: "stock" },
     { symbol: "APLE", name: "Apple Hospitality REIT", exchange: "NYSE", type: "stock" },
     { symbol: "PINE", name: "Alpine Income Property Trust", exchange: "NYSE", type: "stock" },
   ];
 
-  const results = searchSecurities(entries, "apple", 10);
-  assert.deepEqual(results.map((result) => result.symbol), ["AAPL", "APLE"]);
+  const results = searchSecurities(entries, "apple", new Set(["APLE"]), 10);
+  assert.deepEqual(results.map((result) => result.symbol), ["APLE", "AAPL"]);
 });
 
 test("hides ETFs, funds, preferreds and bonds unless the caller asks for them", () => {
@@ -96,9 +96,9 @@ test("hides ETFs, funds, preferreds and bonds unless the caller asks for them", 
     { symbol: "ABR$D", name: "Arbor Realty Trust Series D Preferred", exchange: "NYSE", type: "preferred" },
   ];
 
-  assert.deepEqual(searchSecurities(entries, "AAP", 10).map((result) => result.symbol), ["AAPL"]);
+  assert.deepEqual(searchSecurities(entries, "AAP", new Set(), 10).map((result) => result.symbol), ["AAPL"]);
   assert.deepEqual(
-    searchSecurities(entries, "AAP", 10, ["stock", "etf"]).map((result) => result.symbol),
+    searchSecurities(entries, "AAP", new Set(), 10, ["stock", "etf"]).map((result) => result.symbol),
     ["AAPB", "AAPL", "AAPY"],
   );
 });

@@ -1,10 +1,7 @@
-import { claimSecMemory } from "./services/sec-memory-claim.ts";
-import { commitSecMemory } from "./services/sec-memory-commit.ts";
-import { runCommand } from "./services/result.ts";
-import type { SecMemoryJobClaim } from "./sec/d1.ts";
+import { D1SecRepository } from "./sec/d1.ts";
 import { hashString } from "./sec/analysis.ts";
 import { normalizeMemoryExtraction } from "./sec/memory.ts";
-import type { SecMemoryWorkflowParams } from "./core.ts";
+import { assertTrackedTicker, requireDb, trackedTickersFor, type SecMemoryWorkflowParams } from "./core.ts";
 import { callWorkerSecModel, type SecPipelineEnv } from "./operations.ts";
 import { modelExecutionForAttempt } from "./retry-policy.ts";
 import type { WorkflowStepLike } from "./workflow-core.ts";
@@ -17,12 +14,9 @@ export async function executeSecMemoryWorkflow(
   fetcher: typeof fetch = fetch,
 ) {
   const ownerToken = params.ownerToken || `${workflowInstanceId}:${crypto.randomUUID()}`;
-  const claimed = await step.do(`memory-claim:${params.jobId}`, () => runCommand<{ claim: SecMemoryJobClaim | null }>(claimSecMemory, env, {
-    jobId: params.jobId,
-    ownerToken,
-  }));
-  if (!claimed.claim) return { status: "no-op", jobId: params.jobId };
-  const claim = claimed.claim;
+  const repository = new D1SecRepository(requireDb(env));
+  const claim = await step.do(`memory-claim:${params.jobId}`, () => repository.claimMemoryJob(params.jobId, ownerToken, new Date(), undefined, trackedTickersFor(env)));
+  if (!claim) return { status: "no-op", jobId: params.jobId };
   const source = await step.do(`memory-source:${params.jobId}`, async () => {
     const object = await env.SEC_FILINGS.get(claim.sourceR2Key);
     if (!object) throw new Error(`Memory source not found: ${claim.sourceR2Key}`);
@@ -35,15 +29,10 @@ export async function executeSecMemoryWorkflow(
     const value = await callWorkerSecModel(env, fetcher, "memory-extract", memoryExtractionSystemPrompt(), compactMemorySource(source), execution.model);
     return normalizeMemoryExtraction(value, validEvidenceIds, priorMemoryIds);
   });
-  const committed = await step.do(`memory-commit:${params.jobId}`, () => runCommand<{
-    status: string;
-    noOp: boolean;
-    itemCount: number;
-    memoryVersion: number;
-  }>(commitSecMemory, env, {
-    claim,
-    extraction,
-  }));
+  const committed = await step.do(`memory-commit:${params.jobId}`, async () => {
+    assertTrackedTicker(env, claim.ticker);
+    return { status: "committed" as const, ...await repository.commitMemoryJob(claim, extraction) };
+  });
   let companyAnalysisQueued = false;
   const reportDate = sourceReportDate(source, claim.periodId);
   if (env.COMPANY_ANALYSIS_WORKFLOW && Number.isInteger(committed.memoryVersion) && reportDate) {

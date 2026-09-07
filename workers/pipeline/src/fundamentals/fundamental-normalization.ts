@@ -253,6 +253,9 @@ function unitFor(unitFamily: FundamentalUnitFamily, currency: string): string {
   if (unitFamily === "currency") return currency;
   if (unitFamily === "per_share") return `${currency}/share`;
   if (unitFamily === "shares") return "shares";
+  // A multiple is a bare ratio, so it carries no currency of its own even when
+  // both sides of the ratio are priced in one.
+  if (unitFamily === "multiple") return "x";
   return "%";
 }
 

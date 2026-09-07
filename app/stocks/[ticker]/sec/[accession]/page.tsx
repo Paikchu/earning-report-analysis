@@ -1,15 +1,23 @@
 import { notFound } from "next/navigation";
-import { getPublicFiling } from "@/lib/web/analysis-client";
+import { getAnalysisBackendRuntime } from "../../../../../lib/web/analysis-backend-runtime.ts";
+import { isAnalysisErrorBody } from "../../../../../lib/web/analysis-client.ts";
+import type { PublicFilingDetail } from "../../../../../shared/analysis-contract/filings.ts";
 import { findSecurity } from "../../../../../lib/web/site-data.ts";
-import { normalizeTrackedTicker } from "@/lib/web/ticker";
-import { SecReportDocument } from "@/app/stocks/[ticker]/sec/[accession]/SecReportDocument";
+import { normalizeTrackedTicker } from "../../../../../lib/web/ticker.ts";
+import { SecReportDocument } from "./SecReportDocument.tsx";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Server-rendered report page. It reads through the backend client like every other consumer —
+ * there is no database binding in this Worker to fall back to, and deliberately so: a silent
+ * fallback would have preserved exactly the coupling this refactor removed.
+ */
 export default async function StockSecReportPage({ params }: { params: Promise<{ ticker: string; accession: string }> }) {
   const route = await params;
   const ticker = normalizeTrackedTicker(route.ticker);
-  const result = await getPublicFiling(ticker, route.accession);
+  const result = await loadFiling(ticker, route.accession);
+  if (result === "unavailable") throw new Error("The analysis backend is unavailable.");
   if (!result) notFound();
   const security = findSecurity(ticker);
   const filing = result.filing;
@@ -30,4 +38,29 @@ export default async function StockSecReportPage({ params }: { params: Promise<{
     summary: filing.summary,
     analysis: filing.analysis,
   }} />;
+}
+
+/**
+ * Three outcomes, kept apart on purpose: the filing, a genuine 404, and a backend that could not
+ * answer. Collapsing the third into the second would render an outage as "this report does not
+ * exist", which is the one thing a reader must not be told when it is untrue.
+ */
+async function loadFiling(ticker: string, accession: string): Promise<PublicFilingDetail | null | "unavailable"> {
+  if (!ticker) return null;
+  const runtime = await getAnalysisBackendRuntime();
+  if (!runtime.configured) {
+    console.error(JSON.stringify({ event: "analysis-backend-unconfigured", reason: runtime.reason }));
+    return "unavailable";
+  }
+  try {
+    const response = await runtime.client.getFiling(ticker, accession);
+    if (response.status === 404) return null;
+    if (response.status !== 200 || isAnalysisErrorBody(response.body)) {
+      console.error(JSON.stringify({ event: "analysis-backend-refused", status: response.status }));
+      return "unavailable";
+    }
+    return response.body as PublicFilingDetail;
+  } catch {
+    return "unavailable";
+  }
 }

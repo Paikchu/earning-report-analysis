@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import { SiteHeader } from "@/app/site-header";
 import { findSecurity } from "../../../lib/web/site-data.ts";
-import { normalizeTrackedTicker } from "@/lib/web/ticker";
-import { SecFilingsSection } from "@/app/stocks/[ticker]/SecFilingsSection";
+import { normalizeTrackedTicker } from "../../../lib/web/ticker.ts";
+import { SecFilingsSection } from "./SecFilingsSection.tsx";
 import { BusinessOutlook } from "./BusinessOutlook";
 import { FundamentalCharts } from "./FundamentalCharts";
 import {

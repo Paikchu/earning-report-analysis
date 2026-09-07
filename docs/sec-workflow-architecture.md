@@ -1,7 +1,5 @@
 # SEC Workflow 架构
 
-服务所有权与后续扩展见 [服务架构](service-architecture.md)。以下 Workflow 全部运行在 Pipeline 内，不依赖 Web。
-
 ```mermaid
 flowchart TD
     A["Cron / 管理员刷新"] --> B["公司白名单校验"]
@@ -12,7 +10,7 @@ flowchart TD
     E --> P["发布到 D1 / R2"]
 
     D -->|"10-K / 10-Q / 20-F"| F["准备：原文、章节、证据块、XBRL"]
-    F --> G["读取 Pipeline 自有 D1 上下文（本地调用）"]
+    F --> G["读取 D1 上下文（1 次桥接调用）"]
     G --> H["确定性组装 SecAnalysisBrief"]
     H --> I{"核心事实门禁"}
     I -->|"无 XBRL 序列或单位冲突"| X["失败，保留上一版报告"]

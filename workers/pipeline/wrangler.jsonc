@@ -3,13 +3,10 @@
   "name": "earning-report-analysis-sec-pipeline",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-26",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
+  "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "SEC_USER_AGENT": "earning-report-analysis/1.0 max.zhangyuchen@gmail.com",
-    "SEC_ANALYSIS_MODEL": "glm-5.3-flash",
-    "SEC_TRACKED_TICKERS": ""
+    "SEC_ANALYSIS_MODEL": "glm-5.3-flash"
   },
   "workflows": [
     {
@@ -28,7 +25,15 @@
     {
       "name": "earning-report-analysis-company-analysis",
       "binding": "COMPANY_ANALYSIS_WORKFLOW",
-      "class_name": "CompanyAnalysisWorkflow"
+      "class_name": "CompanyAnalysisWorkflow",
+      "concurrency": {
+        "limit": 2
+      }
+    },
+    {
+      "name": "earning-report-analysis-company-analysis-backfill",
+      "binding": "COMPANY_ANALYSIS_BACKFILL_WORKFLOW",
+      "class_name": "CompanyAnalysisBackfillWorkflow"
     }
   ],
   "r2_buckets": [
@@ -37,10 +42,43 @@
       "bucket_name": "earning-report-analysis-sec-filings"
     }
   ],
+  // This Worker owns the analysis data model: it is the only writer, and since the read API landed
+  // it is also the only reader — the Web Worker no longer binds this database at all. The id is an
+  // account-scoped identifier, not a credential, and is committed here the way the bucket and
+  // Worker names above are. The database itself is unchanged: same name, same id, same rows.
+  //
+  // `migrations_dir` moved from `../web/migrations` to this Worker's own directory when ownership
+  // moved. The files kept their names, so `d1_migrations` — which records applied migrations by
+  // filename — still matches every one of them and nothing is reapplied.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "earning-report-analysis-sec-web",
+      "database_id": "3c917a4c-3562-4de1-8b21-586fa384e63f",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // Per-credential limit for the read API, enforced by Cloudflare across isolates and colos rather
+  // than by a counter in one isolate that would only ever be a local approximation. The
+  // namespace_id is an account-scoped integer, not a secret.
+  "ratelimits": [
+    {
+      "name": "ANALYSIS_READ_RATE_LIMIT",
+      "namespace_id": "1001",
+      "simple": {
+        "limit": 600,
+        "period": 60
+      }
+    }
+  ],
+  // TEMPORARY, while the dead scheduled refresh is being diagnosed: every 10 minutes around the
+  // clock, so a failed run surfaces within minutes instead of at the next hourly slot. The market
+  // windows this replaces cover 09:00-23:00 ET Mon-Fri and must go back once the run is healthy:
+  //   "0 13-23 * * 1-5"
+  //   "0 0-3 * * 2-6"
   "triggers": {
     "crons": [
-      "0 13-23 * * 1-5",
-      "0 0-3 * * 2-6"
+      "*/10 * * * *"
     ]
   },
   "env": {
@@ -48,8 +86,7 @@
       "name": "earning-report-analysis-sec-pipeline-staging",
       "vars": {
         "SEC_USER_AGENT": "earning-report-analysis/1.0 max.zhangyuchen@gmail.com",
-        "SEC_ANALYSIS_MODEL": "glm-5.3-flash",
-        "SEC_TRACKED_TICKERS": ""
+        "SEC_ANALYSIS_MODEL": "glm-5.3-flash"
       },
       "workflows": [
         {
@@ -68,7 +105,15 @@
         {
           "name": "earning-report-analysis-company-analysis-staging",
           "binding": "COMPANY_ANALYSIS_WORKFLOW",
-          "class_name": "CompanyAnalysisWorkflow"
+          "class_name": "CompanyAnalysisWorkflow",
+          "concurrency": {
+            "limit": 2
+          }
+        },
+        {
+          "name": "earning-report-analysis-company-analysis-backfill-staging",
+          "binding": "COMPANY_ANALYSIS_BACKFILL_WORKFLOW",
+          "class_name": "CompanyAnalysisBackfillWorkflow"
         }
       ],
       "r2_buckets": [
@@ -77,35 +122,28 @@
           "bucket_name": "earning-report-analysis-sec-filings-staging"
         }
       ],
-      "triggers": {
-        "crons": []
-      },
-      "d1_databases": [
+      // No D1 binding: staging must never touch the production database, and it has no database of
+      // its own yet. Its Cron list is empty, so nothing reaches the fundamentals sync on its own; a
+      // canary that does gets the explicit "no D1 binding" error instead of a silent wrong write,
+      // and the read API answers 503 STORAGE_UNAVAILABLE rather than an empty success. To give
+      // staging real read capability, create a staging D1 and add the binding here — never point
+      // this environment at the production database id above.
+      "ratelimits": [
         {
-          "binding": "DB",
-          "database_name": "earning-report-analysis-sec-pipeline-staging",
-          "database_id": "00000000-0000-4000-8000-000000000000",
-          "migrations_dir": "migrations"
+          "name": "ANALYSIS_READ_RATE_LIMIT",
+          "namespace_id": "1003",
+          "simple": {
+            "limit": 600,
+            "period": 60
+          }
         }
-      ]
+      ],
+      "triggers": { "crons": [] }
     }
   },
   "observability": {
     "enabled": true,
-    "logs": {
-      "head_sampling_rate": 1
-    },
-    "traces": {
-      "enabled": true,
-      "head_sampling_rate": 0.05
-    }
-  },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "earning-report-analysis-sec-web",
-      "database_id": "00000000-0000-4000-8000-000000000000",
-      "migrations_dir": "migrations"
-    }
-  ]
+    "logs": { "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.05 }
+  }
 }

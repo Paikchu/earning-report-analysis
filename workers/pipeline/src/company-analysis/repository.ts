@@ -1,3 +1,4 @@
+import type { AnalysisRunSummary } from "../../../../shared/analysis-contract/filings.ts";
 import {
   normalizeCompanyAnalysisPublication,
   type CompanyAnalysisPublication,
@@ -17,6 +18,7 @@ export type CompanyAnalysisD1Database = {
 
 export type CompanyAnalysisRunUpdate = {
   analysisId: string;
+  workflowInstanceId?: string;
   ticker: string;
   triggerRef: string;
   periodId: string;
@@ -31,6 +33,22 @@ export type CompanyAnalysisRunUpdate = {
   errorDetail?: string;
   updatedAt: string;
 };
+
+export type CompanyAnalysisBackfillCandidate = {
+  analysisId?: string;
+  recoveryAttempt?: number;
+  expectedUpdatedAt?: string;
+  waitingForData?: boolean;
+  ticker: string;
+  memoryJobId: string;
+  memoryVersion: number;
+  periodId: string;
+  reportDate: string;
+  triggerRef: string;
+};
+
+export const COMPANY_ANALYSIS_MAX_RECOVERIES = 3;
+const RECOVERY_BACKOFF_MS = [15 * 60_000, 2 * 60 * 60_000, 8 * 60 * 60_000];
 
 type PublicationRow = {
   analysisId: string;
@@ -85,6 +103,144 @@ export class D1CompanyAnalysisRepository {
     return Boolean(row);
   }
 
+  /**
+   * The newest run for a company, whatever state it is in — the counterpart to
+   * `getLatestPublication`, which only ever sees rows that reached `ready`. Without this a failed
+   * or queued first run is indistinguishable from a company nothing has ever been requested for.
+   *
+   * Only `error_code` is read, never `error_detail`: the detail column holds provider text and has
+   * no business crossing the API boundary.
+   */
+  async getLatestRunSummary(ticker: string): Promise<AnalysisRunSummary> {
+    const row = await this.database.prepare(`
+      SELECT status, updated_at AS updatedAt, error_code AS errorCode, recovery_count AS recoveryCount
+      FROM company_analysis_runs
+      WHERE ticker = ?
+      ORDER BY updated_at DESC, analysis_id DESC
+      LIMIT 1
+    `).bind(ticker).first<{ status: CompanyAnalysisRunStatus; updatedAt: string; errorCode: string | null; recoveryCount: number }>();
+    if (!row) return { state: "none", updatedAt: null, errorCode: null };
+    return {
+      state: runStateFor(row.status),
+      updatedAt: row.updatedAt ?? null,
+      errorCode: row.status === "failed" && row.recoveryCount >= COMPANY_ANALYSIS_MAX_RECOVERIES
+        ? "RECOVERY_EXHAUSTED" : safeErrorCode(row.status, row.errorCode),
+    };
+  }
+
+  async listBackfillCandidates(tickers: string[], limit = 100, includeIncomplete = false, now = Date.now()): Promise<CompanyAnalysisBackfillCandidate[]> {
+    const allowed = [...new Set(tickers.map((ticker) => ticker.trim().toUpperCase()).filter(Boolean))];
+    if (!allowed.length) return [];
+    const boundedLimit = Math.min(500, Math.max(1, Math.trunc(limit)));
+    const placeholders = allowed.map(() => "?").join(", ");
+    const rows = await this.database.prepare(`
+      WITH ranked_memory AS (
+        SELECT j.job_id AS memoryJobId, j.ticker, j.period_id AS periodId,
+          p.end_date AS reportDate,
+          ROW_NUMBER() OVER (
+            PARTITION BY j.ticker
+            ORDER BY p.end_date DESC, j.completed_at DESC, j.job_id DESC
+          ) AS memoryRank
+        FROM sec_memory_jobs j
+        JOIN sec_periods p ON p.period_id = j.period_id AND p.ticker = j.ticker
+        WHERE j.status = 'complete' AND j.ticker IN (${placeholders})
+      )
+      SELECT m.ticker, m.memoryJobId, t.version AS memoryVersion,
+        m.periodId, m.reportDate, r.analysis_id AS analysisId,
+        r.trigger_ref AS recoveryTriggerRef, r.status AS runStatus,
+        r.recovery_count AS recoveryCount, r.updated_at AS expectedUpdatedAt
+      FROM ranked_memory m
+      JOIN sec_company_memory_threads t ON t.ticker = m.ticker
+      LEFT JOIN company_analysis_runs r ON r.analysis_id = (
+        SELECT prior.analysis_id FROM company_analysis_runs prior
+        WHERE prior.ticker = m.ticker AND prior.period_id = m.periodId AND prior.memory_version = t.version
+        ORDER BY prior.updated_at DESC, prior.analysis_id DESC LIMIT 1
+      )
+      WHERE m.memoryRank = 1
+        AND (r.analysis_id IS NULL OR r.status IN ('failed', 'insufficient_data'))
+        AND NOT EXISTS (
+          SELECT 1 FROM company_analysis_runs done
+          WHERE done.ticker = m.ticker AND done.period_id = m.periodId
+            AND done.memory_version = t.version AND done.status = 'ready'
+        )
+      ORDER BY COALESCE(r.updated_at, ''), m.ticker
+    `).bind(...allowed).all<Omit<CompanyAnalysisBackfillCandidate, "triggerRef" | "expectedUpdatedAt"> & {
+      analysisId: string | null;
+      recoveryTriggerRef: string | null;
+      runStatus: CompanyAnalysisRunStatus | null;
+      recoveryCount: number | null;
+      expectedUpdatedAt: string | null;
+    }>();
+    return rows.results.filter((row) => {
+      if (!row.analysisId || includeIncomplete || row.runStatus === "insufficient_data") return true;
+      const count = row.recoveryCount ?? 0;
+      return count < COMPANY_ANALYSIS_MAX_RECOVERIES
+        && now - Date.parse(row.expectedUpdatedAt ?? "") >= RECOVERY_BACKOFF_MS[count]!;
+    }).slice(0, boundedLimit).map((row) => {
+      const { recoveryTriggerRef, analysisId, runStatus, recoveryCount, expectedUpdatedAt, ...candidate } = row;
+      return {
+        ...candidate,
+        ...(analysisId ? {
+          analysisId,
+          // Waiting for data is not a failed model attempt and does not consume the retry budget.
+          recoveryAttempt: (recoveryCount ?? 0) + (runStatus === "failed" ? 1 : 0),
+          expectedUpdatedAt: expectedUpdatedAt!,
+          waitingForData: runStatus === "insufficient_data",
+        } : {}),
+        triggerRef: recoveryTriggerRef || `${row.memoryJobId}:${row.memoryVersion}`,
+      };
+    });
+  }
+
+  /** Atomic ownership at execution time. A duplicate enqueue cannot start a second Agent. */
+  async beginRun(update: CompanyAnalysisRunUpdate & { workflowInstanceId: string }, recoveryAttempt: number, expectedUpdatedAt?: string): Promise<boolean> {
+    const row = await this.database.prepare(`
+      INSERT INTO company_analysis_runs (
+        analysis_id, ticker, trigger_ref, period_id, memory_version, status,
+        model_version, prompt_version, updated_at, workflow_instance_id, recovery_count
+      ) VALUES (?, ?, ?, ?, ?, 'waiting_fundamentals', ?, ?, ?, ?, ?)
+      ON CONFLICT(trigger_ref) DO UPDATE SET
+        status = 'waiting_fundamentals', model_version = excluded.model_version,
+        prompt_version = excluded.prompt_version, updated_at = excluded.updated_at,
+        workflow_instance_id = excluded.workflow_instance_id, recovery_count = excluded.recovery_count,
+        error_code = NULL, error_detail = NULL
+      WHERE company_analysis_runs.analysis_id = excluded.analysis_id
+        AND company_analysis_runs.status IN ('failed', 'insufficient_data')
+        AND company_analysis_runs.updated_at = ?
+      RETURNING analysis_id AS analysisId
+    `).bind(update.analysisId, update.ticker, update.triggerRef, update.periodId, update.memoryVersion,
+      update.modelVersion, update.promptVersion, update.updatedAt, update.workflowInstanceId,
+      recoveryAttempt, expectedUpdatedAt ?? null).first<{ analysisId: string }>();
+    if (row) return true;
+    // The DB write may have succeeded before a step response was lost. Replaying that step is safe.
+    return Boolean(await this.database.prepare(`
+      SELECT analysis_id FROM company_analysis_runs
+      WHERE analysis_id = ? AND workflow_instance_id = ?
+        AND status IN ('waiting_fundamentals', 'calculating', 'analyzing', 'validating')
+    `).bind(update.analysisId, update.workflowInstanceId).first());
+  }
+
+  async listActiveExecutions(tickers: string[], before: string): Promise<Array<{ analysisId: string; workflowInstanceId: string }>> {
+    if (!tickers.length) return [];
+    const rows = await this.database.prepare(`
+      SELECT analysis_id AS analysisId, workflow_instance_id AS workflowInstanceId
+      FROM company_analysis_runs
+      WHERE ticker IN (${tickers.map(() => "?").join(",")}) AND workflow_instance_id IS NOT NULL
+        AND status IN ('waiting_fundamentals', 'calculating', 'analyzing', 'validating')
+        AND updated_at < ? ORDER BY updated_at LIMIT 100
+    `).bind(...tickers, before).all<{ analysisId: string; workflowInstanceId: string }>();
+    return rows.results;
+  }
+
+  /** Reconcile only a confirmed terminal platform instance, never infer death from age alone. */
+  async markStoppedExecution(analysisId: string, workflowInstanceId: string, now: string): Promise<void> {
+    await this.database.prepare(`
+      UPDATE company_analysis_runs SET status = 'failed', error_code = 'WORKFLOW_STOPPED', updated_at = ?
+      WHERE analysis_id = ? AND workflow_instance_id = ?
+        AND status IN ('waiting_fundamentals', 'calculating', 'analyzing', 'validating')
+    `).bind(now, analysisId, workflowInstanceId).run();
+  }
+
   async upsertRun(update: CompanyAnalysisRunUpdate): Promise<void> {
     await this.database.prepare(`
       INSERT INTO company_analysis_runs (
@@ -100,6 +256,8 @@ export class D1CompanyAnalysisRepository {
         error_code = excluded.error_code,
         error_detail = excluded.error_detail,
         updated_at = excluded.updated_at
+      WHERE company_analysis_runs.status <> 'ready'
+        AND (? IS NULL OR company_analysis_runs.workflow_instance_id = ?)
     `).bind(
       update.analysisId,
       update.ticker,
@@ -115,6 +273,8 @@ export class D1CompanyAnalysisRepository {
       update.errorCode ?? null,
       update.errorDetail?.slice(0, 1_000) ?? null,
       update.updatedAt,
+      update.workflowInstanceId ?? null,
+      update.workflowInstanceId ?? null,
     ).run();
   }
 
@@ -171,6 +331,24 @@ export class D1CompanyAnalysisRepository {
     }
     return { duplicate: false, publication: stored };
   }
+}
+
+function runStateFor(status: CompanyAnalysisRunStatus): AnalysisRunSummary["state"] {
+  if (status === "ready") return "succeeded";
+  if (status === "failed" || status === "insufficient_data") return "failed";
+  // `waiting_fundamentals` is the run sitting in line for its inputs, not yet doing work.
+  return status === "waiting_fundamentals" ? "queued" : "running";
+}
+
+/**
+ * Error codes are published; error details are not. A stored code is additionally bounded to the
+ * shape a machine code has, so a value that somehow carried prose is dropped rather than echoed.
+ */
+function safeErrorCode(status: CompanyAnalysisRunStatus, errorCode: string | null): string | null {
+  if (runStateFor(status) !== "failed") return null;
+  if (status === "insufficient_data" && !errorCode) return "INSUFFICIENT_DATA";
+  const code = (errorCode ?? "").trim();
+  return /^[A-Za-z0-9_.:-]{1,64}$/.test(code) ? code : errorCode ? "ANALYSIS_FAILED" : null;
 }
 
 function publicationSelect(): string {

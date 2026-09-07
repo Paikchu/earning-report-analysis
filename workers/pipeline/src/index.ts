@@ -1,11 +1,11 @@
-import { handleAnalysisApi } from "./read-api.ts";
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 
-import { runSecMemorySweep, runSecRefresh, type CompanyAnalysisWorkflowParams, type SecMemoryWorkflowParams, type SecWorkflowParams } from "./core.ts";
-import { executeCompanyAnalysisWorkflow } from "./company-analysis-workflow.ts";
+import { runCompanyAnalysisSweep, runSecRefresh, type CompanyAnalysisBackfillParams, type CompanyAnalysisWorkflowParams, type SecMemoryWorkflowParams, type SecWorkflowParams } from "./core.ts";
+import { executeCompanyAnalysisWorkflow, type CompanyWorkflowStep } from "./company-analysis-workflow.ts";
 import { executeSecMemoryWorkflow } from "./memory-workflow.ts";
 import { createSecPipelineOperations, type SecPipelineEnv } from "./operations.ts";
 import { retryDelayForAttempt } from "./retry-policy.ts";
+import worker from "./worker.ts";
 import { executeSecAnalysisWorkflow, type WorkflowStepContextLike, type WorkflowStepLike } from "./workflow-core.ts";
 
 const WORKFLOW_RETRY = {
@@ -45,25 +45,32 @@ export class CompanyAnalysisWorkflow extends WorkflowEntrypoint<SecPipelineEnv, 
       event.payload,
       event.instanceId,
       event.timestamp,
-      step,
+      step as unknown as CompanyWorkflowStep,
       this.env,
     );
   }
 }
 
-const worker = {
-  async fetch(request: Request, env: SecPipelineEnv, context: ExecutionContext) {
-    if (new URL(request.url).pathname === "/health") {
-      return Response.json({ status: "ok", executor: "workflow", modelConfigured: Boolean(env.AI_API_KEY), watchlistConfigured: Boolean(env.SEC_TRACKED_TICKERS?.trim()) }, { headers: { "cache-control": "no-store" } });
-    }
-    return handleAnalysisApi(request, env, context);
-  },
+export class CompanyAnalysisBackfillWorkflow extends WorkflowEntrypoint<SecPipelineEnv, CompanyAnalysisBackfillParams> {
+  async run(event: WorkflowEvent<CompanyAnalysisBackfillParams>, step: WorkflowStep) {
+    const durable = durableSteps(step);
+    // Recovery reuses the latest completed Memory and Yahoo snapshot. Starting every SEC workflow
+    // again would add unrelated model traffic precisely while recovering rate-limited Agent runs.
+    const sec = event.payload.forceIncomplete === true
+      ? { started: [], failed: [], skipped: true }
+      : await durable.do("backfill-latest-sec", () => runSecRefresh(this.env));
+    const company = await durable.do("backfill-company-analysis", () => runCompanyAnalysisSweep(
+      this.env,
+      { forceIncomplete: event.payload.forceIncomplete === true },
+    ));
+    return { sec, company };
+  }
+}
 
-  async scheduled(_controller: ScheduledController, env: SecPipelineEnv, context: ExecutionContext) {
-    context.waitUntil(Promise.allSettled([runSecRefresh(env), runSecMemorySweep(env)]).then((results) => {
-      console.log(JSON.stringify({ event: "sec-workflows", analysis: results[0], memory: results[1] }));
-    }));
-  },
-} satisfies ExportedHandler<SecPipelineEnv>;
-
+/**
+ * The request and Cron handler lives in `./worker.ts` so it can be imported — and therefore tested
+ * — without `cloudflare:workers`, which only resolves inside the Workers runtime. The Workflow
+ * entrypoints above genuinely need that module, so they stay here, and this file remains the one
+ * Wrangler points `main` at.
+ */
 export default worker;

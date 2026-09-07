@@ -300,6 +300,29 @@ export class D1FundamentalsRepository implements FundamentalsRepository {
     return { inserted, confirmed, revised };
   }
 
+  /**
+   * When each of these tickers last had a successful fetch, for the scheduled staleness sweep.
+   * One query for the whole watchlist rather than one snapshot read per ticker: the snapshot read
+   * pulls every observation a company has, which is far more than "when did this last succeed"
+   * needs, and the sweep runs on every Cron tick.
+   *
+   * A ticker with no successful run at all comes back with `fetchedAt: null` rather than being
+   * omitted, because "never fetched" is precisely the case the sweep exists to fix.
+   */
+  async listFundamentalsFreshness(tickers: string[]): Promise<Array<{ ticker: string; fetchedAt: string | null }>> {
+    const wanted = [...new Set(tickers.map((ticker) => ticker.trim().toUpperCase()).filter(Boolean))];
+    if (!wanted.length) return [];
+    const placeholders = wanted.map(() => "?").join(", ");
+    const rows = await this.database.prepare(`
+      SELECT ticker, MAX(fetched_at) AS fetchedAt
+      FROM fundamental_fetch_runs
+      WHERE status = 'success' AND ticker IN (${placeholders})
+      GROUP BY ticker
+    `).bind(...wanted).all<{ ticker: string; fetchedAt: string | null }>();
+    const byTicker = new Map(rows.results.map((row) => [row.ticker, row.fetchedAt ?? null]));
+    return wanted.map((ticker) => ({ ticker, fetchedAt: byTicker.get(ticker) ?? null }));
+  }
+
   async getLastGoodSnapshot(ticker: string): Promise<FundamentalLastGoodSnapshot | null> {
     const latest = await this.database.prepare(`
       SELECT run_id AS runId, ticker, fetched_at AS fetchedAt, quality_status AS qualityStatus,

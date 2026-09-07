@@ -81,7 +81,7 @@ XML/JSON/ZIP  XBRL viewer 生成物  噪音
 
 ## 三、第二个问题：光加附件还不够
 
-`summarizePreparedSecEvent`（`lib/sec-pipeline.ts:260`）只取 `blocks.slice(0, 12)`。
+`summarizePreparedSecEvent`（`workers/pipeline/src/sec/pipeline.ts:260`）只取 `blocks.slice(0, 12)`。
 附件块排在主体块之后的话，前 12 个仍然几乎全是样板。
 
 实测对比：
@@ -101,7 +101,7 @@ XML/JSON/ZIP  XBRL viewer 生成物  噪音
 
 ### P0 — 核心（缺一不可）
 
-**1. `lib/sec.ts` — 新增流式附件发现**
+**1. `workers/pipeline/src/sec/sec.ts` — 新增流式附件发现**
 
 新增 `streamSecFilingDocuments(cik, accessionNumber, fetcher)`：
 - 请求 `<accession>.txt`，用 `res.body.getReader()` 流式读取
@@ -110,14 +110,14 @@ XML/JSON/ZIP  XBRL viewer 生成物  噪音
 - 丢弃 `GRAPHIC|XML|JSON|ZIP|EX-101.*`（不进内存）
 - 返回 `Array<{ type, filename, text }>`
 
-**2. `lib/sec-analysis.ts` — `FilingBlock` 增加来源标记**
+**2. `workers/pipeline/src/sec/analysis.ts` — `FilingBlock` 增加来源标记**
 
 ```ts
 source?: "body" | "exhibit";
 exhibitType?: string;   // "EX-99.1"
 ```
 
-**3. `lib/sec-pipeline.ts:109` `prepareSecFiling` — 8-K/6-K 走新路径**
+**3. `workers/pipeline/src/sec/pipeline.ts:109` `prepareSecFiling` — 8-K/6-K 走新路径**
 
 - 表单匹配 `/^(8-K|6-K)(\/A)?$/` 时调用 `streamSecFilingDocuments`
 - 主体与各附件分别调 `htmlToSecDocument` + `buildFilingBlocks`，打上 `source`/`exhibitType`
@@ -125,7 +125,7 @@ exhibitType?: string;   // "EX-99.1"
 - 10-K/10-Q/20-F 保持现有逻辑不变
 - 失败时回退到现有单文档路径，不阻断发布
 
-**4. `lib/sec-pipeline.ts:247` `summarizePreparedSecEvent` — 改 block 选择**
+**4. `workers/pipeline/src/sec/pipeline.ts:247` `summarizePreparedSecEvent` — 改 block 选择**
 
 `blocks.slice(0, 12)` 换成 `selectEventBlocks(blocks, 12)`：
 1. 剔除匹配样板正则的块（注册地、地址、合规 checkbox、签署人等）
@@ -135,13 +135,13 @@ exhibitType?: string;   // "EX-99.1"
 
 ### P1 — 质量保障
 
-**5. `lib/sec-pipeline.ts:429` `eventSummarySystemPrompt` 重写**
+**5. `workers/pipeline/src/sec/pipeline.ts:429` `eventSummarySystemPrompt` 重写**
 
 - 明确：`headline` 与 `bullets` 只允许来自附件实际披露的内容
 - 禁止：签署人、办公地点、Commission File Number、IRS Employer ID、Item 编号、filing date
 - 无具体数字时输出事件定性，不要复述表单结构
 
-**6. `lib/sec.ts:223` `normalizeSecSummary` 加质量门禁**
+**6. `workers/pipeline/src/sec/sec.ts:223` `normalizeSecSummary` 加质量门禁**
 
 检测到 bullets 全部命中样板词（签署人 / `General Counsel` / `Austin, Texas` / `Item 2.02` / `Commission File`）时标记低质量，
 配合现有重试机制触发重生成。

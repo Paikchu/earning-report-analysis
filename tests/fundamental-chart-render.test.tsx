@@ -7,14 +7,14 @@ import {
   FundamentalComboChart,
   FundamentalLineChart,
   MetricSelector,
-} from "../components/fundamentals/FundamentalChart";
+} from "../components/fundamentals/FundamentalChart.tsx";
 import {
   makeChartResponse,
   makeChartSeries,
   makePendingChartResponse,
 } from "./fixtures/fundamental-chart.ts";
 
-test("combo chart renders semantic SVG, redundant encodings, keyboard targets, and status", () => {
+test("combo chart renders semantic SVG, redundant encodings, and keyboard targets", () => {
   const data = makeChartResponse();
   const html = renderToStaticMarkup(
     <FundamentalComboChart
@@ -41,9 +41,12 @@ test("combo chart renders semantic SVG, redundant encodings, keyboard targets, a
   assert.match(html, /stroke-dasharray="/);
   assert.match(html, /<pattern/);
   assert.doesNotMatch(html, /data-chart-role="data-table"/);
-  assert.match(html, /数据待更新/);
-  assert.match(html, /部分数据/);
-  assert.match(html, /来源：Yahoo Finance/);
+  // The plot is framed by the page, so it draws no title, blurb or status chip
+  // of its own — but the title and description stay for assistive tech.
+  assert.match(html, /<figcaption class="sr-only"><h3[^>]*>ACME 基本面趋势<\/h3>/);
+  assert.doesNotMatch(html, /数据待更新/);
+  assert.doesNotMatch(html, /部分数据/);
+  assert.doesNotMatch(html, /来源：Yahoo Finance/);
   assert.match(html, /暂无数据/);
 });
 

@@ -1,13 +1,15 @@
-export const FUNDAMENTAL_METRIC_CATALOG_VERSION = "fundamental-metrics.v1";
+export const FUNDAMENTAL_METRIC_CATALOG_VERSION = "fundamental-metrics.v2";
 
 export type FundamentalMetricCategory =
   | "income_statement"
   | "cash_flow"
   | "balance_sheet"
   | "per_share"
+  | "valuation"
   | "ratio";
 
-export type FundamentalUnitFamily = "currency" | "percent" | "per_share" | "shares";
+/** `multiple` is a unit-less ratio of price to a fundamental — P/E, EV/EBITDA. */
+export type FundamentalUnitFamily = "currency" | "percent" | "per_share" | "shares" | "multiple";
 export type FundamentalChartMark = "bar" | "line";
 export type FundamentalTransform =
   | "value"
@@ -277,6 +279,114 @@ const reportedMetrics = {
     displaySign: "as_reported",
     allowedTransforms: ["value", "qoq_growth", "yoy_growth"],
     colorRole: "ordinary-shares",
+  },
+  market_cap: {
+    basis: "reported",
+    yahooField: "quarterlyMarketCap",
+    label: "市值",
+    shortLabel: "市值",
+    category: "valuation",
+    unitFamily: "currency",
+    defaultMark: "bar",
+    displaySign: "as_reported",
+    allowedTransforms: ["value", "qoq_growth", "yoy_growth"],
+    colorRole: "market-cap",
+  },
+  enterprise_value: {
+    basis: "reported",
+    yahooField: "quarterlyEnterpriseValue",
+    label: "企业价值",
+    shortLabel: "企业价值",
+    category: "valuation",
+    unitFamily: "currency",
+    defaultMark: "bar",
+    displaySign: "as_reported",
+    allowedTransforms: ["value", "qoq_growth", "yoy_growth"],
+    colorRole: "enterprise-value",
+  },
+  pe_ratio: {
+    basis: "reported",
+    yahooField: "quarterlyPeRatio",
+    label: "市盈率 TTM",
+    shortLabel: "市盈率",
+    category: "valuation",
+    unitFamily: "multiple",
+    defaultMark: "line",
+    displaySign: "as_reported",
+    allowedTransforms: ["value", "qoq_growth", "yoy_growth"],
+    colorRole: "pe-ratio",
+  },
+  forward_pe_ratio: {
+    basis: "reported",
+    yahooField: "quarterlyForwardPeRatio",
+    label: "预期市盈率",
+    shortLabel: "预期 PE",
+    category: "valuation",
+    unitFamily: "multiple",
+    defaultMark: "line",
+    displaySign: "as_reported",
+    allowedTransforms: ["value", "qoq_growth", "yoy_growth"],
+    colorRole: "forward-pe-ratio",
+  },
+  peg_ratio: {
+    basis: "reported",
+    yahooField: "quarterlyPegRatio",
+    label: "PEG 五年预期",
+    shortLabel: "PEG",
+    category: "valuation",
+    unitFamily: "multiple",
+    defaultMark: "line",
+    displaySign: "as_reported",
+    allowedTransforms: ["value", "qoq_growth", "yoy_growth"],
+    colorRole: "peg-ratio",
+  },
+  price_to_sales: {
+    basis: "reported",
+    yahooField: "quarterlyPsRatio",
+    label: "市销率",
+    shortLabel: "市销率",
+    category: "valuation",
+    unitFamily: "multiple",
+    defaultMark: "line",
+    displaySign: "as_reported",
+    allowedTransforms: ["value", "qoq_growth", "yoy_growth"],
+    colorRole: "price-to-sales",
+  },
+  price_to_book: {
+    basis: "reported",
+    yahooField: "quarterlyPbRatio",
+    label: "市净率",
+    shortLabel: "市净率",
+    category: "valuation",
+    unitFamily: "multiple",
+    defaultMark: "line",
+    displaySign: "as_reported",
+    allowedTransforms: ["value", "qoq_growth", "yoy_growth"],
+    colorRole: "price-to-book",
+  },
+  ev_to_revenue: {
+    basis: "reported",
+    yahooField: "quarterlyEnterprisesValueRevenueRatio",
+    label: "企业价值 / 收入",
+    shortLabel: "EV/收入",
+    category: "valuation",
+    unitFamily: "multiple",
+    defaultMark: "line",
+    displaySign: "as_reported",
+    allowedTransforms: ["value", "qoq_growth", "yoy_growth"],
+    colorRole: "ev-to-revenue",
+  },
+  ev_to_ebitda: {
+    basis: "reported",
+    yahooField: "quarterlyEnterprisesValueEBITDARatio",
+    label: "企业价值 / EBITDA",
+    shortLabel: "EV/EBITDA",
+    category: "valuation",
+    unitFamily: "multiple",
+    defaultMark: "line",
+    displaySign: "as_reported",
+    allowedTransforms: ["value", "qoq_growth", "yoy_growth"],
+    colorRole: "ev-to-ebitda",
   },
 } as const satisfies Record<string, ReportedMetricDefinition>;
 

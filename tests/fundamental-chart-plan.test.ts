@@ -177,7 +177,7 @@ test("a two-chart AI plan is rejected outright and the page falls back to one pr
 
 test("every presentation source resolves to exactly one chart", () => {
   const data = heavyInvestmentData();
-  const override = { metricKeys: ["total_revenue", "gross_margin"] as const, chart: "combo" as const, periodCount: 5 };
+  const override = { metricKeys: ["total_revenue", "gross_margin"] as const, periodCount: 5 };
   const sources = [
     resolveFundamentalPresentation({ data, userOverride: override }),
     resolveFundamentalPresentation({ data, urlOverride: override }),
@@ -192,12 +192,12 @@ test("every presentation source resolves to exactly one chart", () => {
 
 test("resolves user, URL, validated AI, and fallback preset in strict priority order", () => {
   const data = makeChartResponse();
-  const pageOverride = { metricKeys: ["free_cash_flow"] as const, chart: "line" as const, periodCount: 8 };
+  const pageOverride = { metricKeys: ["free_cash_flow"] as const, periodCount: 8 };
 
   assert.equal(resolveFundamentalPresentation({
     data,
     userOverride: pageOverride,
-    urlOverride: { metricKeys: ["gross_margin"], chart: "bar", periodCount: 5 },
+    urlOverride: { metricKeys: ["gross_margin"], periodCount: 5 },
     aiCandidate: validAiCandidate(data),
   }).source, "user");
   assert.equal(resolveFundamentalPresentation({
@@ -221,7 +221,6 @@ test("legacy URL overrides omit incompatible additions instead of crashing the p
     data,
     urlOverride: {
       metricKeys: ["total_revenue", "gross_margin", "diluted_eps"],
-      chart: "combo",
       periodCount: 5,
     },
   });

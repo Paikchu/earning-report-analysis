@@ -28,7 +28,6 @@ type D1Like = {
 export type PublicFilingPage = {
   filings: SecFilingWithSummary[];
   nextCursor: string | null;
-  total: number;
 };
 
 type PublicFilingRow = {
@@ -96,6 +95,17 @@ export type SecMemoryCommitResult = {
   memoryVersion: number;
 };
 
+/**
+ * Job error codes are published; job error details are not. A stored value that does not look like
+ * a machine code is reduced to a generic one rather than echoed to a reader.
+ */
+function safeJobErrorCode(status: SecAnalysisJobStatus | null, errorCode: string | null): string | null {
+  if (status !== "failed") return null;
+  const code = (errorCode ?? "").trim();
+  if (!code) return null;
+  return /^[A-Za-z0-9_.:-]{1,64}$/.test(code) ? code : "ANALYSIS_FAILED";
+}
+
 export class D1SecRepository implements SecRepository {
   private readonly database: D1Like;
 
@@ -141,7 +151,10 @@ export class D1SecRepository implements SecRepository {
     }
   }
 
-  async setSummary(summary: SecFilingSummary): Promise<void> {
+  async setSummary(filing: Pick<SecFiling, "ticker" | "accessionNumber" | "form">, summary: SecFilingSummary): Promise<void> {
+    if (summary.ticker !== filing.ticker || summary.accessionNumber !== filing.accessionNumber || summary.form !== filing.form) {
+      throw new Error("SEC summary does not match the filing it is being published against");
+    }
     await this.database.prepare(`
       INSERT INTO sec_filing_summaries (ticker, accession_number, generated_at, payload)
       VALUES (?, ?, ?, ?)
@@ -224,32 +237,50 @@ export class D1SecRepository implements SecRepository {
   }
 
   async getLatestAnalysisJobStatus(ticker: string, accessionNumber: string): Promise<SecAnalysisJobStatus | null> {
+    return (await this.getLatestAnalysisJobSummary(ticker, accessionNumber)).status;
+  }
+
+  /**
+   * The newest analysis job for a filing, with the two extra columns a reader needs to tell a
+   * failed run from a filing nothing ever ran against. `getLatestAnalysisJobStatus` keeps its
+   * signature and delegates here, so the same single query serves both and paging a filing list
+   * still costs exactly one job lookup per filing.
+   *
+   * `error_detail` is deliberately not selected: it can hold a provider message, and nothing
+   * outside this Worker has any business seeing one.
+   */
+  async getLatestAnalysisJobSummary(ticker: string, accessionNumber: string): Promise<{
+    status: SecAnalysisJobStatus | null;
+    updatedAt: string | null;
+    errorCode: string | null;
+  }> {
     const row = await this.database.prepare(`
-      SELECT status
+      SELECT status, updated_at AS updatedAt, error_code AS errorCode
       FROM sec_analysis_jobs
       WHERE ticker = ? AND accession_number = ?
       ORDER BY updated_at DESC
       LIMIT 1
-    `).bind(ticker, accessionNumber).first<{ status: SecAnalysisJobStatus }>();
-    return row?.status ?? null;
+    `).bind(ticker, accessionNumber).first<{ status: SecAnalysisJobStatus; updatedAt: string | null; errorCode: string | null }>();
+    if (!row) return { status: null, updatedAt: null, errorCode: null };
+    return { status: row.status, updatedAt: row.updatedAt ?? null, errorCode: safeJobErrorCode(row.status, row.errorCode) };
   }
 
+  /**
+   * A storage failure used to be caught here and returned as `null`, which every caller then
+   * rendered as "this filing has no analysis". A D1 outage therefore looked exactly like a filing
+   * nobody had analysed yet — an infrastructure failure served as an empty success. The error now
+   * propagates so the read router can answer 503, which is the only answer that is true.
+   */
   async getPublishedReport(ticker: string, periodId: string): Promise<PublishedSecReport | null> {
-    try {
-      const row = await this.database.prepare(`
-        SELECT payload
-        FROM sec_published_reports
-        WHERE ticker = ? AND period_id = ?
-          AND verification_status IN ('verified', 'partial')
-        ORDER BY CASE verification_status WHEN 'verified' THEN 0 ELSE 1 END,
-          generated_at DESC,
-          report_version DESC
-        LIMIT 1
-      `).bind(ticker, periodId).first<{ payload: string }>();
-      return row ? parseJson<PublishedSecReport>(row.payload) : null;
-    } catch {
-      return null;
-    }
+    const row = await this.database.prepare(`
+      SELECT payload
+      FROM sec_published_reports
+      WHERE ticker = ? AND period_id = ?
+        AND verification_status IN ('verified', 'partial')
+      ORDER BY generated_at DESC
+      LIMIT 1
+    `).bind(ticker, periodId).first<{ payload: string }>();
+    return row ? parseJson<PublishedSecReport>(row.payload) : null;
   }
 
   async listPublicFilings(rawTicker: string, rawCursor: string | null, rawLimit = 20): Promise<PublicFilingPage> {
@@ -271,7 +302,6 @@ export class D1SecRepository implements SecRepository {
       ORDER BY filing_date DESC, accession_number DESC
       LIMIT ?
     `).bind(...values).all<PublicFilingRow>();
-    const totalRow = await this.database.prepare("SELECT COUNT(*) AS count FROM sec_filings WHERE ticker = ?").bind(ticker).first<{ count: number }>();
     const hasMore = rows.results.length > limit;
     const pageRows = rows.results.slice(0, limit);
     const filings = await Promise.all(pageRows.map((row) => this.hydratePublicFiling(row)));
@@ -279,8 +309,14 @@ export class D1SecRepository implements SecRepository {
     return {
       filings,
       nextCursor: hasMore && last ? encodePageCursor({ filingDate: last.filingDate, accessionNumber: last.accessionNumber }) : null,
-      total: Number(totalRow?.count ?? 0),
     };
+  }
+
+  /** Counted on its own so paging pays for it once, on the first page, instead of on every page. */
+  async countPublicFilings(rawTicker: string): Promise<number> {
+    const row = await this.database.prepare("SELECT COUNT(*) AS count FROM sec_filings WHERE ticker = ?")
+      .bind(rawTicker.trim().toUpperCase()).first<{ count: number }>();
+    return Number(row?.count ?? 0);
   }
 
   async getPublicFiling(rawTicker: string, rawAccession: string): Promise<SecFilingWithSummary | null> {
@@ -528,16 +564,6 @@ export class D1SecRepository implements SecRepository {
 
     if (includePublication && artifact.report.dataQuality.verificationStatus !== "failed") {
       await this.database.prepare(`
-        DELETE FROM sec_published_reports
-        WHERE ticker = ? AND period_id = ? AND report_version <> ?
-          AND (? = 'verified' OR verification_status <> 'verified')
-      `).bind(
-        filing.ticker,
-        artifact.periodId,
-        artifact.report.reportVersion,
-        artifact.report.dataQuality.verificationStatus,
-      ).run();
-      await this.database.prepare(`
         INSERT INTO sec_published_reports (ticker, period_id, report_version, payload, verification_status)
         VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(ticker, period_id, report_version) DO UPDATE SET
@@ -582,21 +608,14 @@ export class D1SecRepository implements SecRepository {
 
   async commitFinalPublication(artifact: SecAnalysisArtifact, summary: SecFilingSummary): Promise<string> {
     if (artifact.report.dataQuality.verificationStatus === "failed") throw new Error("Failed SEC analysis cannot be published");
+    if (summary.ticker !== artifact.filing.ticker || summary.accessionNumber !== artifact.filing.accessionNumber) {
+      throw new Error("SEC summary does not match the filing it is being published against");
+    }
     if (!this.database.batch) throw new Error("D1 batch is required for atomic SEC publication");
     const memoryJobId = `${artifact.filing.ticker}:${artifact.periodId}:${artifact.report.reportVersion}:memory`;
     const sourceR2Key = artifact.artifactKeys?.synthesis;
     if (!sourceR2Key) throw new Error("SEC publication is missing its R2 memory source");
     const statements = [
-      this.database.prepare(`
-        DELETE FROM sec_published_reports
-        WHERE ticker = ? AND period_id = ? AND report_version <> ?
-          AND (? = 'verified' OR verification_status <> 'verified')
-      `).bind(
-        artifact.filing.ticker,
-        artifact.periodId,
-        artifact.report.reportVersion,
-        artifact.report.dataQuality.verificationStatus,
-      ),
       this.database.prepare(`
         INSERT INTO sec_published_reports (ticker, period_id, report_version, payload, verification_status)
         VALUES (?, ?, ?, ?, ?)

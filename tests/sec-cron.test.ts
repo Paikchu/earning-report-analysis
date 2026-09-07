@@ -3,19 +3,30 @@ import test from "node:test";
 
 import {
   handleSecAnalysisRequest,
+  runCompanyAnalysisSweep,
   runSecRefresh,
   type SecCronEnv,
   type SecWorkflowBinding,
 } from "../workers/pipeline/src/core.ts";
 
+/** A fake D1 whose only job here is to answer `listBackfillCandidates`'s query. */
+function companyAnalysisDb(candidates: Array<Record<string, unknown>>) {
+  return {
+    prepare() {
+      return {
+        bind() {
+          return { async all() { return { results: candidates }; } };
+        },
+      };
+    },
+  } as unknown as D1Database;
+}
+
 const env: SecCronEnv = {
-  DB: {} as D1Database,
   SEC_TRACKED_TICKERS: "MSFT,NOK",
   SEC_REFRESH_KEY: "refresh-key",
   SEC_ANALYSIS_WORKFLOW: workflowBinding(),
 };
-
-/** No network request is allowed for collection policy. */
 
 function workflowBinding(started: string[] = []): SecWorkflowBinding {
   return {
@@ -26,12 +37,71 @@ function workflowBinding(started: string[] = []): SecWorkflowBinding {
   };
 }
 
-test("loads the watchlist and starts one independent workflow per ticker", async () => {
+test("reads its own whitelist and starts one independent workflow per ticker", async () => {
   const started: string[] = [];
   const result = await runSecRefresh({ ...env, SEC_ANALYSIS_WORKFLOW: workflowBinding(started) }, 1_786_000_000_000);
 
   assert.deepEqual(result, { started: ["MSFT", "NOK"], failed: [] });
   assert.deepEqual(started, ["MSFT", "NOK"]);
+});
+
+test("starts one idempotent company analysis workflow for each backfill candidate", async () => {
+  const started: Array<{ id: string; ticker: string; triggerRef: string }> = [];
+  const result = await runCompanyAnalysisSweep({
+    ...env,
+    DB: companyAnalysisDb([{
+      ticker: "MSFT",
+      memoryJobId: "memory-job-1",
+      memoryVersion: 4,
+      periodId: "MSFT:2026-06-30:quarter",
+      reportDate: "2026-06-30",
+      triggerRef: "memory-job-1:4",
+    }]),
+    COMPANY_ANALYSIS_WORKFLOW: {
+      async create(options) {
+        started.push({ id: options.id, ticker: options.params.ticker, triggerRef: options.params.triggerRef });
+        return { id: options.id };
+      },
+    },
+  });
+
+  assert.deepEqual(result, { candidates: 1, started: ["MSFT"], failed: [] });
+  assert.equal(started[0]?.ticker, "MSFT");
+  assert.equal(started[0]?.triggerRef, "memory-job-1:4");
+  assert.match(started[0]?.id ?? "", /^company-/);
+});
+
+test("repeated force backfills share the recovery id until that attempt actually ends", async () => {
+  const ids: string[] = [];
+  const triggerRefs: string[] = [];
+  const analysisIds: Array<string | undefined> = [];
+  const sweepEnv = {
+    ...env,
+    DB: companyAnalysisDb([{
+      ticker: "MSFT",
+      analysisId: "company:MSFT:existing",
+      memoryJobId: "memory-job-1",
+      memoryVersion: 4,
+      periodId: "MSFT:2026-06-30:quarter",
+      reportDate: "2026-06-30",
+      triggerRef: "memory-job-1:4",
+    }]),
+    COMPANY_ANALYSIS_WORKFLOW: {
+      async create(options) {
+        ids.push(options.id);
+        triggerRefs.push(options.params.triggerRef);
+        analysisIds.push(options.params.analysisId);
+        return { id: options.id };
+      },
+    },
+  } as SecCronEnv;
+
+  await runCompanyAnalysisSweep(sweepEnv, { forceIncomplete: true });
+  await runCompanyAnalysisSweep(sweepEnv, { forceIncomplete: true });
+
+  assert.equal(new Set(ids).size, 1);
+  assert.deepEqual(triggerRefs, ["memory-job-1:4", "memory-job-1:4"]);
+  assert.deepEqual(analysisIds, ["company:MSFT:existing", "company:MSFT:existing"]);
 });
 
 test("continues starting remaining workflows after one failure", async () => {
@@ -78,4 +148,17 @@ test("creates a distinct workflow for each manual force refresh", async () => {
   await handleSecAnalysisRequest(request(), { ...env, SEC_ANALYSIS_WORKFLOW: binding }, 1_786_000_000_000);
 
   assert.equal(new Set(ids).size, 2);
+});
+
+test("fails the refresh when no workflow could be started at all", async () => {
+  const binding: SecWorkflowBinding = {
+    async create() {
+      throw new Error("workflow unavailable");
+    },
+  };
+
+  await assert.rejects(
+    runSecRefresh({ ...env, SEC_ANALYSIS_WORKFLOW: binding }, 1_786_000_000_000),
+    /started no workflows \(watchlist: 2, failed: 2\)/,
+  );
 });

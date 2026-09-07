@@ -1,8 +1,11 @@
-import { proxyAnalysisRequest } from "@/lib/web/analysis-client";
-import { hasSecAdminAccess } from "@/lib/web/admin-auth";
-export async function POST(request: Request) {
-  const { env } = await import("cloudflare:workers");
-  const token = (env as unknown as { SEC_ADMIN_TOKEN?: string }).SEC_ADMIN_TOKEN ?? "";
-  if (!await hasSecAdminAccess(request, token)) return Response.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
-  return proxyAnalysisRequest(request);
+import { hasSecAdminAccess, requestSecAnalysis } from "../../../../../../../lib/web/sec-api.ts";
+import { normalizeTrackedTicker } from "../../../../../../../lib/web/ticker.ts";
+import { getSecRuntimeConfig } from "../../../../../../../lib/web/sec-runtime.ts";
+
+export async function POST(request: Request, context: { params: Promise<{ ticker: string }> }) {
+  const runtime = await getSecRuntimeConfig();
+  if (!await hasSecAdminAccess(request, runtime.adminToken)) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const ticker = normalizeTrackedTicker((await context.params).ticker);
+  // The whitelist lives on the Pipeline Worker now; it re-checks this ticker before starting a run.
+  return requestSecAnalysis({ ticker, pipelineOrigin: runtime.pipelineOrigin, refreshKey: runtime.refreshKey, fetcher: runtime.pipelineFetch });
 }

@@ -30,7 +30,11 @@ export function checkSourceBoundary(file: string, source: string): string[] {
     ts.forEachChild(node, visit);
   }
   visit(ast);
-  if (pipeline && /WEB_APP_ORIGIN|\/api\/internal\//.test(source)) errors.push(`${file}: Pipeline retains a Web callback`);
+  const scanner = ts.createScanner(ts.ScriptTarget.Latest, true, ts.LanguageVariant.Standard, source);
+  const tokens: string[] = [];
+  while (scanner.scan() !== ts.SyntaxKind.EndOfFileToken) tokens.push(scanner.getTokenText());
+  const executable = tokens.join(" ");
+  if (pipeline && /WEB_APP_ORIGIN|\/api\/internal\//.test(executable)) errors.push(`${file}: Pipeline retains a Web callback`);
   if (contract && /\b(?:D1Database|D1PreparedStatement|Workflow|R2Bucket)\b/.test(source)) errors.push(`${file}: contract contains platform state`);
   return errors;
 }

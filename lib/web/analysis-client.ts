@@ -1,54 +1,113 @@
-import type { PublicFilingResponse } from "../../shared/analysis-contract/filings.ts";
+import type { PublicCompanyAnalysisResponse } from "../../shared/analysis-contract/company-analysis.ts";
+import { AnalysisRequestError, type AnalysisErrorBody, type AnalysisErrorCode } from "./analysis-errors.ts";
+import type { PublicFilingDetail, PublicFilingPage } from "../../shared/analysis-contract/filings.ts";
+import type { PublicFundamentalsResponse } from "../../shared/analysis-contract/fundamentals.ts";
 
-export type AnalysisTransport = {
-  binding?: { fetch(request: Request): Promise<Response> };
-  origin?: string;
+/**
+ * The lightweight client every caller of the analysis backend uses — the Web Worker over its
+ * Service Binding, and any other service over HTTPS. It is **server-only**: it carries a read
+ * credential, so it must never be imported into a browser bundle or a client component.
+ *
+ * It speaks plain HTTP rather than an RPC surface on purpose. The Service Binding already carries
+ * `fetch`, so the same request builder, the same handlers and the same response bodies serve both
+ * transports; adding an RPC API would have forked the business logic across two shapes, which is
+ * exactly what the refactor set out to avoid.
+ */
+export type AnalysisBackendClientOptions = {
+  /**
+   * Absolute origin for the backend. Over a Service Binding the hostname is ignored and only the
+   * path is honoured, so any syntactically valid origin works there; over HTTPS it must be real.
+   */
+  origin: string;
+  /** The read credential, `"<keyId>.<secret>"`. */
   token: string;
+  /** The Service Binding's `fetch` when one is bound, otherwise the global `fetch`. */
+  fetcher?: typeof fetch;
+  /** Per-request timeout. A backend that hangs must not hang the page that called it. */
+  timeoutMs?: number;
 };
 
-/** All service details stay here. Routes and components never import a Worker implementation. */
-export function createAnalysisClient(transport: AnalysisTransport) {
-  return {
-    async request(path: string, method: "GET" | "POST" = "GET"): Promise<Response> {
-      if (!path.startsWith("/api/v1/") || path.startsWith("//")) throw new Error("Invalid analysis API path");
-      if (!transport.token || (!transport.binding && !transport.origin)) return unavailable();
-      try {
-        const request = new Request(new URL(path, transport.binding ? "https://analysis.internal" : transport.origin), {
-          method,
-          headers: { "x-sec-refresh-key": transport.token },
-          signal: AbortSignal.timeout(15_000),
-        });
-        const response = transport.binding ? await transport.binding.fetch(request) : await fetch(request);
-        const headers = new Headers();
-        for (const name of ["content-type", "cache-control", "x-analysis-api-version", "x-company-analysis-schema"]) {
-          const value = response.headers.get(name);
-          if (value) headers.set(name, value);
-        }
-        headers.set("access-control-allow-origin", "*");
-        return new Response(response.body, { status: response.status, headers });
-      } catch { return unavailable(); }
-    },
-  };
+export type AnalysisBackendResponse<T> = {
+  status: number;
+  headers: Headers;
+  body: T;
+};
+
+export const ANALYSIS_CLIENT_DEFAULT_TIMEOUT_MS = 8_000;
+
+export class AnalysisBackendClient {
+  private readonly origin: string;
+  private readonly token: string;
+  private readonly fetcher: typeof fetch;
+  private readonly timeoutMs: number;
+
+  constructor(options: AnalysisBackendClientOptions) {
+    this.origin = options.origin.replace(/\/+$/, "");
+    this.token = options.token;
+    this.fetcher = options.fetcher ?? fetch;
+    this.timeoutMs = options.timeoutMs ?? ANALYSIS_CLIENT_DEFAULT_TIMEOUT_MS;
+  }
+
+  listFilings(ticker: string, query: { cursor?: string | null; limit?: string | null } = {}) {
+    const search = new URLSearchParams();
+    if (query.cursor) search.set("cursor", query.cursor);
+    if (query.limit) search.set("limit", query.limit);
+    return this.request<PublicFilingPage>(`/api/v1/companies/${encode(ticker)}/filings`, search);
+  }
+
+  getFiling(ticker: string, accession: string) {
+    return this.request<PublicFilingDetail>(`/api/v1/companies/${encode(ticker)}/filings/${encode(accession)}`);
+  }
+
+  getCompanyAnalysis(ticker: string) {
+    return this.request<PublicCompanyAnalysisResponse>(`/api/v1/companies/${encode(ticker)}/analysis`);
+  }
+
+  getFundamentals(ticker: string, query: { metrics?: string | null; periodCount?: string | null } = {}) {
+    const search = new URLSearchParams();
+    if (query.metrics !== null && query.metrics !== undefined) search.set("metrics", query.metrics);
+    if (query.periodCount !== null && query.periodCount !== undefined) search.set("periodCount", query.periodCount);
+    return this.request<PublicFundamentalsResponse>(`/api/v1/companies/${encode(ticker)}/fundamentals`, search);
+  }
+
+  /**
+   * Returns the response rather than throwing on a non-2xx, because the callers are proxies that
+   * have to reproduce the backend's status and body. Only transport-level failures throw, and they
+   * throw an `AnalysisRequestError` carrying `BACKEND_UNAVAILABLE` — never the underlying error,
+   * which can name internal hosts.
+   */
+  private async request<T>(path: string, search?: URLSearchParams): Promise<AnalysisBackendResponse<T | AnalysisErrorBody>> {
+    const query = search && [...search.keys()].length ? `?${search}` : "";
+    let response: Response;
+    try {
+      response = await this.fetcher(`${this.origin}${path}${query}`, {
+        method: "GET",
+        headers: { authorization: `Bearer ${this.token}`, accept: "application/json" },
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+    } catch {
+      throw new AnalysisRequestError("BACKEND_UNAVAILABLE", "The analysis backend is unreachable.");
+    }
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      throw new AnalysisRequestError("BACKEND_UNAVAILABLE", "The analysis backend returned an unreadable response.");
+    }
+    return { status: response.status, headers: response.headers, body: body as T | AnalysisErrorBody };
+  }
 }
 
-export async function getAnalysisClient() {
-  const { env } = await import("cloudflare:workers");
-  const values = env as unknown as { ANALYSIS_SERVICE?: AnalysisTransport["binding"]; SEC_PIPELINE_ORIGIN?: string; SEC_REFRESH_KEY?: string };
-  return createAnalysisClient({ binding: values.ANALYSIS_SERVICE, origin: values.SEC_PIPELINE_ORIGIN, token: values.SEC_REFRESH_KEY ?? "" });
+/** Narrows a client result to the error envelope. */
+export function isAnalysisErrorBody(body: unknown): body is AnalysisErrorBody {
+  return typeof body === "object" && body !== null && typeof (body as AnalysisErrorBody).code === "string"
+    && typeof (body as AnalysisErrorBody).error === "string";
 }
 
-export async function proxyAnalysisRequest(request: Request): Promise<Response> {
-  const url = new URL(request.url);
-  return (await getAnalysisClient()).request(url.pathname + url.search, request.method === "POST" ? "POST" : "GET");
+export function analysisErrorCodeOf(body: unknown): AnalysisErrorCode | null {
+  return isAnalysisErrorBody(body) ? body.code : null;
 }
 
-export async function getPublicFiling(ticker: string, accession: string): Promise<PublicFilingResponse | null> {
-  const response = await (await getAnalysisClient()).request(`/api/v1/companies/${encodeURIComponent(ticker)}/filings/${encodeURIComponent(accession)}`);
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error("财报分析服务暂时不可用。");
-  return response.json() as Promise<PublicFilingResponse>;
-}
-
-function unavailable() {
-  return Response.json({ error: "Analysis service unavailable", code: "UNAVAILABLE" }, { status: 503, headers: { "cache-control": "no-store" } });
+function encode(value: string): string {
+  return encodeURIComponent(value);
 }

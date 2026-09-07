@@ -116,11 +116,19 @@ export async function buildCompanyAnalysisPacket(input: {
   };
 }
 
-function resolveTargetPeriodEnd(observations: FundamentalCurrentObservation[], reportDate: string): string | null {
-  return observations.some((item) =>
-    item.periodEnd === reportDate && item.metricKey === "total_revenue" && item.periodType === "3M")
-    ? reportDate
-    : null;
+export function resolveTargetPeriodEnd(observations: FundamentalCurrentObservation[], reportDate: string): string | null {
+  const reportTime = Date.parse(`${reportDate}T00:00:00Z`);
+  if (!Number.isFinite(reportTime)) return null;
+  const maximumDrift = 7 * 24 * 60 * 60 * 1_000;
+  const candidates = observations
+    .filter((item) => item.metricKey === "total_revenue" && item.periodType === "3M")
+    .map((item) => ({
+      periodEnd: item.periodEnd,
+      drift: Math.abs(Date.parse(`${item.periodEnd}T00:00:00Z`) - reportTime),
+    }))
+    .filter((item) => Number.isFinite(item.drift) && item.drift <= maximumDrift)
+    .sort((left, right) => left.drift - right.drift || right.periodEnd.localeCompare(left.periodEnd));
+  return candidates[0]?.periodEnd ?? null;
 }
 
 function lastTwelveQuarters(observations: FundamentalCurrentObservation[], targetPeriodEnd: string): FundamentalCurrentObservation[] {

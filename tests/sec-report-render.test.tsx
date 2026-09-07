@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { SecReportDocument } from "../app/stocks/[ticker]/sec/[accession]/SecReportDocument";
+import { SecReportDocument } from "../app/stocks/[ticker]/sec/[accession]/SecReportDocument.tsx";
 import type { SecFilingWithSummary } from "../workers/pipeline/src/sec/sec.ts";
 
 test("renders the complete report, dynamic evidence, and analysis completeness", () => {

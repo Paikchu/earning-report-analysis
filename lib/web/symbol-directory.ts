@@ -103,19 +103,20 @@ export function parseSecurityTypes(value: string | null | undefined): readonly S
 export function searchSecurities(
   entries: SymbolDirectoryEntry[],
   rawQuery: string,
+  heldSymbols: Set<string>,
   limit = 10,
   types: readonly SecurityType[] = DEFAULT_SEARCH_TYPES,
-): SymbolDirectoryEntry[] {
+): Array<SymbolDirectoryEntry & { isHeld: boolean }> {
   const query = normalizeTicker(rawQuery);
   if (!query) return [];
   const allowedTypes = new Set(types);
   return entries
     .filter((entry) => allowedTypes.has(entry.type))
-    .map((entry) => ({ entry, rank: matchRank(entry, query) }))
+    .map((entry) => ({ entry, rank: matchRank(entry, query), isHeld: heldSymbols.has(entry.symbol) }))
     .filter((result) => result.rank < 9)
-    .sort((left, right) => left.rank - right.rank || left.entry.symbol.localeCompare(right.entry.symbol))
+    .sort((left, right) => Number(right.isHeld) - Number(left.isHeld) || left.rank - right.rank || left.entry.symbol.localeCompare(right.entry.symbol))
     .slice(0, limit)
-    .map(({ entry }) => entry);
+    .map(({ entry, isHeld }) => ({ ...entry, isHeld }));
 }
 
 function rows(contents: string): string[][] {

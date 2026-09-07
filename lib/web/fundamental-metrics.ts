@@ -286,6 +286,141 @@ export const FUNDAMENTAL_METRIC_CATALOG = {
     ],
     "colorRole": "ordinary-shares"
   },
+  "market_cap": {
+    "basis": "reported",
+    "label": "市值",
+    "shortLabel": "市值",
+    "category": "valuation",
+    "unitFamily": "currency",
+    "defaultMark": "bar",
+    "displaySign": "as_reported",
+    "allowedTransforms": [
+      "value",
+      "qoq_growth",
+      "yoy_growth"
+    ],
+    "colorRole": "market-cap"
+  },
+  "enterprise_value": {
+    "basis": "reported",
+    "label": "企业价值",
+    "shortLabel": "企业价值",
+    "category": "valuation",
+    "unitFamily": "currency",
+    "defaultMark": "bar",
+    "displaySign": "as_reported",
+    "allowedTransforms": [
+      "value",
+      "qoq_growth",
+      "yoy_growth"
+    ],
+    "colorRole": "enterprise-value"
+  },
+  "pe_ratio": {
+    "basis": "reported",
+    "label": "市盈率 TTM",
+    "shortLabel": "市盈率",
+    "category": "valuation",
+    "unitFamily": "multiple",
+    "defaultMark": "line",
+    "displaySign": "as_reported",
+    "allowedTransforms": [
+      "value",
+      "qoq_growth",
+      "yoy_growth"
+    ],
+    "colorRole": "pe-ratio"
+  },
+  "forward_pe_ratio": {
+    "basis": "reported",
+    "label": "预期市盈率",
+    "shortLabel": "预期 PE",
+    "category": "valuation",
+    "unitFamily": "multiple",
+    "defaultMark": "line",
+    "displaySign": "as_reported",
+    "allowedTransforms": [
+      "value",
+      "qoq_growth",
+      "yoy_growth"
+    ],
+    "colorRole": "forward-pe-ratio"
+  },
+  "peg_ratio": {
+    "basis": "reported",
+    "label": "PEG 五年预期",
+    "shortLabel": "PEG",
+    "category": "valuation",
+    "unitFamily": "multiple",
+    "defaultMark": "line",
+    "displaySign": "as_reported",
+    "allowedTransforms": [
+      "value",
+      "qoq_growth",
+      "yoy_growth"
+    ],
+    "colorRole": "peg-ratio"
+  },
+  "price_to_sales": {
+    "basis": "reported",
+    "label": "市销率",
+    "shortLabel": "市销率",
+    "category": "valuation",
+    "unitFamily": "multiple",
+    "defaultMark": "line",
+    "displaySign": "as_reported",
+    "allowedTransforms": [
+      "value",
+      "qoq_growth",
+      "yoy_growth"
+    ],
+    "colorRole": "price-to-sales"
+  },
+  "price_to_book": {
+    "basis": "reported",
+    "label": "市净率",
+    "shortLabel": "市净率",
+    "category": "valuation",
+    "unitFamily": "multiple",
+    "defaultMark": "line",
+    "displaySign": "as_reported",
+    "allowedTransforms": [
+      "value",
+      "qoq_growth",
+      "yoy_growth"
+    ],
+    "colorRole": "price-to-book"
+  },
+  "ev_to_revenue": {
+    "basis": "reported",
+    "label": "企业价值 / 收入",
+    "shortLabel": "EV/收入",
+    "category": "valuation",
+    "unitFamily": "multiple",
+    "defaultMark": "line",
+    "displaySign": "as_reported",
+    "allowedTransforms": [
+      "value",
+      "qoq_growth",
+      "yoy_growth"
+    ],
+    "colorRole": "ev-to-revenue"
+  },
+  "ev_to_ebitda": {
+    "basis": "reported",
+    "label": "企业价值 / EBITDA",
+    "shortLabel": "EV/EBITDA",
+    "category": "valuation",
+    "unitFamily": "multiple",
+    "defaultMark": "line",
+    "displaySign": "as_reported",
+    "allowedTransforms": [
+      "value",
+      "qoq_growth",
+      "yoy_growth"
+    ],
+    "colorRole": "ev-to-ebitda"
+  },
   "gross_margin": {
     "basis": "derived",
     "label": "毛利率",
@@ -329,4 +464,4 @@ export const FUNDAMENTAL_METRIC_CATALOG = {
     }
   }
 } as const;
-export function isFundamentalMetricKey(value: string): value is FundamentalMetricKey { return Object.hasOwn(FUNDAMENTAL_METRIC_CATALOG, value); }
+export function isFundamentalMetricKey(value: string): value is FundamentalMetricKey { return Object.hasOwn(FUNDAMENTAL_METRIC_CATALOG,value); }

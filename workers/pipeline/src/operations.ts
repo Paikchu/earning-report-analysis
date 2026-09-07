@@ -1,8 +1,3 @@
-import { storeSecFeed } from "./services/sec-feed.ts";
-import { updateSecJob } from "./services/sec-jobs.ts";
-import { resolveSecContext } from "./services/sec-context.ts";
-import { publishSecAnalysis } from "./services/sec-publish.ts";
-import { runCommand } from "./services/result.ts";
 import {
   analyzePreparedSecNode,
   buildPreparedSecBrief,
@@ -17,13 +12,15 @@ import {
   type PreparedSecFilingMeta,
   type SecModelCall,
 } from "./sec/pipeline.ts";
+import { D1SecRepository } from "./sec/d1.ts";
 import type { SecAnalysisArtifact } from "./sec/types.ts";
-import type { SecFilingSummary, SecNodePlan, SecNodeResult, SecNodeSpec } from "./sec/sec.ts";
+import { cleanSecAccession, cleanSecTicker, type SecFiling, type SecFilingFeed, type SecFilingSummary, type SecNodePlan, type SecNodeResult, type SecNodeSpec } from "./sec/sec.ts";
 import { SEC_ANALYSIS_SCHEMA_VERSION, type FilingBlock, type ManagerReview, type SecHistorySnapshot } from "./sec/analysis.ts";
 import { normalizeCompanyFacts } from "./sec/history.ts";
-import { type SecCronEnv } from "./core.ts";
+import { assertTrackedTicker, requireDb, type SecCronEnv } from "./core.ts";
+import type { AnalysisReadEnv } from "./read-api/router.ts";
 import type { SecModelExecution } from "./retry-policy.ts";
-import type { PreparedFilingReference, SecPipelineOperations } from "./workflow-core.ts";
+import type { PreparedFilingReference, SecPipelineOperations, WorkflowJobUpdate } from "./workflow-core.ts";
 import { jobAnalysisVersionFor } from "./workflow-core.ts";
 
 type R2ObjectLike = { text(): Promise<string> };
@@ -32,7 +29,7 @@ type R2BucketLike = {
   put(key: string, value: string, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
 };
 
-export type SecPipelineEnv = SecCronEnv & {
+export type SecPipelineEnv = SecCronEnv & AnalysisReadEnv & {
   SEC_FILINGS: R2BucketLike;
   SEC_USER_AGENT: string;
   AI_API_KEY?: string;
@@ -43,9 +40,6 @@ export type SecPipelineEnv = SecCronEnv & {
 
 const PUBLISH_BLOCK_CHUNK_SIZE = 40;
 
-/** Largest companyfacts payload we are willing to hold in memory while parsing. */
-const COMPANY_FACTS_MAX_BYTES = 20_000_000;
-
 /** Planning, review and synthesis carry the judgement; node extraction is mechanical. */
 const REASONING_STAGE = /^(manager|synthesis)/;
 
@@ -55,6 +49,7 @@ export function modelForStage(env: SecPipelineEnv, stage: string, override?: str
 }
 
 export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof fetch = fetch): SecPipelineOperations {
+  const repository = () => new D1SecRepository(requireDb(env));
   const modelFor = (execution?: SecModelExecution): SecModelCall => async (stage, system, payload) => {
     try {
       return await callWorkerSecModel(env, fetcher, stage, system, payload, modelForStage(env, stage, execution?.model));
@@ -66,22 +61,34 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
   };
   return {
     discover: (ticker) => discoverSecTicker(ticker, { userAgent: env.SEC_USER_AGENT, fetcher }),
-    publishFeed: (feed) => runCommand(storeSecFeed, env, { feed }).then(() => undefined),
+    publishFeed: async (feed) => {
+      const typedFeed = feed as SecFilingFeed;
+      const ticker = cleanSecTicker(typedFeed.ticker);
+      if (!ticker) throw new Error("SEC 索引数据无效。");
+      assertTrackedTicker(env, ticker);
+      const normalizedFeed = { ...typedFeed, ticker, filings: typedFeed.filings.map(toStoredFiling) };
+      const store = repository();
+      await store.setCache(`sec:filings:${ticker}`, normalizedFeed, typedFeed.fetchedAt ?? new Date().toISOString());
+      await Promise.all(normalizedFeed.filings.map((filing) => store.upsertFilingIndex(filing)));
+    },
     shouldAnalyze: async (filing, requestedBy) => {
       if (requestedBy === "manual") return true;
-      const result = await runCommand<{ status: "queued" | "running" | "complete" | "failed" | null }>(updateSecJob, env, {
-        lookup: {
-          ticker: filing.ticker,
-          accessionNumber: filing.accessionNumber,
-          analysisVersion: jobAnalysisVersionFor(filing.form),
-        },
-      });
-      return result.status === null || result.status === "failed";
+      const ticker = cleanSecTicker(filing.ticker);
+      if (!ticker) throw new Error("SEC 任务查询无效。");
+      assertTrackedTicker(env, ticker);
+      const status = await repository().getAnalysisJobStatus(ticker, filing.accessionNumber, jobAnalysisVersionFor(filing.form));
+      return status === null || status === "failed";
     },
     getContext: async (filing, reference) => {
       const history = reference ? await readHistory(env.SEC_FILINGS, reference) : EMPTY_HISTORY;
-      const response = await runCommand<{ context: Awaited<ReturnType<SecPipelineOperations["getContext"]>> }>(resolveSecContext, env, { filing, history });
-      return { ...response.context, history: response.context.history ?? history };
+      const ticker = cleanSecTicker(filing.ticker);
+      if (!ticker || !filing.accessionNumber) throw new Error("SEC filing 无效。");
+      assertTrackedTicker(env, ticker);
+      const normalizedFiling = { ...filing, ticker };
+      const store = repository();
+      await store.saveHistory(normalizedFiling, history);
+      const context = await store.getAnalysisContext(normalizedFiling);
+      return { ...context, history: context.history ?? history };
     },
     prepare: async (filing) => {
       const prepared = await prepareSecFiling(filing, { userAgent: env.SEC_USER_AGENT, fetcher });
@@ -139,24 +146,71 @@ export function createSecPipelineOperations(env: SecPipelineEnv, fetcher: typeof
       const prepared = await readPrepared(env.SEC_FILINGS, reference);
       const citedBlockIds = collectReferencedBlockIds(artifact);
       const citedBlocks = prepared.blocks.filter((block) => citedBlockIds.has(block.blockId));
+      const ticker = cleanSecTicker(artifact.filing.ticker);
+      const accessionNumber = cleanSecAccession(artifact.filing.accessionNumber);
+      if (!accessionNumber || !ticker) throw new Error("SEC 分析结果无效。");
+      assertTrackedTicker(env, ticker);
+      const store = repository();
+      const normalizedFiling = { ...artifact.filing, ticker, accessionNumber };
       for (const blocks of chunks(citedBlocks, PUBLISH_BLOCK_CHUNK_SIZE)) {
-        await runCommand(publishSecAnalysis, env, { filing: artifact.filing, blocks });
+        await store.saveFilingBlocks(normalizedFiling, blocks);
       }
-      return runCommand<{ memoryJobId?: string }>(publishSecAnalysis, env, {
-        artifact: { ...artifact, blocks: [] } satisfies SecAnalysisArtifact,
-        summary,
-      });
+      const normalizedArtifact = { ...artifact, filing: normalizedFiling };
+      await store.saveAnalysis(normalizedArtifact, false);
+      if (artifact.report.dataQuality.verificationStatus === "failed") return {};
+      if (!summary) throw new Error("SEC 最终发布缺少报告摘要。");
+      const memoryJobId = await store.commitFinalPublication(normalizedArtifact, summary);
+      return { memoryJobId };
     },
     enqueueMemory: async (jobId, ticker) => {
       if (!env.SEC_MEMORY_WORKFLOW) return;
       await env.SEC_MEMORY_WORKFLOW.create({ id: `memory-${crypto.randomUUID()}`, params: { jobId, ticker } });
     },
-    publishEvent: async (summary) => runCommand(publishSecAnalysis, env, { filing: summaryIdentity(summary), summary }).then(() => undefined),
-    updateJob: (job) => runCommand(updateSecJob, env, { job }).then(() => undefined),
+    publishEvent: async (summary) => {
+      const identity = summaryIdentity(summary);
+      const eventTicker = cleanSecTicker(identity.ticker);
+      const eventAccession = cleanSecAccession(identity.accessionNumber);
+      const validEvent = /^(8-K|6-K)(\/A)?$/.test(identity.form)
+        && Boolean(eventTicker)
+        && summary.source === "deepseek"
+        && summary.ticker === eventTicker
+        && summary.form === identity.form
+        && summary.accessionNumber === eventAccession;
+      if (!validEvent) throw new Error("SEC 事件简析无效。");
+      assertTrackedTicker(env, eventTicker);
+      await repository().setSummary(
+        { ticker: eventTicker, accessionNumber: eventAccession, form: identity.form },
+        { ...summary, ticker: eventTicker, accessionNumber: eventAccession },
+      );
+    },
+    updateJob: async (job: WorkflowJobUpdate) => {
+      const ticker = cleanSecTicker(job.ticker);
+      if (!ticker || !job.jobId || !job.accessionNumber) throw new Error("SEC 任务状态无效。");
+      assertTrackedTicker(env, ticker);
+      await repository().upsertAnalysisJob({ ...job, ticker });
+    },
   };
 }
 
 const EMPTY_HISTORY: SecHistorySnapshot = { registryVersion: "sec-canonical-series.v1", series: [] };
+
+function toStoredFiling(filing: SecFilingFeed["filings"][number]): SecFiling {
+  return {
+    ticker: filing.ticker,
+    cik: filing.cik,
+    cikNumber: filing.cikNumber,
+    companyName: filing.companyName,
+    form: filing.form,
+    filingDate: filing.filingDate,
+    reportDate: filing.reportDate,
+    accessionNumber: filing.accessionNumber,
+    primaryDocument: filing.primaryDocument,
+    description: filing.description,
+    items: filing.items,
+    documentUrl: filing.documentUrl,
+    indexUrl: filing.indexUrl,
+  };
+}
 
 async function readJson<T>(bucket: R2BucketLike, key: string): Promise<T> {
   const object = await bucket.get(key);
@@ -183,7 +237,6 @@ async function readPrepared(bucket: R2BucketLike, reference: PreparedFilingRefer
   ]);
   return { ...meta, document: body.document, blocks: body.blocks };
 }
-
 
 function preparedKey(ticker: string, accessionNumber: string) {
   return `filings/${ticker}/${accessionNumber}`;
@@ -234,46 +287,9 @@ async function fetchCompanyHistory(cik: string, ticker: string, userAgent: strin
     signal: AbortSignal.timeout(30_000),
   });
   if (!response.ok) throw new Error(`SEC Company Facts HTTP ${response.status}`);
-  return normalizeCompanyFacts(ticker, await readJsonWithinLimit(response, COMPANY_FACTS_MAX_BYTES));
-}
-
-/**
- * Reads a JSON body while counting the bytes actually received.
- *
- * The companyfacts endpoint commonly replies with a chunked encoding and therefore no
- * content-length header, so the header alone cannot bound the payload — trusting it let
- * a 40-100 MB document (routine for large caps) reach `response.json()` and exhaust the
- * 128 MB Worker heap. Counting the stream keeps the guard effective for both cases.
- */
-async function readJsonWithinLimit(response: Response, limit: number): Promise<unknown> {
-  const declared = Number(response.headers.get("content-length") ?? "");
-  if (Number.isFinite(declared) && declared > limit) {
-    throw new Error(`SEC Company Facts payload exceeds ${limit} bytes`);
-  }
-  if (!response.body) return response.json();
-
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > limit) throw new Error(`SEC Company Facts payload exceeds ${limit} bytes`);
-      chunks.push(value);
-    }
-  } finally {
-    await reader.cancel().catch(() => undefined);
-  }
-
-  const merged = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return JSON.parse(new TextDecoder().decode(merged));
+  const contentLength = Number(response.headers.get("content-length") ?? 0);
+  if (contentLength > 20_000_000) throw new Error("SEC Company Facts payload exceeds 20 MB");
+  return normalizeCompanyFacts(ticker, await response.json());
 }
 
 async function putArtifact(bucket: R2BucketLike, reference: PreparedFilingReference, name: string, value: unknown): Promise<string> {

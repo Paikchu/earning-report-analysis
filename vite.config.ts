@@ -20,6 +20,10 @@ export default defineConfig(async () => {
       : undefined,
     plugins: [
       vinext(),
+      // There used to be a `cloudflareArtifacts()` plugin here that copied the Web Worker's D1
+      // migrations into `dist/migrations`. The Web Worker has no D1 binding and no migrations any
+      // more — both belong to the analysis backend — so the plugin only produced an empty
+      // directory on every build, and it is gone.
       cloudflare({
         configPath: "workers/web/wrangler.jsonc",
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },

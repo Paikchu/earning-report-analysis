@@ -1,5 +1,3 @@
-import type { AnalysisFact, AnalysisClaim, ComparisonResult, PublishedSecReport } from "../../../../shared/analysis-contract/filings.ts";
-export type { AnalysisFact, AnalysisClaim, SecComparisonType, ComparisonResult, PublishedSecReport } from "../../../../shared/analysis-contract/filings.ts";
 export const SEC_ANALYSIS_SCHEMA_VERSION = "sec-analysis.v3";
 export const SEC_ANALYSIS_PROMPT_VERSION = "sec-analysis-prompt.v3";
 // One round, matching what the Manager Review prompt tells the model it gets. Raising this without
@@ -133,7 +131,7 @@ export type ManagerReview = {
   stopReason: "complete" | "max_rounds" | "no_progress" | "analysis_incomplete" | null;
 };
 
-
+export type SecComparisonType = "qoq" | "yoy" | "guidance_revision" | "disclosure_change";
 
 export function buildPeriodIdentity(ticker: string, form: string, reportDate: string): { periodId: string; periodScope: "quarter" | "annual" } {
   const periodScope = form.startsWith("10-K") || form.startsWith("20-F") ? "annual" : "quarter";
@@ -164,9 +162,32 @@ export type FilingBlock = {
   exhibitType?: string;
 };
 
+export type AnalysisFact = {
+  factId?: string;
+  metricKey: string;
+  value: string;
+  unit: string;
+  currency?: string;
+  periodScope?: string;
+  basis: "gaap" | "non_gaap" | "management_kpi" | "derived" | "unknown";
+  evidenceIds: string[];
+  confidence: "high" | "medium" | "low";
+  sourceLabel: "fact_source_reported" | "management_adjusted" | "derived_calculation" | "unknown";
+  definitionHash?: string;
+};
 
-
-
+export type AnalysisClaim = {
+  claimId?: string;
+  topicKey: string;
+  claimType: "driver" | "guidance" | "risk" | "one_off" | "accounting" | "commitment" | "tone";
+  statement: string;
+  direction: "positive" | "negative" | "mixed" | "neutral" | "unknown";
+  horizon: "current" | "next_period" | "longer_term" | "unknown";
+  materialityScore: number;
+  confidence: "high" | "medium" | "low";
+  evidenceIds: string[];
+  targetPeriodId?: string;
+};
 
 export type MemoryCandidate = AnalysisClaim & {
   memoryType: "guidance" | "risk" | "commitment" | "definition" | "driver" | "one_off";
@@ -174,9 +195,61 @@ export type MemoryCandidate = AnalysisClaim & {
   expectedResolutionPeriod?: string;
 };
 
+export type ComparisonResult = {
+  comparisonType: SecComparisonType;
+  currentPeriodId: string;
+  priorPeriodId: string;
+  comparability: "full" | "partial" | "not_comparable";
+  metricDeltas: Array<{
+    metricKey: string;
+    currentValue: string;
+    priorValue: string;
+    absoluteDelta?: string;
+    percentageDelta?: string;
+    /** Set for ratio-unit series only, as the fraction the ratio moved. See `pointDelta`. */
+    percentagePointDelta?: string;
+    reason?: string;
+  }>;
+  narrativeDeltas: Array<{
+    topicKey: string;
+    changeType: "introduced" | "reaffirmed" | "strengthened" | "weakened" | "withdrawn" | "resolved" | "not_mentioned";
+    currentStatement?: string;
+    priorStatement?: string;
+    evidenceIds: string[];
+    materialityScore: number;
+  }>;
+};
 
-
-
+export type PublishedSecReport = {
+  ticker: string;
+  periodId: string;
+  reportVersion: string;
+  headline: string;
+  keyMetrics: Array<{
+    metricKey: string;
+    currentValue: string;
+    qoq?: string;
+    yoy?: string;
+    status: "verified" | "derived" | "not_comparable" | "not_disclosed";
+    evidenceIds: string[];
+  }>;
+  changes: {
+    qoq: ComparisonResult["narrativeDeltas"];
+    yoy: ComparisonResult["narrativeDeltas"];
+    guidance: AnalysisClaim[];
+    risks: AnalysisClaim[];
+  };
+  dataQuality: {
+    coverage: number;
+    verificationStatus: "verified" | "partial" | "failed";
+    warnings: string[];
+    analysisStatus?: "complete" | "partial";
+    unresolvedQuestions?: string[];
+    failedNodeIds?: string[];
+    stopReason?: ManagerReview["stopReason"];
+    managerCoverageScore?: number;
+  };
+};
 
 export const SEC_CURRENT_PERIOD_TOLERANCE_DAYS = 10;
 
