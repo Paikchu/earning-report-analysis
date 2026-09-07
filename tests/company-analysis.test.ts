@@ -20,7 +20,7 @@ import { D1CompanyAnalysisRepository } from "../workers/pipeline/src/company-ana
 import type { FundamentalCurrentObservation } from "../workers/pipeline/src/fundamentals/fundamentals-d1.ts";
 import { applySqlMigration, SqliteD1Database } from "./helpers/sqlite-d1.ts";
 import { COMPANY_AGENT_MODEL_STEP_CONFIG } from "../workers/pipeline/src/company-analysis-workflow.ts";
-import { runCompanyAnalysisAgent } from "../workers/pipeline/src/company-analysis-agent.ts";
+import { COMPANY_TRAJECTORY_KEYS, runCompanyAnalysisAgent } from "../workers/pipeline/src/company-analysis-agent.ts";
 import type { SecPipelineEnv } from "../workers/pipeline/src/operations.ts";
 
 const generatedAt = "2026-09-03T08:00:00.000Z";
@@ -278,18 +278,21 @@ test("checkpoints one Agent's turns and retries invalid decisions inside the mod
     targetPeriodEnd: "2026-03-31", memoryVersion: 1, fundamentalsDataVersion: "test-version",
     ready: true, reason: null, features, currentMemory: [], historicalMemory: [], priorConclusion: null,
   };
-  const keys = ["business_stability", "earning_power", "balance_sheet", "cash_quality", "valuation_readiness"];
+  const keys = [...COMPANY_TRAJECTORY_KEYS];
   const decision = {
-    headline: "业务保持韧性", thesis: "当前证据支持继续观察业务质量。",
-    internalPillars: keys.map((key) => ({
-      key, state: "watch", claim: "仍需跨期验证。", evidenceRefs: [evidenceRef],
-      falsifier: "后续需求持续减弱。", nextCheck: "观察下一季度经营表现。",
+    headline: "扩张的约束从需求转向交付", thesis: "未来四个季度的路径由建设节奏决定。",
+    internalTrajectories: keys.map((key) => ({
+      key, trajectory: "inflecting", horizon: "next_4_quarters",
+      mechanism: "新增产能转固后折旧上台阶，抵消收入增长带来的杠杆。",
+      claim: "利润率先降后升。", evidenceRefs: [evidenceRef],
+      falsifier: "折旧摊销占收入比重不再上升。", nextCheck: "观察下一季度折旧摊销占比。",
     })),
     selectedEvidenceRefs: [evidenceRef],
   };
   const responses = [
     { summary: "本季经营保持稳定。", drivers: [{ statement: "需求支撑经营。", evidenceRefs: [evidenceRef] }], risks: [], unresolved: [] },
-    { action: "finalize", decision: { ...decision, internalPillars: [] } },
+    // Rejected inside the model step and retried: an axis set that covers nothing.
+    { action: "finalize", decision: { ...decision, internalTrajectories: [] } },
     { action: "finalize", decision },
     // Three judgments, not four: the editorial turn's own count has to survive to the publication.
     {
@@ -320,8 +323,15 @@ test("checkpoints one Agent's turns and retries invalid decisions inside the mod
   });
   assert.deepEqual(stages, ["current-quarter", "cross-period-round-01", "editorial"]);
   assert.equal(payloads.length, 4);
-  const schema = payloads[1]!.outputSchema as { decision: { internalPillars: Array<{ key: string }> } };
-  assert.deepEqual(schema.decision.internalPillars.map((pillar) => pillar.key), keys);
+  const schema = payloads[1]!.outputSchema as { decision: { internalTrajectories: Array<{ key: string; mechanism: string }> } };
+  assert.deepEqual(schema.decision.internalTrajectories.map((axis) => axis.key), keys);
+  // The axes are asked for as trajectories with a mechanism, not as present-tense quality states.
+  assert.match(schema.decision.internalTrajectories[0]!.mechanism, /causal chain/);
+  const crossPeriod = systemPrompts[1]!;
+  assert.match(crossPeriod, /Decide where this business is heading/);
+  assert.match(crossPeriod, /direction of travel, not a verdict on current quality/);
+  assert.match(crossPeriod, /must name the mechanism that moves it/);
+  assert.doesNotMatch(crossPeriod, /valuation_readiness/);
   assert.equal(result.overview.highlights.length, 3);
   // The model is told the range in both halves of the turn it has to satisfy, and told nothing
   // that contradicts it — a prompt still asking for four would quietly restore the fixed count.
@@ -465,4 +475,75 @@ test("a judgment carries the observation that would overturn it, bounded and opt
   assert.equal(normalized.highlights[0]!.watchFor, "下季资本开支是否回落至折旧水平以下。");
   // Absent rather than empty, like blocks: an overview written before this reads identically.
   assert.equal("watchFor" in normalized.highlights[1]!, false);
+});
+
+/**
+ * The guard that keeps unsupported forward claims out of the decision. An axis that asserts a
+ * direction has to say what moves it, over what period, on what evidence. An axis that admits it
+ * could not be assessed is held to none of that — the prompt asks for an honest unobserved, so
+ * validation must not make it the expensive answer.
+ */
+test("an axis claiming a direction must carry mechanism, horizon and evidence; an unobserved one need not", async () => {
+  const features = buildCompanyFeaturePack({
+    source: "yahoo_finance", ticker: "AMZN", targetPeriodEnd: "2026-03-31",
+    observations: [observation("2026-03-31", "total_revenue", "100")],
+  });
+  const evidenceRef = features.features[0]!.featureRef;
+  const packet: CompanyAnalysisPacket = {
+    ticker: "AMZN", periodId: "AMZN:2026-03-31:quarter", reportDate: "2026-03-31",
+    targetPeriodEnd: "2026-03-31", memoryVersion: 1, fundamentalsDataVersion: "test-version",
+    ready: true, reason: null, features, currentMemory: [], historicalMemory: [], priorConclusion: null,
+  };
+  const axis = (key: string) => ({
+    key, trajectory: "improving", horizon: "next_4_quarters",
+    mechanism: "产能转固推高折旧基数。", claim: "利润率先降后升。", evidenceRefs: [evidenceRef],
+    falsifier: "折旧占比停止上升。", nextCheck: "观察下季折旧占比。",
+  });
+  const decisionWhere = (mutate: (value: Record<string, unknown>) => Record<string, unknown>) => ({
+    headline: "扩张的约束从需求转向交付", thesis: "未来四个季度由建设节奏决定。",
+    internalTrajectories: COMPANY_TRAJECTORY_KEYS.map((key, index) => index === 0 ? mutate(axis(key)) : axis(key)),
+    selectedEvidenceRefs: [evidenceRef],
+  });
+
+  const without = (value: Record<string, unknown>, field: string) => {
+    const copy = { ...value };
+    delete copy[field];
+    return copy;
+  };
+  const rejected = [
+    (value: Record<string, unknown>) => without(value, "mechanism"),
+    (value: Record<string, unknown>) => ({ ...value, horizon: "unobserved" }),
+    (value: Record<string, unknown>) => ({ ...value, evidenceRefs: [] }),
+  ];
+  // Accepted with no mechanism, no horizon, no evidence — only what would make it assessable.
+  const honestUnobserved = (value: Record<string, unknown>) => ({
+    key: value.key, trajectory: "unobserved", horizon: "unobserved", nextCheck: "需要估值口径数据才能评估。",
+  });
+
+  const responses: unknown[] = [
+    { summary: "本季经营保持稳定。", drivers: [{ statement: "需求支撑经营。", evidenceRefs: [evidenceRef] }], risks: [], unresolved: [] },
+    ...rejected.map((mutate) => ({ action: "finalize", decision: decisionWhere(mutate) })),
+    { action: "finalize", decision: decisionWhere(honestUnobserved) },
+    { ...overview(["判断一", "判断二"]), highlights: overview(["判断一", "判断二"]).highlights.map((highlight) => ({ ...highlight, evidenceRefs: [evidenceRef] })) },
+  ];
+  let attempts = 0;
+  const fetcher: typeof fetch = async () => Response.json({ choices: [{ message: { content: JSON.stringify(responses.shift()) } }] });
+  const result = await runCompanyAnalysisAgent({
+    env: { AI_API_KEY: "test-key" } as SecPipelineEnv,
+    fetcher, currentPacket: packet, crossPeriodPacket: packet,
+    analysisId: "company:AMZN:axes", generatedAt,
+    runStage: async (stage, callback) => {
+      if (stage !== "cross-period-round-01") return callback();
+      for (;;) {
+        attempts += 1;
+        try { return await callback(); } catch (error) { if (attempts > rejected.length) throw error; }
+      }
+    },
+  });
+  // Every malformed claim was rejected, and the run only settled on the one that was honest.
+  assert.equal(attempts, rejected.length + 1);
+  const first = result.decision.internalTrajectories[0]!;
+  assert.equal(first.trajectory, "unobserved");
+  assert.equal(first.mechanism, "");
+  assert.equal(result.decision.internalTrajectories.length, COMPANY_TRAJECTORY_KEYS.length);
 });

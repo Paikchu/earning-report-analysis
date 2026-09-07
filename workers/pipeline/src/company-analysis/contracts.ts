@@ -19,7 +19,7 @@ export const COMPANY_ANALYSIS_SCHEMA_VERSION = "company-analysis.v1";
  * run's input hash, so a company already analysed under the previous label would otherwise be
  * deduplicated against that publication and never see the new prompt's output at all.
  */
-export const COMPANY_ANALYSIS_PROMPT_VERSION = "company-analysis-skill.v5";
+export const COMPANY_ANALYSIS_PROMPT_VERSION = "company-analysis-skill.v6";
 
 export type CompanyAnalysisRunStatus =
   | "waiting_fundamentals"

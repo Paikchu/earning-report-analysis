@@ -20,12 +20,47 @@ export type QuarterDiagnostic = {
   unresolved: string[];
 };
 
+/**
+ * The five axes the reasoning phase must cover.
+ *
+ * They are a coverage discipline, not a report outline: the phase returns all five and marks what
+ * it could not observe, so a run cannot answer the interesting questions and quietly skip the
+ * balance sheet.
+ *
+ * They replace the quality pillars this phase used to score. `valuation_readiness` is gone because
+ * it had no evidence to stand on — the feature pack carries no valuation metrics, so it resolved to
+ * `unobserved` every run and surfaced in published copy as 「估值证据完全缺失」. In its place,
+ * `reinvestment_efficiency` asks what today's capital spending turns into, which the feature pack
+ * can actually answer and which is the question a forward view turns on. `demand_and_position`
+ * carries the industry: where demand is going and whether this company's position in it is holding.
+ */
+export const COMPANY_TRAJECTORY_KEYS = [
+  "demand_and_position",
+  "earning_power",
+  "reinvestment_efficiency",
+  "cash_generation",
+  "balance_sheet_capacity",
+] as const;
+
+/** Direction of travel, not present quality. `inflecting` is a turn the evidence already shows. */
+export const COMPANY_TRAJECTORY_STATES = ["improving", "stable", "deteriorating", "inflecting", "unobserved"] as const;
+
+/** A forward claim without a time frame cannot be checked, so the horizon is part of the claim. */
+export const COMPANY_TRAJECTORY_HORIZONS = ["next_1_2_quarters", "next_4_quarters", "multi_year", "unobserved"] as const;
+
 export type CompanyAnalysisDecision = {
   headline: string;
   thesis: string;
-  internalPillars: Array<{
-    key: "business_stability" | "earning_power" | "balance_sheet" | "cash_quality" | "valuation_readiness";
-    state: "strengthening" | "intact" | "watch" | "impaired" | "unobserved";
+  internalTrajectories: Array<{
+    key: (typeof COMPANY_TRAJECTORY_KEYS)[number];
+    trajectory: (typeof COMPANY_TRAJECTORY_STATES)[number];
+    horizon: (typeof COMPANY_TRAJECTORY_HORIZONS)[number];
+    /**
+     * The causal chain that moves this axis. What separates a forward judgment from an extrapolated
+     * line: a claim carrying a mechanism has to survive being asked why, and one without it is a
+     * trend drawn forward.
+     */
+    mechanism: string;
     claim: string;
     evidenceRefs: string[];
     falsifier: string;
@@ -178,12 +213,15 @@ function currentQuarterPrompt(): string {
 function crossPeriodPrompt(round: number): string {
   return [
     "You are the cross-period phase of the same company-analysis Agent.",
-    "Decide whether the evidence is enough. You may inspect named Memory items or finalize; no other action exists.",
-    "The five internal pillars are reasoning constraints, never the public report outline.",
-    "Return exactly these five pillar keys: business_stability, earning_power, balance_sheet, cash_quality, valuation_readiness.",
-    "Each pillar state must be exactly one of strengthening, intact, watch, impaired, unobserved; never translate these keys or states.",
-    "Fixed Buffett thresholds are references, not universal scores. Mark unavailable evidence unobserved.",
-    "Every pillar claim must be falsifiable and cite supplied featureRef or Memory evidenceIds.",
+    "Decide where this business is heading and whether the evidence is enough to say so. You may inspect named Memory items or finalize; no other action exists.",
+    "The five internal axes are reasoning constraints, never the public report outline.",
+    `Return exactly these five axis keys: ${COMPANY_TRAJECTORY_KEYS.join(", ")}.`,
+    `Each trajectory must be exactly one of ${COMPANY_TRAJECTORY_STATES.join(", ")}, and each horizon exactly one of ${COMPANY_TRAJECTORY_HORIZONS.join(", ")}; never translate these keys or values.`,
+    "A trajectory is a direction of travel, not a verdict on current quality. Ask what changes over the horizon and why, not how good the axis looks today.",
+    "Every axis must name the mechanism that moves it — the causal chain, not the trend line. 「收入增长所以利润率扩张」 restates a number; 「利润率扩张会持续到新增产能转固，届时折旧反转它」 is a mechanism.",
+    "Quality thresholds describe where an axis stands today. That is the starting point of a trajectory, never the judgment itself.",
+    "Mark an axis unobserved when the supplied evidence cannot carry a forward claim. An honest unobserved is worth more than a claim the evidence does not support, and it never reaches public copy.",
+    "Every axis claim must be falsifiable and cite supplied featureRef or Memory evidenceIds.",
     round === 4 ? "This is the last round. You must finalize or fail." : "Request only Memory items material to the unresolved decision.",
     "Return one JSON object only.",
   ].join("\n");
@@ -192,7 +230,7 @@ function crossPeriodPrompt(round: number): string {
 function editorialPrompt(): string {
   return [
     "You are the editorial phase of the same company-analysis Agent.",
-    "The decision is locked. Do not add evidence, alter pillar states, or invent numbers.",
+    "The decision is locked. Do not add evidence, alter any trajectory, or invent numbers.",
 
     // What this section is for. Everything below follows from it: the reasoning phases look
     // backwards because that is where evidence lives, but the reader is here for what comes next.
@@ -205,13 +243,15 @@ function editorialPrompt(): string {
     "Choose how many the decision earns: as many as it supports and no more. Never pad to a count, never split one judgment in two, never merge two to fit.",
     "Order them by importance — a run that exceeds the maximum is truncated from the end.",
     "Title each highlight yourself. A title states the forward judgment, not the topic: prefer 「资本开支高峰将在两到三个季度内压制利润率」 over 「资本开支」 or 「利润率承压」.",
-    "Give each highlight a watchFor: the one observation that would confirm or overturn it. Take it from that pillar's falsifier or nextCheck, and write it as something a reader could actually check next period — not as a restatement of the judgment.",
+    "Give each highlight a watchFor: the one observation that would confirm or overturn it. Take it from that axis's falsifier or nextCheck, and write it as something a reader could actually check next period — not as a restatement of the judgment.",
 
     // The two ways this section drifts back into a quarter recap, both observed in published copy.
     "Never write about the sufficiency of your own evidence. A reader wants the judgment, or the honest absence of one, never a report on how much was observable.",
     "An industry-level judgment is in scope when the locked decision supports it. A judgment that is true of the whole sector and says nothing about this company is not.",
 
-    "Do not write a full report or source-label prose. Do not expose pillar names, scores, confidence badges, feature IDs, Memory IDs, or repeated revenue/gross-margin cards in public copy.",
+    "Build each highlight on one axis's mechanism, and say what it implies. A highlight that restates an axis claim has added nothing the decision did not already hold.",
+    "An axis marked unobserved supports no highlight. Leave it out silently; never write that it could not be assessed.",
+    "Do not write a full report or source-label prose. Do not expose axis keys, trajectory or horizon values, scores, confidence badges, feature IDs, Memory IDs, or repeated revenue/gross-margin cards in public copy.",
     "Numbers may appear only when an approved Yahoo feature is indispensable to the explanation.",
     "A highlight may add blocks under its body when prose alone reads worse: a list where the prose would enumerate, a callout for a condition that interrupts the argument, a chart where the point is a trend the reader should extrapolate. Most highlights need none — add one only when it replaces prose rather than repeating it.",
     "A chart names series from the supplied chartMetricKeys and nothing else. Never write data points; the page draws them from verified fundamentals.",
@@ -228,12 +268,14 @@ function blockVocabulary(): Record<string, string> {
 
 function decisionSchema() {
   return {
-    headline: "string",
-    thesis: "string",
-    internalPillars: ["business_stability", "earning_power", "balance_sheet", "cash_quality", "valuation_readiness"].map((key) => ({
+    headline: "string stating where this business is heading and what that turns on",
+    thesis: "string arguing that direction from the axes below",
+    internalTrajectories: COMPANY_TRAJECTORY_KEYS.map((key) => ({
       key,
-      state: "strengthening|intact|watch|impaired|unobserved",
-      claim: "string",
+      trajectory: COMPANY_TRAJECTORY_STATES.join("|"),
+      horizon: COMPANY_TRAJECTORY_HORIZONS.join("|"),
+      mechanism: "string naming the causal chain that moves this axis over the horizon",
+      claim: "string stating what will be true over that horizon",
       evidenceRefs: "string[] containing supplied featureRef or Memory evidenceIds",
       falsifier: "string describing what would invalidate this claim",
       nextCheck: "string describing what to verify next",
@@ -277,30 +319,39 @@ function normalizeAction(
   }
   if (item?.action !== "finalize") throw new Error("Agent must return inspect_memory or finalize.");
   const root = record(item.decision);
-  const allowedKeys = ["business_stability", "earning_power", "balance_sheet", "cash_quality", "valuation_readiness"] as const;
-  const pillars = Array.isArray(root?.internalPillars) ? root.internalPillars.flatMap((raw) => {
-    const pillar = record(raw);
-    const key = allowedKeys.find((candidate) => candidate === pillar?.key);
-    const states = ["strengthening", "intact", "watch", "impaired", "unobserved"] as const;
-    const state = states.find((candidate) => candidate === pillar?.state);
-    const claim = string(pillar?.claim, 1_000);
-    const evidenceRefs = refs(pillar?.evidenceRefs, allowed);
-    const falsifier = string(pillar?.falsifier, 500);
-    const nextCheck = string(pillar?.nextCheck, 500);
-    return key && state && claim && falsifier && nextCheck && (state === "unobserved" || evidenceRefs.length)
-      ? [{ key, state, claim, evidenceRefs, falsifier, nextCheck }]
-      : [];
+  type Trajectory = CompanyAnalysisDecision["internalTrajectories"][number];
+  const trajectories = Array.isArray(root?.internalTrajectories) ? root.internalTrajectories.flatMap((raw): Trajectory[] => {
+    const axis = record(raw);
+    const key = COMPANY_TRAJECTORY_KEYS.find((candidate) => candidate === axis?.key);
+    const trajectory = COMPANY_TRAJECTORY_STATES.find((candidate) => candidate === axis?.trajectory);
+    const horizon = COMPANY_TRAJECTORY_HORIZONS.find((candidate) => candidate === axis?.horizon);
+    const mechanism = string(axis?.mechanism, 800);
+    const claim = string(axis?.claim, 1_000);
+    const evidenceRefs = refs(axis?.evidenceRefs, allowed);
+    const falsifier = string(axis?.falsifier, 500);
+    const nextCheck = string(axis?.nextCheck, 500);
+    // `nextCheck` is asked of every axis, including one that could not be assessed: there, it is
+    // what would make it assessable. The rest is required only of an axis making a claim — demanding
+    // a mechanism for something the evidence could not show would push the model to invent one, or
+    // to drop the axis and fail the five-axis coverage check. Both are worse than an honest
+    // unobserved, which the prompt asks for and this must not punish.
+    if (!key || !trajectory || !horizon || !nextCheck) return [];
+    if (trajectory === "unobserved") {
+      return [{ key, trajectory, horizon: "unobserved", mechanism, claim, evidenceRefs, falsifier, nextCheck }];
+    }
+    if (!mechanism || !claim || !falsifier || !evidenceRefs.length || horizon === "unobserved") return [];
+    return [{ key, trajectory, horizon, mechanism, claim, evidenceRefs, falsifier, nextCheck }];
   }) : [];
-  const byKey = new Map(pillars.map((pillar) => [pillar.key, pillar]));
-  const internalPillars = allowedKeys.map((key) => byKey.get(key)).filter(Boolean) as CompanyAnalysisDecision["internalPillars"];
+  const byKey = new Map(trajectories.map((axis) => [axis.key, axis]));
+  const internalTrajectories = COMPANY_TRAJECTORY_KEYS.map((key) => byKey.get(key)).filter(Boolean) as CompanyAnalysisDecision["internalTrajectories"];
   const selectedEvidenceRefs = refs(root?.selectedEvidenceRefs, allowed);
   const decision = {
     headline: string(root?.headline, 180),
     thesis: string(root?.thesis, 1_800),
-    internalPillars,
+    internalTrajectories,
     selectedEvidenceRefs,
   };
-  if (!decision.headline || !decision.thesis || internalPillars.length !== 5 || !selectedEvidenceRefs.length) {
+  if (!decision.headline || !decision.thesis || internalTrajectories.length !== COMPANY_TRAJECTORY_KEYS.length || !selectedEvidenceRefs.length) {
     throw new Error("Company analysis decision is invalid.");
   }
   return { action: "finalize", decision };
