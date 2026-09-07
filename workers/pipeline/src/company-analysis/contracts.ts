@@ -1,11 +1,12 @@
-import type { CompanyAnalysisCoverageStatus, CompanyAnalysisHighlight, CompanyAnalysisOverview, PublicCompanyAnalysisResponse } from "../../../../shared/analysis-contract/company-analysis.ts";
+import { COMPANY_ANALYSIS_MAX_HIGHLIGHTS, COMPANY_ANALYSIS_MIN_HIGHLIGHTS } from "../../../../shared/analysis-contract/company-analysis.ts";
+import type { CompanyAnalysisCoverageStatus, CompanyAnalysisOverview, PublicCompanyAnalysisResponse } from "../../../../shared/analysis-contract/company-analysis.ts";
 export type { CompanyAnalysisCoverageStatus, CompanyAnalysisHighlight, CompanyAnalysisOverview, PublicCompanyAnalysisResponse } from "../../../../shared/analysis-contract/company-analysis.ts";
 import { normalizeTrackedTicker } from "../sec/config.ts";
 import type { AnalysisRunSummary } from "../../../../shared/analysis-contract/filings.ts";
 import { ANALYSIS_API_SCHEMA_VERSION } from "../read-api/contract-support/versions.ts";
 
 export const COMPANY_ANALYSIS_SCHEMA_VERSION = "company-analysis.v1";
-export const COMPANY_ANALYSIS_PROMPT_VERSION = "company-analysis-skill.v2";
+export const COMPANY_ANALYSIS_PROMPT_VERSION = "company-analysis-skill.v3";
 
 export type CompanyAnalysisRunStatus =
   | "waiting_fundamentals"
@@ -145,20 +146,25 @@ export function normalizeCompanyAnalysisOverview(value: unknown): CompanyAnalysi
   const label = bounded(item?.label, 80);
   const headline = bounded(item?.headline, 180);
   const introduction = bounded(item?.introduction, 1_200);
-  const highlights = Array.isArray(item?.highlights) ? item.highlights.map((raw, index) => {
-    const highlight = record(raw);
-    return {
-      ordinal: String(index + 1).padStart(2, "0") as CompanyAnalysisHighlight["ordinal"],
-      title: bounded(highlight?.title, 100),
-      body: bounded(highlight?.body, 700),
-      evidenceRefs: strings(highlight?.evidenceRefs, 16, 240),
-    };
-  }) : [];
-  if (!label || !headline || !introduction || highlights.length !== 4 || highlights.some((highlight) =>
-    !highlight.title || !highlight.body || !highlight.evidenceRefs.length)) {
-    throw new CompanyAnalysisValidationError("Company analysis overview must contain one headline, one introduction, and exactly four evidence-backed highlights.");
+  // A generation that runs long is trimmed rather than rejected: the judgments are ordered by
+  // importance, so the tail is what the editorial phase itself ranked least worth saying.
+  const highlights = (Array.isArray(item?.highlights) ? item.highlights : [])
+    .slice(0, COMPANY_ANALYSIS_MAX_HIGHLIGHTS)
+    .map((raw, index) => {
+      const highlight = record(raw);
+      return {
+        ordinal: String(index + 1).padStart(2, "0"),
+        title: bounded(highlight?.title, 100),
+        body: bounded(highlight?.body, 700),
+        evidenceRefs: strings(highlight?.evidenceRefs, 16, 240),
+      };
+    });
+  if (!label || !headline || !introduction
+    || highlights.length < COMPANY_ANALYSIS_MIN_HIGHLIGHTS
+    || highlights.some((highlight) => !highlight.title || !highlight.body || !highlight.evidenceRefs.length)) {
+    throw new CompanyAnalysisValidationError(`Company analysis overview must contain one headline, one introduction, and at least ${COMPANY_ANALYSIS_MIN_HIGHLIGHTS} evidence-backed highlights.`);
   }
-  return { label, headline, introduction, highlights: highlights as CompanyAnalysisOverview["highlights"] };
+  return { label, headline, introduction, highlights };
 }
 
 function record(value: unknown): Record<string, unknown> | null {

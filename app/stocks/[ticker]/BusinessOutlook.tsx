@@ -70,23 +70,35 @@ function BusinessOutlookContent({ ticker }: { ticker: string }) {
         <span className="stock-outlook__eyebrow" id="stock-outlook-heading">{overview.label}</span>
         <span>{analysis.period?.label}</span>
       </div>
-      <h2 className="stock-outlook__headline">{overview.headline}</h2>
+      <h2 className="stock-outlook__headline" data-length={headlineLength(overview.headline)}>{overview.headline}</h2>
       <OutlookParagraph key={overview.introduction} className="stock-outlook__lede" text={overview.introduction} label="背景说明" />
       {companyAnalysisNotice(analysis.latestRun, true) && <p className="stock-outlook__updating" role="status">{companyAnalysisNotice(analysis.latestRun, true)}</p>}
 
-      <ol className="stock-outlook__clues" aria-label="本次最重要的四项判断">
+      <ol className="stock-outlook__clues" aria-label={`本次最重要的 ${overview.highlights.length} 项判断`}>
         {overview.highlights.map((highlight) => (
+          // Title and body are direct children so a two-column row can align them through subgrid:
+          // a judgment whose title runs to two lines would otherwise start its body a line below
+          // the one beside it.
           <li className="stock-outlook__clue" key={highlight.ordinal}>
             <span className="stock-outlook__clue-index" aria-hidden="true">{highlight.ordinal}</span>
-            <div>
-              <h3 className="stock-outlook__clue-title">{highlight.title}</h3>
-              <OutlookParagraph key={highlight.body} className="stock-outlook__clue-desc" text={highlight.body} label={`第 ${highlight.ordinal} 项判断`} />
-            </div>
+            <h3 className="stock-outlook__clue-title">{highlight.title}</h3>
+            <OutlookParagraph key={highlight.body} className="stock-outlook__clue-desc" text={highlight.body} label={`第 ${highlight.ordinal} 项判断`} />
           </li>
         ))}
       </ol>
     </section>
   );
+}
+
+/**
+ * Headlines are written by the analysis, so their length is not a layout constant: one filing gets
+ * a six-word verdict and the next gets a clause-by-clause one carrying three figures. Type scale
+ * alone cannot answer that — a container query knows the column width but not how much text has to
+ * fit in it — so the length picks the scale and the container query still adapts within it.
+ */
+function headlineLength(headline: string): "short" | "medium" | "long" {
+  if (headline.length > 56) return "long";
+  return headline.length > 28 ? "medium" : "short";
 }
 
 async function requestOverview(ticker: string, signal?: AbortSignal): Promise<PublicCompanyAnalysisResponse> {

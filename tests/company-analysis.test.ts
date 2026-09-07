@@ -6,6 +6,7 @@ import {
   normalizeCompanyAnalysisPublication,
   toPublicCompanyAnalysis,
 } from "../workers/pipeline/src/company-analysis/contracts.ts";
+import { COMPANY_ANALYSIS_MAX_HIGHLIGHTS, COMPANY_ANALYSIS_MIN_HIGHLIGHTS } from "../shared/analysis-contract/company-analysis.ts";
 import { buildCompanyFeaturePack } from "../workers/pipeline/src/company-analysis/feature-engine.ts";
 import { resolveTargetPeriodEnd, type CompanyAnalysisPacket } from "../workers/pipeline/src/company-analysis/packet.ts";
 import { D1CompanyAnalysisRepository } from "../workers/pipeline/src/company-analysis/repository.ts";
@@ -17,12 +18,12 @@ import type { SecPipelineEnv } from "../workers/pipeline/src/operations.ts";
 
 const generatedAt = "2026-09-03T08:00:00.000Z";
 
-function overview() {
+function overview(titles = ["增长逻辑", "平台优势", "再投资", "现金约束"]) {
   return {
     label: "业务前瞻 · AI 综述",
     headline: "核心需求仍在扩张，但资本回报进入验证期",
     introduction: "公司仍处于增长与再投资并行阶段，现有优势保持韧性，但新增投入需要转化为持续现金回报。",
-    highlights: ["增长逻辑", "平台优势", "再投资", "现金约束"].map((title, index) => ({
+    highlights: titles.map((title, index) => ({
       title,
       body: `${title}是本期最重要的变化之一。`,
       evidenceRefs: [`evidence-${index + 1}`],
@@ -56,7 +57,7 @@ function publication(inputHash = "input-hash-123") {
  * consumer that has to re-derive which observation backs a claim by reading the prose does not have
  * a usable contract. Everything internal to *how* the analysis was produced still stays inside.
  */
-test("requires exactly four highlights and publishes the evidence backing each one", () => {
+test("publishes the evidence backing each highlight", () => {
   const normalized = normalizeCompanyAnalysisPublication(publication());
   assert.equal(normalized.overview.highlights.length, 4);
   const publicValue = toPublicCompanyAnalysis(normalized);
@@ -69,10 +70,37 @@ test("requires exactly four highlights and publishes the evidence backing each o
   // Internal pipeline versions are labels, reported under their own key — never a prompt.
   assert.equal(publicValue.versions.prompt, normalized.promptVersion);
   assert.equal(publicValue.versions.contentRevision, normalized.inputHash);
-  assert.throws(() => normalizeCompanyAnalysisPublication({
-    ...publication(),
-    overview: { ...overview(), highlights: overview().highlights.slice(0, 3) },
-  }), /exactly four/i);
+});
+
+/**
+ * The count is the editorial phase's call now, so normalization enforces a range rather than a
+ * number. A quarter with two things worth saying should not be padded to four, and one that runs
+ * long should not take the page with it.
+ */
+test("an overview carries as many judgments as the analysis composed, within bounds", () => {
+  for (const count of [COMPANY_ANALYSIS_MIN_HIGHLIGHTS, 3, COMPANY_ANALYSIS_MAX_HIGHLIGHTS]) {
+    const titles = Array.from({ length: count }, (_, index) => `判断 ${index + 1}`);
+    const normalized = normalizeCompanyAnalysisPublication({ ...publication(), overview: overview(titles) });
+    assert.equal(normalized.overview.highlights.length, count);
+    // Ordinals number the published order rather than echoing anything the model chose.
+    assert.deepEqual(
+      normalized.overview.highlights.map((highlight) => highlight.ordinal),
+      titles.map((_, index) => String(index + 1).padStart(2, "0")),
+    );
+    assert.deepEqual(normalized.overview.highlights.map((highlight) => highlight.title), titles);
+  }
+});
+
+test("too few judgments fail the publication; too many are truncated from the least important end", () => {
+  const short = Array.from({ length: COMPANY_ANALYSIS_MIN_HIGHLIGHTS - 1 }, (_, index) => `判断 ${index + 1}`);
+  assert.throws(
+    () => normalizeCompanyAnalysisPublication({ ...publication(), overview: overview(short) }),
+    /at least 2 evidence-backed highlights/i,
+  );
+  const long = Array.from({ length: COMPANY_ANALYSIS_MAX_HIGHLIGHTS + 3 }, (_, index) => `判断 ${index + 1}`);
+  const normalized = normalizeCompanyAnalysisPublication({ ...publication(), overview: overview(long) });
+  assert.equal(normalized.overview.highlights.length, COMPANY_ANALYSIS_MAX_HIGHLIGHTS);
+  assert.equal(normalized.overview.highlights.at(-1)!.title, `判断 ${COMPANY_ANALYSIS_MAX_HIGHLIGHTS}`);
 });
 
 test("publishes immutable analysis rows and reads the latest ready version", async () => {
@@ -256,11 +284,17 @@ test("checkpoints one Agent's turns and retries invalid decisions inside the mod
     { summary: "本季经营保持稳定。", drivers: [{ statement: "需求支撑经营。", evidenceRefs: [evidenceRef] }], risks: [], unresolved: [] },
     { action: "finalize", decision: { ...decision, internalPillars: [] } },
     { action: "finalize", decision },
-    { ...overview(), highlights: overview().highlights.map((highlight) => ({ ...highlight, evidenceRefs: [evidenceRef] })) },
+    // Three judgments, not four: the editorial turn's own count has to survive to the publication.
+    {
+      ...overview(["判断一", "判断二", "判断三"]),
+      highlights: overview(["判断一", "判断二", "判断三"]).highlights.map((highlight) => ({ ...highlight, evidenceRefs: [evidenceRef] })),
+    },
   ];
   const payloads: Record<string, unknown>[] = [];
+  const systemPrompts: string[] = [];
   const fetcher: typeof fetch = async (_url, init) => {
     const body = JSON.parse(String(init?.body));
+    systemPrompts.push(String(body.messages[0].content));
     payloads.push(JSON.parse(body.messages[1].content));
     return Response.json({ choices: [{ message: { content: JSON.stringify(responses.shift()) } }] });
   };
@@ -281,7 +315,13 @@ test("checkpoints one Agent's turns and retries invalid decisions inside the mod
   assert.equal(payloads.length, 4);
   const schema = payloads[1]!.outputSchema as { decision: { internalPillars: Array<{ key: string }> } };
   assert.deepEqual(schema.decision.internalPillars.map((pillar) => pillar.key), keys);
-  assert.equal(result.overview.highlights.length, 4);
+  assert.equal(result.overview.highlights.length, 3);
+  // The model is told the range in both halves of the turn it has to satisfy, and told nothing
+  // that contradicts it — a prompt still asking for four would quietly restore the fixed count.
+  const editorialSchema = payloads.at(-1)!.outputSchema as { highlights: string };
+  assert.match(editorialSchema.highlights, /2-6/);
+  assert.match(systemPrompts.at(-1)!, /2-6 highlights/);
+  assert.doesNotMatch(systemPrompts.at(-1)!, /exactly four/i);
 });
 
 function observation(

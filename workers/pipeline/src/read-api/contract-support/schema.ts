@@ -1,6 +1,7 @@
 import { FUNDAMENTAL_METRIC_CATALOG, FUNDAMENTAL_METRIC_CATALOG_VERSION } from "../../fundamentals/fundamental-metrics.ts";
 import { COMPANY_ANALYSIS_SCHEMA_VERSION } from "../../company-analysis/contracts.ts";
 import { FUNDAMENTALS_API_SCHEMA_VERSION } from "../../../../../shared/analysis-contract/fundamentals.ts";
+import { COMPANY_ANALYSIS_MAX_HIGHLIGHTS, COMPANY_ANALYSIS_MIN_HIGHLIGHTS } from "../../../../../shared/analysis-contract/company-analysis.ts";
 import type { JsonSchema } from "./json-schema.ts";
 import { ANALYSIS_API_SCHEMA_VERSION } from "./versions.ts";
 import { ANALYSIS_ERROR_STATUS } from "./errors.ts";
@@ -242,14 +243,14 @@ export const COMPANY_ANALYSIS_SCHEMA: JsonSchema = {
         introduction: { type: "string" },
         highlights: {
           type: "array",
-          minItems: 4,
-          maxItems: 4,
+          minItems: COMPANY_ANALYSIS_MIN_HIGHLIGHTS,
+          maxItems: COMPANY_ANALYSIS_MAX_HIGHLIGHTS,
           items: {
             type: "object",
             additionalProperties: false,
             required: ["ordinal", "title", "body", "evidenceRefs"],
             properties: {
-              ordinal: { enum: ["01", "02", "03", "04"] },
+              ordinal: { type: "string", pattern: "^\\d{2}$" },
               title: { type: "string" },
               body: { type: "string" },
               evidenceRefs: { type: "array", items: { type: "string" } },

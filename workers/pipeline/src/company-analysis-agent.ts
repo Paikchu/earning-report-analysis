@@ -1,3 +1,4 @@
+import { COMPANY_ANALYSIS_MAX_HIGHLIGHTS, COMPANY_ANALYSIS_MIN_HIGHLIGHTS } from "../../../shared/analysis-contract/company-analysis.ts";
 import type { CompanyMemoryItem } from "./sec/analysis.ts";
 import {
   normalizeCompanyAnalysisOverview,
@@ -134,7 +135,7 @@ export async function runCompanyAnalysisAgent(input: {
           label: "string",
           headline: "string",
           introduction: "string",
-          highlights: "exactly 4 [{title,body,evidenceRefs}]",
+          highlights: `${COMPANY_ANALYSIS_MIN_HIGHLIGHTS}-${COMPANY_ANALYSIS_MAX_HIGHLIGHTS} [{title,body,evidenceRefs}], ordered by importance; the count is yours to choose`,
         },
       },
     );
@@ -172,7 +173,10 @@ function editorialPrompt(): string {
   return [
     "You are the editorial phase of the same company-analysis Agent.",
     "The decision is locked. Do not add evidence, alter pillar states, or invent numbers.",
-    "Write natural Chinese investment-research prose: one judgment headline, one background paragraph, and exactly four most-important highlights.",
+    `Write natural Chinese investment-research prose: one judgment headline, one background paragraph, and ${COMPANY_ANALYSIS_MIN_HIGHLIGHTS}-${COMPANY_ANALYSIS_MAX_HIGHLIGHTS} highlights.`,
+    "Choose how many highlights this quarter earns: as many as the locked decision supports and no more. Never pad to a count, never split one judgment in two, never merge two to fit.",
+    "Order them by importance — a run that exceeds the maximum is truncated from the end.",
+    "Title each highlight yourself. A title names the judgment, not the topic: prefer 「毛利率扩张由结构而非价格驱动」 over 「毛利率」.",
     "Do not write a full report or source-label prose. Do not expose pillar names, scores, confidence badges, feature IDs, Memory IDs, or repeated revenue/gross-margin cards in public copy.",
     "Numbers may appear only when an approved Yahoo feature is indispensable to the explanation.",
     "Return one JSON object only.",

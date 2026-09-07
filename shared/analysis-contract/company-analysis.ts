@@ -1,8 +1,21 @@
 import type { AnalysisRunSummary } from "./filings.ts";
 export type CompanyAnalysisCoverageStatus = "complete" | "partial";
 
+/**
+ * How many judgments an overview may carry. The count used to be fixed at four, which made every
+ * filing look equally eventful: a quarter with two things worth saying padded to four, and one with
+ * six had two cut. The editorial phase now decides, within these bounds — below two there is no
+ * list to read, and past six the page stops being a summary.
+ *
+ * Widening, not breaking: a stored four-highlight overview stays valid, so the payload schema
+ * version does not move and published analyses keep rendering.
+ */
+export const COMPANY_ANALYSIS_MIN_HIGHLIGHTS = 2;
+export const COMPANY_ANALYSIS_MAX_HIGHLIGHTS = 6;
+
 export type CompanyAnalysisHighlight = {
-  ordinal: "01" | "02" | "03" | "04";
+  /** Assigned by position at normalization ("01", "02", …), never taken from the model. */
+  ordinal: string;
   title: string;
   body: string;
   evidenceRefs: string[];
@@ -12,12 +25,7 @@ export type CompanyAnalysisOverview = {
   label: string;
   headline: string;
   introduction: string;
-  highlights: [
-    CompanyAnalysisHighlight,
-    CompanyAnalysisHighlight,
-    CompanyAnalysisHighlight,
-    CompanyAnalysisHighlight,
-  ];
+  highlights: CompanyAnalysisHighlight[];
 };
 
 export type PublicCompanyAnalysisResponse = {
