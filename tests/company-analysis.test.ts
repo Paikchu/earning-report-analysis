@@ -349,7 +349,6 @@ test("checkpoints one Agent's turns and retries invalid decisions inside the mod
   assert.match(editorial, /not a quarter recap and not earnings commentary/);
   assert.match(editorial, /evidence for that judgment, never its subject/);
   assert.match(editorial, /Never write about the sufficiency of your own evidence/);
-  assert.match(editorial, /watchFor/);
   // The name is not the model's to move, so it is not in the shape it is asked for.
   assert.equal("label" in editorialSchema, false);
 });
@@ -451,9 +450,8 @@ test("a stored publication reads its blocks back without the feature pack that v
 });
 
 /**
- * The section is a forward view on the business and its industry, not a quarter recap. Three things
- * hold that: a name the run cannot restate, a judgment that has to say what would overturn it, and
- * the briefing asserted in the Agent test below.
+ * The section is a forward view on the business and its industry, not a quarter recap. Two things
+ * hold that: a name the run cannot restate, and the briefing asserted in the Agent test below.
  */
 test("the section names itself, including for an overview published under the old free-form label", () => {
   const stored = { ...publication(), overview: { ...overview(), label: "财报点评" } };
@@ -463,19 +461,6 @@ test("the section names itself, including for an overview published under the ol
   assert.equal(toPublicCompanyAnalysis(normalized).overview!.label, COMPANY_ANALYSIS_OVERVIEW_LABEL);
 });
 
-test("a judgment carries the observation that would overturn it, bounded and optional", () => {
-  const base = overview(["判断一", "判断二"]);
-  const withWatch = {
-    ...base,
-    highlights: base.highlights.map((highlight, index) => index === 0
-      ? { ...highlight, watchFor: "下季资本开支是否回落至折旧水平以下。" }
-      : { ...highlight, watchFor: "  " }),
-  };
-  const normalized = normalizeCompanyAnalysisOverview(withWatch);
-  assert.equal(normalized.highlights[0]!.watchFor, "下季资本开支是否回落至折旧水平以下。");
-  // Absent rather than empty, like blocks: an overview written before this reads identically.
-  assert.equal("watchFor" in normalized.highlights[1]!, false);
-});
 
 /**
  * The guard that keeps unsupported forward claims out of the decision. An axis that asserts a
@@ -556,7 +541,7 @@ test("prose over its cap is cut, not refused: a long paragraph must not fail the
     headline: long,
     introduction: long,
     highlights: base.highlights.map((highlight, index) => index === 0
-      ? { ...highlight, title: long, body: long, watchFor: long, blocks: [{ type: "prose", text: long }] }
+      ? { ...highlight, title: long, body: long, blocks: [{ type: "prose", text: long }] }
       : highlight),
   });
   const first = normalized.highlights[0]!;
@@ -565,7 +550,6 @@ test("prose over its cap is cut, not refused: a long paragraph must not fail the
     ["introduction", normalized.introduction, 1_200],
     ["title", first.title, 100],
     ["body", first.body, 700],
-    ["watchFor", first.watchFor ?? "", 240],
   ] as const) {
     assert.equal(value.length, cap, label);
     assert.ok(value.endsWith("…"), `${label} should show it was cut`);

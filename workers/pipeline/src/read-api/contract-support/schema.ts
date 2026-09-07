@@ -337,7 +337,6 @@ export const COMPANY_ANALYSIS_SCHEMA: JsonSchema = {
               title: { type: "string" },
               body: { type: "string" },
               evidenceRefs: { type: "array", items: { type: "string" } },
-              watchFor: { type: "string" },
               blocks: {
                 type: "array",
                 maxItems: COMPANY_ANALYSIS_MAX_BLOCKS_PER_HIGHLIGHT,

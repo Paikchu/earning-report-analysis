@@ -105,10 +105,6 @@ function BusinessOutlookContent({ ticker }: { ticker: string }) {
                   <ReportBlockList blocks={highlight.blocks} context={{ metrics: [], fundamentals }} />
                 </div>
               ) : null}
-              {/* Last, as the closer: the argument, then what supports it, then what to check. */}
-              {highlight.watchFor && (
-                <p className="stock-outlook__clue-watch"><span>验证信号</span>{highlight.watchFor}</p>
-              )}
             </div>
           </li>
         ))}

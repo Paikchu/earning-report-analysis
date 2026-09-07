@@ -44,13 +44,6 @@ export type CompanyAnalysisHighlight = {
   body: string;
   evidenceRefs: string[];
   /**
-   * The observation that would confirm or overturn this judgment. A forward view without one is an
-   * opinion; with one it is a position that can be checked next quarter. The reasoning phase
-   * already produces a falsifier and a next check per pillar, so this carries that thinking into
-   * the public copy rather than asking for it twice.
-   */
-  watchFor?: string;
-  /**
    * The forms this judgment chose beyond its prose, rendered under the body. Optional and additive:
    * an overview published before this existed carries none and renders exactly as it did, so the
    * payload schema version does not move and no consumer loses a field it relied on.

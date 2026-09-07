@@ -2800,10 +2800,6 @@ h4.rich-text-heading { font-size: 15px; color: var(--ink-soft); }
 .stock-outlook__clue-content { grid-column: 2; min-width: 0; }
 .stock-outlook__clue-desc { color: var(--ink-soft); font: 400 var(--outlook-body-size)/var(--outlook-body-leading) var(--serif); }
 .stock-outlook__clue-blocks { margin-top: .75rem; }
-/* The forward hook. Set apart from the prose because it is the one line a reader returns to next
-   quarter, and lighter than it because it is a question, not a claim. */
-.stock-outlook__clue-watch { margin: .75rem 0 0; padding-top: .5rem; border-top: 1px dotted var(--hairline); color: var(--ink-muted); font: 500 .8125rem/1.6 var(--serif); overflow-wrap: break-word; }
-.stock-outlook__clue-watch span { margin-right: .5rem; color: var(--color-profit); font: 700 .625rem/1.5 var(--sans); letter-spacing: .08em; }
 .stock-outlook__clue-blocks .report-block + .report-block { margin-top: .75rem; }
 .stock-outlook__clue-blocks .report-block-callout { padding: .625rem .875rem; font-size: .9375rem; }
 .stock-outlook__clue-blocks .report-block-chart { margin: 0; }

@@ -187,8 +187,7 @@ export async function runCompanyAnalysisAgent(input: {
           // No label: the section's name is fixed, so it is not something a run can restate.
           headline: "string, a forward judgment and its condition",
           introduction: "string, how the present position constrains the paths from here",
-          highlights: `${COMPANY_ANALYSIS_MIN_HIGHLIGHTS}-${COMPANY_ANALYSIS_MAX_HIGHLIGHTS} [{title,body,watchFor,evidenceRefs,blocks?}], ordered by importance; the count is yours to choose`,
-          watchFor: "string, the observation that would confirm or overturn this judgment next period",
+          highlights: `${COMPANY_ANALYSIS_MIN_HIGHLIGHTS}-${COMPANY_ANALYSIS_MAX_HIGHLIGHTS} [{title,body,evidenceRefs,blocks?}], ordered by importance; the count is yours to choose`,
           blocks: `optional, 0-${COMPANY_ANALYSIS_MAX_BLOCKS_PER_HIGHLIGHT} per highlight, rendered under its body`,
           blockTypes: blockVocabulary(),
         },
@@ -243,7 +242,6 @@ function editorialPrompt(): string {
     "Choose how many the decision earns: as many as it supports and no more. Never pad to a count, never split one judgment in two, never merge two to fit.",
     "Order them by importance — a run that exceeds the maximum is truncated from the end.",
     "Title each highlight yourself. A title states the forward judgment, not the topic: prefer 「资本开支高峰将在两到三个季度内压制利润率」 over 「资本开支」 or 「利润率承压」.",
-    "Give each highlight a watchFor: the one observation that would confirm or overturn it. Take it from that axis's falsifier or nextCheck, and write it as something a reader could actually check next period — not as a restatement of the judgment.",
 
     // The two ways this section drifts back into a quarter recap, both observed in published copy.
     "Never write about the sufficiency of your own evidence. A reader wants the judgment, or the honest absence of one, never a report on how much was observable.",
