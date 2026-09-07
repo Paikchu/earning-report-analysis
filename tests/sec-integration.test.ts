@@ -56,9 +56,10 @@ test("exposes the standalone stock and report routes", async () => {
     readFile(new URL("../app/site-header.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(stockPage, /SecFilingsSection/);
-  assert.match(stockPage, /FundamentalCharts/);
+  assert.doesNotMatch(stockPage, /FundamentalCharts/);
+  assert.match(stockPage, /BusinessOutlook/);
   assert.match(stockPage, /stock-analysis-grid/);
-  assert.match(stockPage, /parseFundamentalPageState/);
+  assert.doesNotMatch(stockPage, /parseFundamentalPageState/);
   assert.match(stockPage, /findSecurity/);
   // The report page reads through the backend client; there is no database binding to fall back to.
   assert.match(reportPage, /getAnalysisBackendRuntime/);

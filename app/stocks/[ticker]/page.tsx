@@ -4,31 +4,17 @@ import { findSecurity } from "../../../lib/web/site-data.ts";
 import { normalizeTrackedTicker } from "../../../lib/web/ticker.ts";
 import { SecFilingsSection } from "./SecFilingsSection.tsx";
 import { BusinessOutlook } from "./BusinessOutlook";
-import { FundamentalCharts } from "./FundamentalCharts";
-import {
-  hasExplicitFundamentalPageState,
-  parseFundamentalPageState,
-  stockPageSearchParamsToUrlSearchParams,
-  type StockPageSearchParams,
-} from "../../../lib/web/fundamental-page-state.ts";
 
 export const dynamic = "force-dynamic";
 
 export default async function StockPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ ticker: string }>;
-  searchParams: Promise<StockPageSearchParams>;
 }) {
   const ticker = normalizeTrackedTicker((await params).ticker);
   if (!ticker) notFound();
   const security = findSecurity(ticker);
-  const normalizedSearchParams = stockPageSearchParamsToUrlSearchParams(await searchParams);
-  const initialState = parseFundamentalPageState(normalizedSearchParams);
-  const initialPreferenceSource = hasExplicitFundamentalPageState(normalizedSearchParams)
-    ? "url"
-    : "preset";
   return (
     <div className="sec-app-shell stock-analysis-shell">
       <SiteHeader initialQuery={security?.symbol ?? ticker} />
@@ -40,12 +26,6 @@ export default async function StockPage({
               <span>{ticker}</span>
             </header>
             <BusinessOutlook ticker={ticker} />
-            <FundamentalCharts
-              ticker={ticker}
-              companyName={security?.name ?? ticker}
-              initialState={initialState}
-              initialPreferenceSource={initialPreferenceSource}
-            />
           </div>
           <div className="stock-analysis-filings">
             <SecFilingsSection ticker={ticker} title="披露时间线" />
