@@ -1,7 +1,7 @@
 import { FUNDAMENTAL_METRIC_CATALOG, FUNDAMENTAL_METRIC_CATALOG_VERSION } from "../../fundamentals/fundamental-metrics.ts";
 import { COMPANY_ANALYSIS_SCHEMA_VERSION } from "../../company-analysis/contracts.ts";
 import { FUNDAMENTALS_API_SCHEMA_VERSION } from "../../../../../shared/analysis-contract/fundamentals.ts";
-import { COMPANY_ANALYSIS_MAX_HIGHLIGHTS, COMPANY_ANALYSIS_MIN_HIGHLIGHTS } from "../../../../../shared/analysis-contract/company-analysis.ts";
+import { COMPANY_ANALYSIS_MAX_BLOCKS_PER_HIGHLIGHT, COMPANY_ANALYSIS_MAX_HIGHLIGHTS, COMPANY_ANALYSIS_MIN_HIGHLIGHTS } from "../../../../../shared/analysis-contract/company-analysis.ts";
 import type { JsonSchema } from "./json-schema.ts";
 import { ANALYSIS_API_SCHEMA_VERSION } from "./versions.ts";
 import { ANALYSIS_ERROR_STATUS } from "./errors.ts";
@@ -22,6 +22,90 @@ const TICKER_PATTERN = "^[A-Z][A-Z0-9.-]{0,9}$";
 const DATE_PATTERN = "^\\d{4}-\\d{2}-\\d{2}$";
 
 const nullableString: JsonSchema = { type: ["string", "null"] };
+
+/**
+ * The forms a judgment may take beyond its prose. Deliberately narrower than the full block
+ * vocabulary — see COMPANY_ANALYSIS_BLOCK_TYPES for why `metrics` and `evidence` are absent — and
+ * spelled out on the wire so a consumer can switch on `type` without reading the renderer.
+ *
+ * A chart names series; it never carries points. Those come from the fundamentals resource.
+ */
+const companyAnalysisBlock: JsonSchema = {
+  anyOf: [
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["type", "id", "text"],
+      properties: {
+        type: { const: "prose" },
+        id: { type: "string" },
+        title: { type: "string" },
+        text: { type: "string" },
+      },
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["type", "id", "tone", "text"],
+      properties: {
+        type: { const: "callout" },
+        id: { type: "string" },
+        tone: { enum: ["neutral", "positive", "negative", "caution"] },
+        title: { type: "string" },
+        text: { type: "string" },
+      },
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["type", "id", "points"],
+      properties: {
+        type: { const: "key_points" },
+        id: { type: "string" },
+        title: { type: "string" },
+        points: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["label", "detail", "importance"],
+            properties: {
+              label: { type: "string" },
+              detail: { type: "string" },
+              importance: { enum: ["high", "medium", "low"] },
+            },
+          },
+        },
+      },
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["type", "id", "title", "series"],
+      properties: {
+        type: { const: "chart" },
+        id: { type: "string" },
+        title: { type: "string" },
+        caption: { type: "string" },
+        periodCount: { type: "integer" },
+        series: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["metricKey"],
+            properties: {
+              metricKey: { enum: Object.keys(FUNDAMENTAL_METRIC_CATALOG) },
+              mark: { enum: ["bar", "line"] },
+              transform: { enum: ["value", "qoq_growth", "yoy_growth", "qoq_change", "yoy_change"] },
+              axis: { enum: ["left", "right"] },
+            },
+          },
+        },
+      },
+    },
+  ],
+};
 
 const analysisRunSummary: JsonSchema = {
   title: "AnalysisRunSummary",
@@ -254,6 +338,11 @@ export const COMPANY_ANALYSIS_SCHEMA: JsonSchema = {
               title: { type: "string" },
               body: { type: "string" },
               evidenceRefs: { type: "array", items: { type: "string" } },
+              blocks: {
+                type: "array",
+                maxItems: COMPANY_ANALYSIS_MAX_BLOCKS_PER_HIGHLIGHT,
+                items: { $ref: "#/$defs/CompanyAnalysisBlock" },
+              },
             },
           },
         },
@@ -274,7 +363,7 @@ export const COMPANY_ANALYSIS_SCHEMA: JsonSchema = {
       },
     },
   },
-  $defs: { AnalysisRunSummary: analysisRunSummary },
+  $defs: { AnalysisRunSummary: analysisRunSummary, CompanyAnalysisBlock: companyAnalysisBlock },
 };
 
 export const FUNDAMENTALS_SCHEMA: JsonSchema = {

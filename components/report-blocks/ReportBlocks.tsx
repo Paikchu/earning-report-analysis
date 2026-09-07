@@ -60,6 +60,15 @@ function Section({ context, index, section }: { context: ReportBlockRenderContex
   );
 }
 
+/**
+ * A bare run of blocks, for a surface that composes its own frame rather than a section list — the
+ * outlook renders these under a judgment's prose. Same registry, same resolution rules.
+ */
+export function ReportBlockList({ blocks, context }: { blocks: readonly ReportBlock[]; context: ReportBlockRenderContext }) {
+  if (blocks.length === 0) return null;
+  return <>{blocks.map((block) => <Block block={block} context={context} key={block.id} />)}</>;
+}
+
 function Block({ block, context }: { block: ReportBlock; context: ReportBlockRenderContext }) {
   switch (block.type) {
     case "prose":
@@ -80,7 +89,7 @@ function Block({ block, context }: { block: ReportBlock; context: ReportBlockRen
       return (
         <div className="report-block report-block-points" id={block.id}>
           {block.title && <h3 className="report-block-title">{block.title}</h3>}
-          <ul className="sec-report-conclusion-list">
+          <ul className="report-block-points-list">
             {block.points.map((point, index) => (
               <li data-importance={point.importance} key={`${point.label}-${index}`}>
                 <strong>{point.label}</strong><span>{point.detail}</span>

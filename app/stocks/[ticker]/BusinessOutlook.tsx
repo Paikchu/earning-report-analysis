@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 
 import type { PublicCompanyAnalysisResponse } from "../../../shared/analysis-contract/company-analysis.ts";
+import type { PublicFundamentalsResponse } from "../../../shared/analysis-contract/fundamentals.ts";
 import { companyAnalysisNotice, shouldPollCompanyAnalysis } from "../../../lib/web/company-analysis-display-state.ts";
+import { ReportBlockList } from "../../../components/report-blocks/ReportBlocks.tsx";
 import { OutlookParagraph } from "./OutlookParagraph";
 
 type RequestStatus = "loading" | "ready" | "empty" | "error";
@@ -15,6 +17,9 @@ export function BusinessOutlook({ ticker }: { ticker: string }) {
 function BusinessOutlookContent({ ticker }: { ticker: string }) {
   const [status, setStatus] = useState<RequestStatus>("loading");
   const [analysis, setAnalysis] = useState<PublicCompanyAnalysisResponse | null>(null);
+  // Fetched beside the analysis rather than with it: a chart block names series, and the points are
+  // resolved here from verified fundamentals. Its absence costs a chart, never the judgments.
+  const [fundamentals, setFundamentals] = useState<PublicFundamentalsResponse | null>(null);
 
   const [refresh, setRefresh] = useState(0);
 
@@ -39,6 +44,9 @@ function BusinessOutlookContent({ ticker }: { ticker: string }) {
       }
     }
     void loadOverview();
+    void requestFundamentals(ticker, controller.signal)
+      .then((value) => { if (!controller.signal.aborted) setFundamentals(value); })
+      .catch(() => undefined);
     return () => { controller.abort(); clearTimeout(timer); };
   }, [ticker, refresh]);
 
@@ -78,11 +86,25 @@ function BusinessOutlookContent({ ticker }: { ticker: string }) {
         {overview.highlights.map((highlight) => (
           // Title and body are direct children so a two-column row can align them through subgrid:
           // a judgment whose title runs to two lines would otherwise start its body a line below
-          // the one beside it.
-          <li className="stock-outlook__clue" key={highlight.ordinal}>
+          // the one beside it. A judgment carrying a chart takes the full width instead — a chart
+          // in a half-width column is a picture of a chart, not a readable one.
+          <li
+            className="stock-outlook__clue"
+            data-wide={highlight.blocks?.some((block) => block.type === "chart") ? "true" : undefined}
+            key={highlight.ordinal}
+          >
             <span className="stock-outlook__clue-index" aria-hidden="true">{highlight.ordinal}</span>
             <h3 className="stock-outlook__clue-title">{highlight.title}</h3>
-            <OutlookParagraph key={highlight.body} className="stock-outlook__clue-desc" text={highlight.body} label={`第 ${highlight.ordinal} 项判断`} />
+            {/* Prose and blocks share the card's second row. The subgrid spans exactly two parent
+                rows, so a third child here would fall outside the tracks it borrows. */}
+            <div className="stock-outlook__clue-content">
+              <OutlookParagraph key={highlight.body} className="stock-outlook__clue-desc" text={highlight.body} label={`第 ${highlight.ordinal} 项判断`} />
+              {highlight.blocks?.length ? (
+                <div className="stock-outlook__clue-blocks">
+                  <ReportBlockList blocks={highlight.blocks} context={{ metrics: [], fundamentals }} />
+                </div>
+              ) : null}
+            </div>
           </li>
         ))}
       </ol>
@@ -105,4 +127,10 @@ async function requestOverview(ticker: string, signal?: AbortSignal): Promise<Pu
   const response = await fetch(`/api/v1/companies/${encodeURIComponent(ticker)}/analysis`, { signal });
   if (!response.ok) throw new Error("公司分析读取失败。");
   return response.json() as Promise<PublicCompanyAnalysisResponse>;
+}
+
+async function requestFundamentals(ticker: string, signal?: AbortSignal): Promise<PublicFundamentalsResponse> {
+  const response = await fetch(`/api/v1/companies/${encodeURIComponent(ticker)}/fundamentals`, { signal });
+  if (!response.ok) throw new Error("基本面数据读取失败。");
+  return response.json() as Promise<PublicFundamentalsResponse>;
 }

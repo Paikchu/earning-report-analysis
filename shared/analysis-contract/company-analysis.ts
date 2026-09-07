@@ -1,4 +1,5 @@
 import type { AnalysisRunSummary } from "./filings.ts";
+import type { ReportBlock } from "./report-blocks.ts";
 export type CompanyAnalysisCoverageStatus = "complete" | "partial";
 
 /**
@@ -13,12 +14,31 @@ export type CompanyAnalysisCoverageStatus = "complete" | "partial";
 export const COMPANY_ANALYSIS_MIN_HIGHLIGHTS = 2;
 export const COMPANY_ANALYSIS_MAX_HIGHLIGHTS = 6;
 
+/**
+ * Which block forms a judgment may take. `metrics` and `evidence` are absent on purpose, not by
+ * oversight: `metrics` resolves against the SEC report's verified figures, a different vocabulary
+ * from the Yahoo features this analysis reasons over, and `evidence` carries filing character
+ * offsets, which company analysis evidence — feature and memory references — does not have.
+ */
+export const COMPANY_ANALYSIS_BLOCK_TYPES = ["prose", "key_points", "callout", "chart"] as const;
+
+/** Past a few, the extra forms stop supporting the judgment and become the judgment. */
+export const COMPANY_ANALYSIS_MAX_BLOCKS_PER_HIGHLIGHT = 3;
+
+export type CompanyAnalysisBlock = Extract<ReportBlock, { type: (typeof COMPANY_ANALYSIS_BLOCK_TYPES)[number] }>;
+
 export type CompanyAnalysisHighlight = {
   /** Assigned by position at normalization ("01", "02", …), never taken from the model. */
   ordinal: string;
   title: string;
   body: string;
   evidenceRefs: string[];
+  /**
+   * The forms this judgment chose beyond its prose, rendered under the body. Optional and additive:
+   * an overview published before this existed carries none and renders exactly as it did, so the
+   * payload schema version does not move and no consumer loses a field it relied on.
+   */
+  blocks?: CompanyAnalysisBlock[];
 };
 
 export type CompanyAnalysisOverview = {

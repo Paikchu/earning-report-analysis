@@ -301,6 +301,12 @@ export function overviewFixture() {
       title: `Synthetic highlight ${ordinal}`,
       body: "Synthetic highlight body.",
       evidenceRefs: [`evidence-${index + 1}`],
+      // One judgment composes extra forms, so every response these tests validate exercises the
+      // block union on the wire rather than only the prose path.
+      ...(ordinal === "01" ? { blocks: [
+        { type: "callout", id: "company-block-01-1", tone: "caution", text: "Synthetic caveat." },
+        { type: "chart", id: "company-block-01-2", title: "Synthetic chart", series: [{ metricKey: "total_revenue", mark: "bar", transform: "value" }] },
+      ] } : {}),
     })),
   };
 }

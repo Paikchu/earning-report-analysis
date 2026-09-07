@@ -2017,12 +2017,22 @@ h4.rich-text-heading { font-size: 15px; color: var(--ink-soft); }
 .report-block + .report-block { margin-top: 22px; }
 .report-block-title { margin: 0 0 10px; color: var(--ink); font: 600 15px/1.4 var(--serif); }
 .report-block-callout { padding: 14px 18px; border-left: 2px solid var(--hairline); background: color-mix(in srgb, var(--paper-deep) 45%, transparent); }
-.report-block-callout strong { display: block; margin-bottom: 6px; font: 600 14px/1.4 var(--serif); }
+/* The block's own title, not any bold inside its prose — RichText emits inline <strong>, and an
+   unscoped rule here broke every emphasised phrase onto a line of its own. */
+.report-block-callout > strong { display: block; margin-bottom: 6px; font: 600 14px/1.4 var(--serif); }
 .report-block-callout p { margin: 0 0 0.6em; color: var(--ink-soft); font: 500 15px/1.65 var(--serif); }
 .report-block-callout p:last-child { margin-bottom: 0; }
 .report-block-callout[data-tone="positive"] { border-left-color: var(--color-profit); }
 .report-block-callout[data-tone="negative"] { border-left-color: var(--color-loss); }
 .report-block-callout[data-tone="caution"] { border-left-color: var(--chart-selected); }
+/* Points stack label over detail at every width. The SEC report's own conclusion list sets a
+   two-column grid with a fixed label column, which is right for a full-width page and unreadable
+   in a half-width card — a block has to survive both, so it carries its own layout. */
+.report-block-points-list { margin: 0; padding: 0; display: grid; gap: .625rem; list-style: none; }
+.report-block-points-list li { display: grid; gap: .125rem; padding-left: .75rem; border-left: 2px solid var(--hairline); }
+.report-block-points-list strong { color: var(--color-loss); font: 700 .6875rem/1.5 var(--sans); letter-spacing: .04em; }
+.report-block-points-list li[data-importance="low"] strong { color: var(--ink-muted); }
+.report-block-points-list span { color: var(--ink-soft); font: 500 .9375rem/1.6 var(--serif); overflow-wrap: break-word; }
 .report-block-chart { margin: 0; }
 .report-block-empty { color: var(--ink-muted); font-size: 13px; }
 .sec-report-node-list { border-top: 1px solid var(--ink); }
@@ -2787,7 +2797,21 @@ h4.rich-text-heading { font-size: 15px; color: var(--ink-soft); }
 .stock-outlook__clue { min-width: 0; display: grid; grid-template-columns: 1.25rem minmax(0, 1fr); grid-template-rows: auto auto; align-items: start; gap: 0 .5rem; padding-top: .75rem; border-top: 1px solid var(--hairline-soft); }
 .stock-outlook__clue-index { grid-row: 1; padding-top: .3125rem; color: var(--color-loss); font: 700 .75rem/1 var(--sans); font-variant-numeric: tabular-nums; }
 .stock-outlook__clue-title { grid-column: 2; margin: 0 0 .375rem; font: 600 1rem/1.5 var(--serif); text-wrap: balance; overflow-wrap: break-word; }
-.stock-outlook__clue-desc { grid-column: 2; color: var(--ink-soft); font: 400 var(--outlook-body-size)/var(--outlook-body-leading) var(--serif); }
+.stock-outlook__clue-content { grid-column: 2; min-width: 0; }
+.stock-outlook__clue-desc { color: var(--ink-soft); font: 400 var(--outlook-body-size)/var(--outlook-body-leading) var(--serif); }
+.stock-outlook__clue-blocks { margin-top: .75rem; }
+.stock-outlook__clue-blocks .report-block + .report-block { margin-top: .75rem; }
+.stock-outlook__clue-blocks .sec-report-conclusion-list { margin: 0; }
+.stock-outlook__clue-blocks .report-block-callout { padding: .625rem .875rem; font-size: .9375rem; }
+.stock-outlook__clue-blocks /* Points stack label over detail at every width. The SEC report's own conclusion list sets a
+   two-column grid with a fixed label column, which is right for a full-width page and unreadable
+   in a half-width card — a block has to survive both, so it carries its own layout. */
+.report-block-points-list { margin: 0; padding: 0; display: grid; gap: .625rem; list-style: none; }
+.report-block-points-list li { display: grid; gap: .125rem; padding-left: .75rem; border-left: 2px solid var(--hairline); }
+.report-block-points-list strong { color: var(--color-loss); font: 700 .6875rem/1.5 var(--sans); letter-spacing: .04em; }
+.report-block-points-list li[data-importance="low"] strong { color: var(--ink-muted); }
+.report-block-points-list span { color: var(--ink-soft); font: 500 .9375rem/1.6 var(--serif); overflow-wrap: break-word; }
+.report-block-chart { margin: 0; }
 .stock-outlook__excerpt { margin: 0; overflow-wrap: break-word; }
 .stock-outlook__excerpt[data-expanded="false"] { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--outlook-preview-lines); overflow: hidden; }
 .stock-outlook__read-more {
@@ -2805,6 +2829,9 @@ h4.rich-text-heading { font-size: 15px; color: var(--ink-soft); }
      rather than title from body. A browser without subgrid ignores these two declarations and
      lands back on the independent `auto auto` rows above. */
   .stock-outlook__clue { grid-row: span 2; grid-template-rows: subgrid; row-gap: 0; }
+  /* A chart is unreadable at half a column, so the judgment carrying one takes the whole width.
+     It still spans the same two rows, so it simply owns that row pair alone. */
+  .stock-outlook__clue[data-wide="true"] { grid-column: 1 / -1; }
 }
 @media (pointer: coarse) { .stock-outlook__read-more { min-height: 44px; } }
 .stock-outlook__state-row button {

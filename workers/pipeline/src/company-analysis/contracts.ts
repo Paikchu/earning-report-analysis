@@ -1,5 +1,12 @@
-import { COMPANY_ANALYSIS_MAX_HIGHLIGHTS, COMPANY_ANALYSIS_MIN_HIGHLIGHTS } from "../../../../shared/analysis-contract/company-analysis.ts";
-import type { CompanyAnalysisCoverageStatus, CompanyAnalysisOverview, PublicCompanyAnalysisResponse } from "../../../../shared/analysis-contract/company-analysis.ts";
+import {
+  COMPANY_ANALYSIS_BLOCK_TYPES,
+  COMPANY_ANALYSIS_MAX_BLOCKS_PER_HIGHLIGHT,
+  COMPANY_ANALYSIS_MAX_HIGHLIGHTS,
+  COMPANY_ANALYSIS_MIN_HIGHLIGHTS,
+} from "../../../../shared/analysis-contract/company-analysis.ts";
+import type { CompanyAnalysisBlock, CompanyAnalysisCoverageStatus, CompanyAnalysisOverview, PublicCompanyAnalysisResponse } from "../../../../shared/analysis-contract/company-analysis.ts";
+import type { ReportBlockImportance, ReportBlockTone } from "../../../../shared/analysis-contract/report-blocks.ts";
+import { FUNDAMENTAL_METRIC_CATALOG, isFundamentalMetricKey } from "../fundamentals/fundamental-metrics.ts";
 export type { CompanyAnalysisCoverageStatus, CompanyAnalysisHighlight, CompanyAnalysisOverview, PublicCompanyAnalysisResponse } from "../../../../shared/analysis-contract/company-analysis.ts";
 import { normalizeTrackedTicker } from "../sec/config.ts";
 import type { AnalysisRunSummary } from "../../../../shared/analysis-contract/filings.ts";
@@ -141,7 +148,19 @@ export function unavailableCompanyAnalysis(
   };
 }
 
-export function normalizeCompanyAnalysisOverview(value: unknown): CompanyAnalysisOverview {
+export type CompanyAnalysisOverviewOptions = {
+  /**
+   * The metric keys the analysis actually observed. Supplied when publishing, so a chart cannot
+   * name a series the run never saw; absent when reading a stored publication back, where the
+   * blocks already passed that check and the underlying feature pack is long gone.
+   */
+  chartMetricKeys?: ReadonlySet<string>;
+};
+
+export function normalizeCompanyAnalysisOverview(
+  value: unknown,
+  options: CompanyAnalysisOverviewOptions = {},
+): CompanyAnalysisOverview {
   const item = record(value);
   const label = bounded(item?.label, 80);
   const headline = bounded(item?.headline, 180);
@@ -152,11 +171,14 @@ export function normalizeCompanyAnalysisOverview(value: unknown): CompanyAnalysi
     .slice(0, COMPANY_ANALYSIS_MAX_HIGHLIGHTS)
     .map((raw, index) => {
       const highlight = record(raw);
+      const ordinal = String(index + 1).padStart(2, "0");
+      const blocks = normalizeHighlightBlocks(highlight?.blocks, ordinal, options);
       return {
-        ordinal: String(index + 1).padStart(2, "0"),
+        ordinal,
         title: bounded(highlight?.title, 100),
         body: bounded(highlight?.body, 700),
         evidenceRefs: strings(highlight?.evidenceRefs, 16, 240),
+        ...(blocks.length ? { blocks } : {}),
       };
     });
   if (!label || !headline || !introduction
@@ -165,6 +187,89 @@ export function normalizeCompanyAnalysisOverview(value: unknown): CompanyAnalysi
     throw new CompanyAnalysisValidationError(`Company analysis overview must contain one headline, one introduction, and at least ${COMPANY_ANALYSIS_MIN_HIGHLIGHTS} evidence-backed highlights.`);
   }
   return { label, headline, introduction, highlights };
+}
+
+/**
+ * A judgment's chosen forms, narrowed to what the page can render.
+ *
+ * An unusable block is dropped rather than failing the overview: the judgment's title and prose are
+ * what carry it, and losing a whole quarter's analysis because one chart named a metric the run did
+ * not observe trades a small omission for a large one. The prose is never dropped this way.
+ */
+function normalizeHighlightBlocks(
+  value: unknown,
+  ordinal: string,
+  options: CompanyAnalysisOverviewOptions,
+): CompanyAnalysisBlock[] {
+  if (!Array.isArray(value)) return [];
+  const allowed = new Set<string>(COMPANY_ANALYSIS_BLOCK_TYPES);
+  return value
+    .slice(0, COMPANY_ANALYSIS_MAX_BLOCKS_PER_HIGHLIGHT)
+    .flatMap((raw, index): CompanyAnalysisBlock[] => {
+      const block = record(raw);
+      const type = text(block?.type);
+      if (!block || !allowed.has(type)) return [];
+      // Positional, like the ordinal above: an id the model chose would not survive regeneration.
+      const id = `company-block-${ordinal}-${index + 1}`;
+      if (type === "prose") {
+        const body = bounded(block.text, 700);
+        return body ? [{ type: "prose" as const, id, ...titleOf(block), text: body }] : [];
+      }
+      if (type === "callout") {
+        const body = bounded(block.text, 400);
+        const tone: ReportBlockTone = TONES.has(text(block.tone)) ? text(block.tone) as ReportBlockTone : "neutral";
+        return body ? [{ type: "callout" as const, id, tone, ...titleOf(block), text: body }] : [];
+      }
+      if (type === "key_points") {
+        const points = (Array.isArray(block.points) ? block.points : []).slice(0, 5).flatMap((entry) => {
+          const point = record(entry);
+          const label = bounded(point?.label, 40);
+          const detail = bounded(point?.detail, 240);
+          if (!label && !detail) return [];
+          const importance: ReportBlockImportance = IMPORTANCE.has(text(point?.importance))
+            ? text(point?.importance) as ReportBlockImportance
+            : "medium";
+          return [{ label, detail, importance }];
+        });
+        return points.length ? [{ type: "key_points" as const, id, ...titleOf(block), points }] : [];
+      }
+      const title = bounded(block.title, 100);
+      const series = (Array.isArray(block.series) ? block.series : []).slice(0, 3).flatMap(chartSeries(options));
+      if (!title || !series.length) return [];
+      return [{
+        type: "chart" as const,
+        id,
+        title,
+        ...(bounded(block.caption, 200) ? { caption: bounded(block.caption, 200) } : {}),
+        series,
+      }];
+    });
+}
+
+function chartSeries(options: CompanyAnalysisOverviewOptions) {
+  return (raw: unknown): Array<Extract<CompanyAnalysisBlock, { type: "chart" }>["series"][number]> => {
+    const entry = record(raw);
+    const metricKey = text(entry?.metricKey);
+    if (!isFundamentalMetricKey(metricKey)) return [];
+    if (options.chartMetricKeys && !options.chartMetricKeys.has(metricKey)) return [];
+    const definition = FUNDAMENTAL_METRIC_CATALOG[metricKey];
+    const transform = definition.allowedTransforms.find((allowedTransform) => allowedTransform === text(entry?.transform));
+    const mark = text(entry?.mark) === "bar" || text(entry?.mark) === "line" ? text(entry?.mark) as "bar" | "line" : definition.defaultMark;
+    return [{
+      metricKey,
+      mark,
+      transform: transform ?? definition.allowedTransforms[0]!,
+      ...(entry?.axis === "left" || entry?.axis === "right" ? { axis: entry.axis } : {}),
+    }];
+  };
+}
+
+const TONES = new Set<string>(["neutral", "positive", "negative", "caution"] satisfies ReportBlockTone[]);
+const IMPORTANCE = new Set<string>(["high", "medium", "low"] satisfies ReportBlockImportance[]);
+
+function titleOf(block: Record<string, unknown>): { title?: string } {
+  const title = bounded(block.title, 100);
+  return title ? { title } : {};
 }
 
 function record(value: unknown): Record<string, unknown> | null {

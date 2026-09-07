@@ -1,4 +1,10 @@
-import { COMPANY_ANALYSIS_MAX_HIGHLIGHTS, COMPANY_ANALYSIS_MIN_HIGHLIGHTS } from "../../../shared/analysis-contract/company-analysis.ts";
+import {
+  COMPANY_ANALYSIS_BLOCK_TYPES,
+  COMPANY_ANALYSIS_MAX_BLOCKS_PER_HIGHLIGHT,
+  COMPANY_ANALYSIS_MAX_HIGHLIGHTS,
+  COMPANY_ANALYSIS_MIN_HIGHLIGHTS,
+} from "../../../shared/analysis-contract/company-analysis.ts";
+import { REPORT_BLOCK_OUTPUT_SCHEMA } from "../../../shared/analysis-contract/report-blocks.ts";
 import type { CompanyMemoryItem } from "./sec/analysis.ts";
 import {
   normalizeCompanyAnalysisOverview,
@@ -119,6 +125,14 @@ export async function runCompanyAnalysisAgent(input: {
   }
   if (!decision) throw new Error("Company analysis Agent exhausted its decision loop without finalizing.");
 
+  // Only metrics the run actually observed can be charted. A feature the packet marked unavailable
+  // has no points to draw, so offering it would only produce a block the page has to drop.
+  const chartMetricKeys = new Set(
+    input.crossPeriodPacket.features.features
+      .filter((feature) => feature.quality !== "unavailable")
+      .map((feature) => feature.metricKey),
+  );
+
   const overview = await runStage("editorial", async () => {
     const editorialRaw = await callWorkerSecModel(
       input.env,
@@ -131,15 +145,20 @@ export async function runCompanyAnalysisAgent(input: {
         generatedAt: input.generatedAt,
         decision,
         approvedEvidence: approvedEvidence(decision.selectedEvidenceRefs, input.crossPeriodPacket),
+        // The metrics a chart may name. Naming one the run never observed is the single most likely
+        // way a block gets dropped, so the list is supplied rather than left to recall.
+        chartMetricKeys: [...chartMetricKeys],
         outputSchema: {
           label: "string",
           headline: "string",
           introduction: "string",
-          highlights: `${COMPANY_ANALYSIS_MIN_HIGHLIGHTS}-${COMPANY_ANALYSIS_MAX_HIGHLIGHTS} [{title,body,evidenceRefs}], ordered by importance; the count is yours to choose`,
+          highlights: `${COMPANY_ANALYSIS_MIN_HIGHLIGHTS}-${COMPANY_ANALYSIS_MAX_HIGHLIGHTS} [{title,body,evidenceRefs,blocks?}], ordered by importance; the count is yours to choose`,
+          blocks: `optional, 0-${COMPANY_ANALYSIS_MAX_BLOCKS_PER_HIGHLIGHT} per highlight, rendered under its body`,
+          blockTypes: blockVocabulary(),
         },
       },
     );
-    const overview = normalizeCompanyAnalysisOverview(editorialRaw);
+    const overview = normalizeCompanyAnalysisOverview(editorialRaw, { chartMetricKeys });
     validateEditorialEvidence(overview, new Set(decision.selectedEvidenceRefs));
     return overview;
   });
@@ -179,8 +198,17 @@ function editorialPrompt(): string {
     "Title each highlight yourself. A title names the judgment, not the topic: prefer 「毛利率扩张由结构而非价格驱动」 over 「毛利率」.",
     "Do not write a full report or source-label prose. Do not expose pillar names, scores, confidence badges, feature IDs, Memory IDs, or repeated revenue/gross-margin cards in public copy.",
     "Numbers may appear only when an approved Yahoo feature is indispensable to the explanation.",
+    "A highlight may add blocks under its body when prose alone reads worse: a list where the prose would enumerate, a callout for a caveat that interrupts the argument, a chart where the point is a trend across quarters. Most highlights need none — add one only when it replaces prose rather than repeating it.",
+    "A chart names series from the supplied chartMetricKeys and nothing else. Never write data points; the page draws them from verified fundamentals.",
     "Return one JSON object only.",
   ].join("\n");
+}
+
+/** The block vocabulary, taken from the shared definition so the prompt cannot drift from it. */
+function blockVocabulary(): Record<string, string> {
+  return Object.fromEntries(
+    COMPANY_ANALYSIS_BLOCK_TYPES.map((type) => [type, REPORT_BLOCK_OUTPUT_SCHEMA.blockTypes[type]]),
+  );
 }
 
 function decisionSchema() {

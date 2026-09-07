@@ -3,10 +3,16 @@ import test from "node:test";
 
 import {
   COMPANY_ANALYSIS_SCHEMA_VERSION,
+  normalizeCompanyAnalysisOverview,
   normalizeCompanyAnalysisPublication,
   toPublicCompanyAnalysis,
 } from "../workers/pipeline/src/company-analysis/contracts.ts";
-import { COMPANY_ANALYSIS_MAX_HIGHLIGHTS, COMPANY_ANALYSIS_MIN_HIGHLIGHTS } from "../shared/analysis-contract/company-analysis.ts";
+import {
+  COMPANY_ANALYSIS_BLOCK_TYPES,
+  COMPANY_ANALYSIS_MAX_BLOCKS_PER_HIGHLIGHT,
+  COMPANY_ANALYSIS_MAX_HIGHLIGHTS,
+  COMPANY_ANALYSIS_MIN_HIGHLIGHTS,
+} from "../shared/analysis-contract/company-analysis.ts";
 import { buildCompanyFeaturePack } from "../workers/pipeline/src/company-analysis/feature-engine.ts";
 import { resolveTargetPeriodEnd, type CompanyAnalysisPacket } from "../workers/pipeline/src/company-analysis/packet.ts";
 import { D1CompanyAnalysisRepository } from "../workers/pipeline/src/company-analysis/repository.ts";
@@ -318,10 +324,13 @@ test("checkpoints one Agent's turns and retries invalid decisions inside the mod
   assert.equal(result.overview.highlights.length, 3);
   // The model is told the range in both halves of the turn it has to satisfy, and told nothing
   // that contradicts it — a prompt still asking for four would quietly restore the fixed count.
-  const editorialSchema = payloads.at(-1)!.outputSchema as { highlights: string };
+  const editorialSchema = payloads.at(-1)!.outputSchema as { highlights: string; blockTypes: Record<string, string> };
   assert.match(editorialSchema.highlights, /2-6/);
   assert.match(systemPrompts.at(-1)!, /2-6 highlights/);
   assert.doesNotMatch(systemPrompts.at(-1)!, /exactly four/i);
+  // The forms it may choose, and the only metrics a chart may name — both supplied, not recalled.
+  assert.deepEqual(Object.keys(editorialSchema.blockTypes), [...COMPANY_ANALYSIS_BLOCK_TYPES]);
+  assert.deepEqual(payloads.at(-1)!.chartMetricKeys, ["total_revenue"]);
 });
 
 function observation(
@@ -349,3 +358,73 @@ function observation(
     updatedAt: generatedAt,
   };
 }
+
+/**
+ * A judgment chooses its own form now. These cover the seam where an untrusted composition meets a
+ * closed vocabulary: what survives, what is dropped, and what a dropped block costs.
+ */
+function withBlocks(blocks: unknown[]) {
+  const base = overview(["判断一", "判断二"]);
+  return { ...base, highlights: base.highlights.map((highlight, index) => index === 0 ? { ...highlight, blocks } : highlight) };
+}
+
+function firstBlocks(value: unknown, chartMetricKeys?: ReadonlySet<string>) {
+  return normalizeCompanyAnalysisOverview(value, chartMetricKeys ? { chartMetricKeys } : {}).highlights[0]!.blocks ?? [];
+}
+
+test("a judgment keeps the forms it chose from the vocabulary the page can render", () => {
+  const blocks = firstBlocks(withBlocks([
+    { type: "key_points", points: [{ label: "毛利率", detail: "结构性改善。", importance: "high" }] },
+    { type: "callout", tone: "caution", text: "含一次性项目。" },
+  ]));
+  assert.deepEqual(blocks.map((block) => block.type), ["key_points", "callout"]);
+  // Ids are positional, like the ordinals: a shared anchor must survive regeneration.
+  assert.deepEqual(blocks.map((block) => block.id), ["company-block-01-1", "company-block-01-2"]);
+});
+
+test("forms outside this surface's vocabulary are dropped, and the judgment survives them", () => {
+  const overviewValue = withBlocks([
+    { type: "metrics", metricKeys: ["revenue"] },
+    { type: "evidence", items: [{ excerpt: "x", start: 1, end: 2, score: 9 }] },
+    { type: "prose", text: "补充说明。" },
+  ]);
+  const normalized = normalizeCompanyAnalysisOverview(overviewValue);
+  assert.deepEqual(normalized.highlights[0]!.blocks?.map((block) => block.type), ["prose"]);
+  assert.equal(normalized.highlights[0]!.title, "判断一");
+  assert.equal(normalized.highlights.length, 2);
+});
+
+test("a chart may name only metrics the run observed, and never carries its own points", () => {
+  const chart = [{ type: "chart", title: "收入趋势", series: [{ metricKey: "total_revenue" }, { metricKey: "inventory" }] }];
+  const observed = firstBlocks(withBlocks(chart), new Set(["total_revenue"]));
+  assert.equal(observed.length, 1);
+  const series = observed[0]!.type === "chart" ? observed[0]!.series : [];
+  assert.deepEqual(series.map((entry) => entry.metricKey), ["total_revenue"]);
+  assert.equal("points" in series[0]!, false);
+  assert.equal("value" in series[0]!, false);
+  // Every series unobservable: the chart goes, the judgment stays.
+  assert.deepEqual(firstBlocks(withBlocks(chart), new Set(["gross_margin"])), []);
+});
+
+test("a chart's mark and transform fall back to the catalog rather than honouring an invalid one", () => {
+  const blocks = firstBlocks(withBlocks([
+    { type: "chart", title: "收入", series: [{ metricKey: "total_revenue", mark: "pie", transform: "cagr" }] },
+  ]));
+  const series = blocks[0]!.type === "chart" ? blocks[0]!.series[0]! : null;
+  assert.equal(series?.mark, "bar");
+  assert.equal(series?.transform, "value");
+});
+
+test("blocks are capped per judgment, and a judgment that chose none carries the field at all", () => {
+  const many = Array.from({ length: COMPANY_ANALYSIS_MAX_BLOCKS_PER_HIGHLIGHT + 2 }, (_, index) => ({ type: "prose", text: `补充 ${index + 1}。` }));
+  assert.equal(firstBlocks(withBlocks(many)).length, COMPANY_ANALYSIS_MAX_BLOCKS_PER_HIGHLIGHT);
+  // Absent rather than empty: an overview composed before blocks existed reads identically.
+  assert.equal("blocks" in normalizeCompanyAnalysisOverview(overview(["判断一", "判断二"])).highlights[0]!, false);
+});
+
+test("a stored publication reads its blocks back without the feature pack that vetted them", () => {
+  const stored = { ...publication(), overview: withBlocks([{ type: "callout", tone: "negative", text: "杠杆上升。" }]) };
+  const normalized = normalizeCompanyAnalysisPublication(stored);
+  const blocks = toPublicCompanyAnalysis(normalized).overview!.highlights[0]!.blocks;
+  assert.deepEqual(blocks?.map((block) => block.type), ["callout"]);
+});
