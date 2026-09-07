@@ -13,7 +13,12 @@ import type { AnalysisRunSummary } from "../../../../shared/analysis-contract/fi
 import { ANALYSIS_API_SCHEMA_VERSION } from "../read-api/contract-support/versions.ts";
 
 export const COMPANY_ANALYSIS_SCHEMA_VERSION = "company-analysis.v1";
-export const COMPANY_ANALYSIS_PROMPT_VERSION = "company-analysis-skill.v3";
+/**
+ * Bumped whenever the editorial prompt changes, not merely when the payload does. It feeds the
+ * run's input hash, so a company already analysed under the previous label would otherwise be
+ * deduplicated against that publication and never see the new prompt's output at all.
+ */
+export const COMPANY_ANALYSIS_PROMPT_VERSION = "company-analysis-skill.v4";
 
 export type CompanyAnalysisRunStatus =
   | "waiting_fundamentals"
