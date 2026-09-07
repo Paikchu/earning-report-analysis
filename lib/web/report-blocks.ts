@@ -234,12 +234,7 @@ function parseChartSeries(
   const mark = typeof raw.mark === "string" && MARKS.has(raw.mark as FundamentalChartMark)
     ? raw.mark as FundamentalChartMark
     : source.defaultMark;
-  return [{
-    metricKey: raw.metricKey,
-    mark,
-    transform,
-    ...(raw.axis === "left" || raw.axis === "right" ? { axis: raw.axis } : {}),
-  }];
+  return [{ metricKey: raw.metricKey, mark, transform }];
 }
 
 function drop(issues: ReportBlockIssue[], code: ReportBlockIssueCode, path: string, message: string): null {

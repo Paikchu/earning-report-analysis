@@ -98,7 +98,6 @@ const companyAnalysisBlock: JsonSchema = {
               metricKey: { enum: Object.keys(FUNDAMENTAL_METRIC_CATALOG) },
               mark: { enum: ["bar", "line"] },
               transform: { enum: ["value", "qoq_growth", "yoy_growth", "qoq_change", "yoy_change"] },
-              axis: { enum: ["left", "right"] },
             },
           },
         },

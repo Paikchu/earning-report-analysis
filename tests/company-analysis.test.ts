@@ -547,3 +547,72 @@ test("an axis claiming a direction must carry mechanism, horizon and evidence; a
   assert.equal(first.mechanism, "");
   assert.equal(result.decision.internalTrajectories.length, COMPANY_TRAJECTORY_KEYS.length);
 });
+
+test("prose over its cap is cut, not refused: a long paragraph must not fail the whole run", () => {
+  const long = "字".repeat(2_000);
+  const base = overview(["判断一", "判断二"]);
+  const normalized = normalizeCompanyAnalysisOverview({
+    ...base,
+    headline: long,
+    introduction: long,
+    highlights: base.highlights.map((highlight, index) => index === 0
+      ? { ...highlight, title: long, body: long, watchFor: long, blocks: [{ type: "prose", text: long }] }
+      : highlight),
+  });
+  const first = normalized.highlights[0]!;
+  for (const [label, value, cap] of [
+    ["headline", normalized.headline, 180],
+    ["introduction", normalized.introduction, 1_200],
+    ["title", first.title, 100],
+    ["body", first.body, 700],
+    ["watchFor", first.watchFor ?? "", 240],
+  ] as const) {
+    assert.equal(value.length, cap, label);
+    assert.ok(value.endsWith("…"), `${label} should show it was cut`);
+  }
+  const block = first.blocks?.[0];
+  assert.equal(block?.type === "prose" && block.text.length, 700);
+});
+
+test("cutting prose never splits a character in half", () => {
+  // Astral code points are two UTF-16 units; a naive slice at the cap would leave half of one.
+  const emoji = "🚀".repeat(500);
+  const normalized = normalizeCompanyAnalysisOverview({ ...overview(["判断一", "判断二"]), headline: emoji });
+  assert.equal(Array.from(normalized.headline).length, 180);
+  assert.ok(!/[\uD800-\uDBFF]$/.test(normalized.headline.slice(0, -1)));
+});
+
+test("a decision that observed nothing is refused rather than published as invention", async () => {
+  const features = buildCompanyFeaturePack({
+    source: "yahoo_finance", ticker: "AMZN", targetPeriodEnd: "2026-03-31",
+    observations: [observation("2026-03-31", "total_revenue", "100")],
+  });
+  const evidenceRef = features.features[0]!.featureRef;
+  const packet: CompanyAnalysisPacket = {
+    ticker: "AMZN", periodId: "AMZN:2026-03-31:quarter", reportDate: "2026-03-31",
+    targetPeriodEnd: "2026-03-31", memoryVersion: 1, fundamentalsDataVersion: "test-version",
+    ready: true, reason: null, features, currentMemory: [], historicalMemory: [], priorConclusion: null,
+  };
+  // Five axes, all honestly unobserved. The count check passes; nothing has been seen.
+  const blind = {
+    headline: "证据不足以判断方向", thesis: "无法形成前瞻判断。",
+    internalTrajectories: COMPANY_TRAJECTORY_KEYS.map((key) => ({
+      key, trajectory: "unobserved", horizon: "unobserved", nextCheck: "需要更多披露。",
+    })),
+    selectedEvidenceRefs: [evidenceRef],
+  };
+  const responses: unknown[] = [
+    { summary: "本季经营保持稳定。", drivers: [{ statement: "需求支撑经营。", evidenceRefs: [evidenceRef] }], risks: [], unresolved: [] },
+    { action: "finalize", decision: blind },
+  ];
+  const fetcher: typeof fetch = async () => Response.json({ choices: [{ message: { content: JSON.stringify(responses.shift() ?? blind) } }] });
+  await assert.rejects(
+    () => runCompanyAnalysisAgent({
+      env: { AI_API_KEY: "test-key" } as SecPipelineEnv,
+      fetcher, currentPacket: packet, crossPeriodPacket: packet,
+      analysisId: "company:AMZN:blind", generatedAt,
+      runStage: async (_stage, callback) => callback(),
+    }),
+    /observed 0 of 5 axes/,
+  );
+});

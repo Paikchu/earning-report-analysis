@@ -48,7 +48,13 @@ export type ReportMetricsBlock = {
   metricKeys: string[];
 };
 
-/** Names series to plot. Points come from the fundamentals response, never from the model. */
+/**
+ * Names series to plot. Points come from the fundamentals response, never from the model.
+ *
+ * There is no axis here on purpose. An explicitly requested side was the only way a chart could
+ * reach `AXIS_CONFLICT` in the renderer, and the model has no information the renderer lacks —
+ * sides are assigned from unit families, which it knows and the model is guessing at.
+ */
 export type ReportChartBlock = {
   type: "chart";
   id: string;
@@ -59,7 +65,6 @@ export type ReportChartBlock = {
     metricKey: FundamentalMetricKey;
     mark?: FundamentalChartMark;
     transform?: FundamentalTransform;
-    axis?: "left" | "right";
   }>;
 };
 
@@ -124,7 +129,7 @@ export const REPORT_BLOCK_OUTPUT_SCHEMA = {
     prose: "{type:'prose', title?, text}：连续叙述。text 可用 **加粗**、`代码`、- 列表、### 小标题；不得写 HTML。用来解释因果，不要用它罗列数字。",
     key_points: "{type:'key_points', title?, points:[{label, detail, importance:'high'|'medium'|'low'}]}：并列要点 1–10 条，每条一个论断。不要把一段连贯叙述拆成要点。",
     metrics: "{type:'metrics', title?, metricKeys}：单期数值，最多 6 个，只能取自 payload 的 verifiedMetricKeys。不要写数值，页面从已验证数据里填。",
-    chart: "{type:'chart', title, caption?, series:[{metricKey, mark?, transform?, axis?}]}：跨期趋势或对比，最多 4 条序列，metricKey 只能取自 payload 的 availableChartMetrics。不要写数据点，页面从基本面数据里填。单期数值用 metrics，不要用图。",
+    chart: "{type:'chart', title, caption?, series:[{metricKey, mark?, transform?}]}：跨期趋势或对比，最多 4 条序列，metricKey 只能取自 payload 的 availableChartMetrics。不要写数据点，页面从基本面数据里填。单期数值用 metrics，不要用图。",
     evidence: "{type:'evidence', title?, items:[{excerpt, start, end, score}]}：原文摘录，excerpt 必须逐字来自 filing，start/end 是它在原文中的字符位置。",
     callout: "{type:'callout', tone:'neutral'|'positive'|'negative'|'caution', title?, text}：需要与叙述分开的口径变化、一次性项目或风险提示。",
   },

@@ -354,6 +354,17 @@ function normalizeAction(
   if (!decision.headline || !decision.thesis || internalTrajectories.length !== COMPANY_TRAJECTORY_KEYS.length || !selectedEvidenceRefs.length) {
     throw new Error("Company analysis decision is invalid.");
   }
+  // Covering all five axes says nothing about having seen anything: five `unobserved` axes satisfy
+  // the count. The editorial phase is then asked for judgments built on axis mechanisms with no
+  // mechanism on file, and its evidence check passes anyway — refs only have to belong to
+  // selectedEvidenceRefs, which are features, not conclusions. So it would invent, publishably.
+  // Each highlight rests on one observed axis, so the floor is the minimum highlight count.
+  const observed = internalTrajectories.filter((axis) => axis.trajectory !== "unobserved");
+  if (observed.length < COMPANY_ANALYSIS_MIN_HIGHLIGHTS) {
+    throw new Error(
+      `Company analysis decision observed ${observed.length} of ${COMPANY_TRAJECTORY_KEYS.length} axes; ${COMPANY_ANALYSIS_MIN_HIGHLIGHTS} are needed to publish a forward view.`,
+    );
+  }
   return { action: "finalize", decision };
 }
 

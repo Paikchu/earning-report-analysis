@@ -7,7 +7,12 @@ import {
 } from "../../../../shared/analysis-contract/company-analysis.ts";
 import type { CompanyAnalysisBlock, CompanyAnalysisCoverageStatus, CompanyAnalysisOverview, PublicCompanyAnalysisResponse } from "../../../../shared/analysis-contract/company-analysis.ts";
 import type { ReportBlockImportance, ReportBlockTone } from "../../../../shared/analysis-contract/report-blocks.ts";
-import { FUNDAMENTAL_METRIC_CATALOG, isFundamentalMetricKey } from "../fundamentals/fundamental-metrics.ts";
+import { FUNDAMENTAL_METRIC_CATALOG, isFundamentalMetricKey, type FundamentalMetricKey } from "../fundamentals/fundamental-metrics.ts";
+import {
+  FUNDAMENTAL_CHART_MAX_AXES,
+  FUNDAMENTAL_CHART_MAX_SERIES,
+  type FundamentalTransform,
+} from "../../../../shared/analysis-contract/fundamentals.ts";
 export type { CompanyAnalysisCoverageStatus, CompanyAnalysisHighlight, CompanyAnalysisOverview, PublicCompanyAnalysisResponse } from "../../../../shared/analysis-contract/company-analysis.ts";
 import { normalizeTrackedTicker } from "../sec/config.ts";
 import type { AnalysisRunSummary } from "../../../../shared/analysis-contract/filings.ts";
@@ -171,8 +176,8 @@ export function normalizeCompanyAnalysisOverview(
   // Applied on the read path too, so a publication written under the old free-form label re-frames
   // itself without waiting to be regenerated.
   const label = COMPANY_ANALYSIS_OVERVIEW_LABEL;
-  const headline = bounded(item?.headline, 180);
-  const introduction = bounded(item?.introduction, 1_200);
+  const headline = prose(item?.headline, 180);
+  const introduction = prose(item?.introduction, 1_200);
   // A generation that runs long is trimmed rather than rejected: the judgments are ordered by
   // importance, so the tail is what the editorial phase itself ranked least worth saying.
   const highlights = (Array.isArray(item?.highlights) ? item.highlights : [])
@@ -181,11 +186,11 @@ export function normalizeCompanyAnalysisOverview(
       const highlight = record(raw);
       const ordinal = String(index + 1).padStart(2, "0");
       const blocks = normalizeHighlightBlocks(highlight?.blocks, ordinal, options);
-      const watchFor = bounded(highlight?.watchFor, 240);
+      const watchFor = prose(highlight?.watchFor, 240);
       return {
         ordinal,
-        title: bounded(highlight?.title, 100),
-        body: bounded(highlight?.body, 700),
+        title: prose(highlight?.title, 100),
+        body: prose(highlight?.body, 700),
         evidenceRefs: strings(highlight?.evidenceRefs, 16, 240),
         ...(watchFor ? { watchFor } : {}),
         ...(blocks.length ? { blocks } : {}),
@@ -222,19 +227,19 @@ function normalizeHighlightBlocks(
       // Positional, like the ordinal above: an id the model chose would not survive regeneration.
       const id = `company-block-${ordinal}-${index + 1}`;
       if (type === "prose") {
-        const body = bounded(block.text, 700);
+        const body = prose(block.text, 700);
         return body ? [{ type: "prose" as const, id, ...titleOf(block), text: body }] : [];
       }
       if (type === "callout") {
-        const body = bounded(block.text, 400);
+        const body = prose(block.text, 400);
         const tone: ReportBlockTone = TONES.has(text(block.tone)) ? text(block.tone) as ReportBlockTone : "neutral";
         return body ? [{ type: "callout" as const, id, tone, ...titleOf(block), text: body }] : [];
       }
       if (type === "key_points") {
         const points = (Array.isArray(block.points) ? block.points : []).slice(0, 5).flatMap((entry) => {
           const point = record(entry);
-          const label = bounded(point?.label, 40);
-          const detail = bounded(point?.detail, 240);
+          const label = prose(point?.label, 40);
+          const detail = prose(point?.detail, 240);
           if (!label && !detail) return [];
           const importance: ReportBlockImportance = IMPORTANCE.has(text(point?.importance))
             ? text(point?.importance) as ReportBlockImportance
@@ -243,21 +248,65 @@ function normalizeHighlightBlocks(
         });
         return points.length ? [{ type: "key_points" as const, id, ...titleOf(block), points }] : [];
       }
-      const title = bounded(block.title, 100);
-      const series = (Array.isArray(block.series) ? block.series : []).slice(0, 3).flatMap(chartSeries(options));
+      const title = prose(block.title, 100);
+      const series = chartSeriesFor(block.series, options);
       if (!title || !series.length) return [];
       return [{
         type: "chart" as const,
         id,
         title,
-        ...(bounded(block.caption, 200) ? { caption: bounded(block.caption, 200) } : {}),
+        ...(prose(block.caption, 200) ? { caption: prose(block.caption, 200) } : {}),
         series,
       }];
     });
 }
 
+type ChartSeries = Extract<CompanyAnalysisBlock, { type: "chart" }>["series"];
+
+/**
+ * Narrows a chart to one the renderer can actually build.
+ *
+ * `buildFundamentalChartModel` throws on an empty series, too many series, an unknown metric, an
+ * unsupported transform, a duplicate `metricKey:transform`, or more than two distinct axis units.
+ * The renderer catches its own throw and shows 「这组指标暂时不能叠加」 —話術 written for someone
+ * picking metrics interactively, not something to publish into an analysis. So every one of those
+ * conditions is settled here instead, and `tests/company-analysis.test.ts` feeds this function's
+ * output straight into the renderer's builder to keep the two from drifting apart.
+ */
+function chartSeriesFor(value: unknown, options: CompanyAnalysisOverviewOptions): ChartSeries {
+  const parsed = (Array.isArray(value) ? value : []).flatMap(chartSeries(options));
+  const seen = new Set<string>();
+  const axisKeys = new Set<string>();
+  const series: ChartSeries = [];
+  for (const entry of parsed) {
+    // The renderer keys a series by metric and transform, and rejects a repeat outright.
+    const id = `${entry.metricKey}:${entry.transform}`;
+    if (seen.has(id)) continue;
+    // Two axes is the ceiling. A third unit family would take the chart down, so it is left out
+    // rather than allowed to replace the whole panel with an error.
+    const axisKey = chartAxisKey(entry.metricKey, entry.transform);
+    if (!axisKeys.has(axisKey) && axisKeys.size >= FUNDAMENTAL_CHART_MAX_AXES) continue;
+    seen.add(id);
+    axisKeys.add(axisKey);
+    series.push(entry);
+    if (series.length >= FUNDAMENTAL_CHART_MAX_SERIES) break;
+  }
+  return series;
+}
+
+/**
+ * Mirrors `axisKeyForSeries` in the Web service, which the architecture boundary keeps out of
+ * reach. Currency and per-share units carry the company's own currency there; within one company
+ * that is a single value, so the family alone partitions the series the same way.
+ */
+function chartAxisKey(metricKey: FundamentalMetricKey, transform: FundamentalTransform | undefined): string {
+  if (transform && transform !== "value") return "percent";
+  const unitFamily = FUNDAMENTAL_METRIC_CATALOG[metricKey].unitFamily;
+  return unitFamily === "percent" ? "percent" : unitFamily;
+}
+
 function chartSeries(options: CompanyAnalysisOverviewOptions) {
-  return (raw: unknown): Array<Extract<CompanyAnalysisBlock, { type: "chart" }>["series"][number]> => {
+  return (raw: unknown): ChartSeries => {
     const entry = record(raw);
     const metricKey = text(entry?.metricKey);
     if (!isFundamentalMetricKey(metricKey)) return [];
@@ -265,12 +314,10 @@ function chartSeries(options: CompanyAnalysisOverviewOptions) {
     const definition = FUNDAMENTAL_METRIC_CATALOG[metricKey];
     const transform = definition.allowedTransforms.find((allowedTransform) => allowedTransform === text(entry?.transform));
     const mark = text(entry?.mark) === "bar" || text(entry?.mark) === "line" ? text(entry?.mark) as "bar" | "line" : definition.defaultMark;
-    return [{
-      metricKey,
-      mark,
-      transform: transform ?? definition.allowedTransforms[0]!,
-      ...(entry?.axis === "left" || entry?.axis === "right" ? { axis: entry.axis } : {}),
-    }];
+    // No axis is carried through, whatever the model wrote. Dropping the field from the type does
+    // not stop a spread from putting it on the object at runtime, and an explicitly requested side
+    // is the only way a chart reaches AXIS_CONFLICT.
+    return [{ metricKey, mark, transform: transform ?? definition.allowedTransforms[0]! }];
   };
 }
 
@@ -278,7 +325,7 @@ const TONES = new Set<string>(["neutral", "positive", "negative", "caution"] sat
 const IMPORTANCE = new Set<string>(["high", "medium", "low"] satisfies ReportBlockImportance[]);
 
 function titleOf(block: Record<string, unknown>): { title?: string } {
-  const title = bounded(block.title, 100);
+  const title = prose(block.title, 100);
   return title ? { title } : {};
 }
 
@@ -293,6 +340,23 @@ function text(value: unknown): string {
 function bounded(value: unknown, max: number): string {
   const result = text(value);
   return result && result.length <= max ? result : "";
+}
+
+/**
+ * Prose written by a model, kept rather than refused when it runs long.
+ *
+ * `bounded` returns "" past its limit, which is right for an identifier — a truncated analysisId is
+ * a corrupt one — and wrong for prose. A body one character over the cap emptied the field, failed
+ * the overview and took the whole run with it, so a model with no character counter could lose a
+ * quarter's analysis by writing a long paragraph. Length is a layout constraint, not a validity
+ * one; it is enforced by cutting.
+ *
+ * Split into code points so a cut cannot land inside a surrogate pair and leave a broken character.
+ */
+function prose(value: unknown, max: number): string {
+  const result = text(value);
+  const characters = Array.from(result);
+  return characters.length <= max ? result : `${characters.slice(0, max - 1).join("")}…`;
 }
 
 function strings(value: unknown, maxItems: number, maxLength: number): string[] {

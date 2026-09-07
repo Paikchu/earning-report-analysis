@@ -1,3 +1,7 @@
+import {
+  FUNDAMENTAL_CHART_MAX_AXES,
+  FUNDAMENTAL_CHART_MAX_SERIES,
+} from "../../shared/analysis-contract/fundamentals.ts";
 import type {
   FundamentalChartMark,
   FundamentalMetricKey,
@@ -10,8 +14,9 @@ import type {
 } from "../../shared/analysis-contract/fundamentals.ts";
 
 export const FUNDAMENTAL_CHART_SPEC_VERSION = "fundamental-chart.v1";
-export const FUNDAMENTAL_CHART_MAX_SERIES = 4;
-export const FUNDAMENTAL_CHART_MAX_AXES = 2;
+// Defined in the contract so the Pipeline enforces the same ceilings; re-exported so every
+// existing consumer keeps its import path.
+export { FUNDAMENTAL_CHART_MAX_AXES, FUNDAMENTAL_CHART_MAX_SERIES };
 export const FUNDAMENTAL_CHART_WIDTH = 760;
 export const FUNDAMENTAL_CHART_HEIGHT = 280;
 

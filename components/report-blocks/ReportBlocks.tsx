@@ -124,13 +124,23 @@ function Block({ block, context }: { block: ReportBlock; context: ReportBlockRen
       if (!context.fundamentals) {
         return <p className="report-block report-block-empty" id={block.id}>{block.title}：基本面数据暂不可用。</p>;
       }
+      // Whether a metric is actually in this response is knowable only here — the Pipeline vets a
+      // chart against the feature pack it reasoned over, which is a different read. A series the
+      // response does not carry makes the builder throw, and the reader gets 「这组指标暂时不能叠加」,
+      // wording meant for someone choosing metrics by hand. Drop it here instead.
+      const series = block.series.filter((entry) => context.fundamentals!.series.some(
+        (candidate) => candidate.metricKey === entry.metricKey && candidate.available,
+      ));
+      if (series.length === 0) {
+        return <p className="report-block report-block-empty" id={block.id}>{block.title}：这组指标暂无可用数据。</p>;
+      }
       return (
         <figure className="report-block report-block-chart" id={block.id}>
           <ReportBlockBoundary label={block.title}>
             <FundamentalChartRenderer
               data={context.fundamentals}
               description={block.caption}
-              series={block.series}
+              series={series}
               title={block.title}
             />
           </ReportBlockBoundary>
