@@ -32,7 +32,7 @@ function healthResponse(): Response {
 function readyResponse(env: SecPipelineEnv): Response {
   const checks = {
     analysisStore: Boolean(env.DB),
-    readCredentials: Boolean(env.ANALYSIS_READ_KEYS?.trim()),
+    readCredentials: Boolean(env.ANALYSIS_READ_KEYS?.trim() || env.ANALYSIS_ADDITIONAL_READ_KEYS?.trim()),
     readRateLimiter: Boolean(env.ANALYSIS_READ_RATE_LIMIT),
     watchlist: Boolean(env.SEC_TRACKED_TICKERS?.trim()),
     analysisWorkflow: Boolean(env.SEC_ANALYSIS_WORKFLOW),

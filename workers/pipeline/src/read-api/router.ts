@@ -31,6 +31,8 @@ export type AnalysisReadEnv = {
   DB?: D1Database;
   /** Read credentials. Absent means no reader is authorised — the surface fails closed. */
   ANALYSIS_READ_KEYS?: string;
+  /** Independent read credentials; existing encrypted keys need not be replaced to add a consumer. */
+  ANALYSIS_ADDITIONAL_READ_KEYS?: string;
   /**
    * Cloudflare's rate-limit binding, keyed per credential. Optional so a local `wrangler dev`
    * without it still serves; its absence is reported by `/ready` rather than silently substituted
@@ -86,7 +88,10 @@ export async function handleAnalysisReadRequest(request: Request, env: AnalysisR
     return dataResponse(request, buildAnalysisOpenApiDocument(url.origin));
   }
 
-  const auth = await authenticateReadRequest(request, env.ANALYSIS_READ_KEYS);
+  let auth = await authenticateReadRequest(request, env.ANALYSIS_READ_KEYS);
+  if (!auth.ok && env.ANALYSIS_ADDITIONAL_READ_KEYS?.trim()) {
+    auth = await authenticateReadRequest(request, env.ANALYSIS_ADDITIONAL_READ_KEYS);
+  }
   if (!auth.ok) {
     return auth.reason === "not_configured"
       ? errorResponse("READ_AUTH_NOT_CONFIGURED", "Read credentials are not configured on this deployment.")

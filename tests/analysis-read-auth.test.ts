@@ -171,3 +171,23 @@ test("the read router refuses every method that is not a read", async () => {
     assert.equal((await response.json() as { code: string }).code, "METHOD_NOT_ALLOWED");
   }
 });
+
+// A new consumer must never require replacing the existing opaque Cloudflare Secret.
+test("additional credentials preserve original readers and do not broaden scopes or write access", async () => {
+  const { createAnalysisDatabase } = await import("./helpers/analysis-backend.ts");
+  const { seedAnalysisFixtures, FIXTURE_TICKER } = await import("./helpers/analysis-fixtures.ts");
+  const db = await createAnalysisDatabase();
+  try {
+    await seedAnalysisFixtures(db);
+    const additionalToken = "investment-test.independent-read-secret-0123456789";
+    const env = readEnv(db, { ANALYSIS_ADDITIONAL_READ_KEYS: "investment-test:independent-read-secret-0123456789:filings:read" });
+    const path = `/api/v1/companies/${FIXTURE_TICKER}/filings`;
+    for (const token of [TEST_READ_TOKEN, additionalToken]) {
+      assert.equal((await handleAnalysisReadRequest(readRequest(path, { token }), env)).status, 200);
+    }
+    assert.equal((await handleAnalysisReadRequest(readRequest(`/api/v1/companies/${FIXTURE_TICKER}/analysis`, { token: additionalToken }), env)).status, 403);
+    assert.equal((await handleAnalysisReadRequest(readRequest(path, { token: additionalToken, method: "POST" }), env)).status, 405);
+    assert.equal((await handleAnalysisReadRequest(readRequest(path, { token: "investment-test.wrong-secret" }), env)).status, 401);
+    assert.equal((await handleAnalysisReadRequest(readRequest(path), { ...env, ANALYSIS_ADDITIONAL_READ_KEYS: "malformed" })).status, 200);
+  } finally { db.close(); }
+});
