@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  handleCompanyAnalysisRequest,
   handleSecAnalysisRequest,
   runCompanyAnalysisSweep,
   runSecRefresh,
@@ -161,4 +162,74 @@ test("fails the refresh when no workflow could be started at all", async () => {
     runSecRefresh({ ...env, SEC_ANALYSIS_WORKFLOW: binding }, 1_786_000_000_000),
     /started no workflows \(watchlist: 2, failed: 2\)/,
   );
+});
+
+/** A fake D1 answering `findAnalysisTrigger`, which reads one row rather than a result set. */
+function memoryTriggerDb(row: Record<string, unknown> | null) {
+  return {
+    prepare() {
+      return { bind() { return { async first() { return row; } }; } };
+    },
+  } as unknown as D1Database;
+}
+
+const memoryRow = { memoryJobId: "memory-job-9", periodId: "MSFT:2026-06-30:quarterly", reportDate: "2026-06-30", memoryVersion: 4 };
+
+/**
+ * The outlook workflow's only manual entry. The Cron sweep skips a company that already published
+ * for the current memory version, so without this a prompt or model change cannot be looked at
+ * until a filing advances memory.
+ */
+test("starts one company analysis on demand, with the trigger the sweep would have built", async () => {
+  const started: Array<{ id: string; params: Record<string, unknown> }> = [];
+  const response = await handleCompanyAnalysisRequest(
+    new Request("https://worker.example/company-analysis/MSFT", { method: "POST", headers: { "x-sec-refresh-key": "refresh-key" } }),
+    {
+      ...env,
+      DB: memoryTriggerDb(memoryRow),
+      COMPANY_ANALYSIS_WORKFLOW: { async create(options) { started.push({ id: options.id, params: options.params as Record<string, unknown> }); return { id: options.id }; } },
+    },
+    1_786_000_000_000,
+  );
+
+  assert.equal(response.status, 202);
+  assert.deepEqual(await response.json(), {
+    status: "queued", analysisJobId: started[0]!.id, ticker: "MSFT",
+    periodId: memoryRow.periodId, memoryVersion: memoryRow.memoryVersion,
+  });
+  // The same trigger shape the sweep passes, so the workflow cannot tell a manual run apart.
+  assert.equal(started[0]!.params.triggerRef, "memory-job-9:4");
+  assert.equal(started[0]!.params.ticker, "MSFT");
+  // A manual run is a fresh attempt, never a retry, so it must not spend the recovery budget.
+  assert.equal("recoveryAttempt" in started[0]!.params, false);
+  assert.equal("analysisId" in started[0]!.params, false);
+});
+
+test("a manual company analysis gets its own workflow id, because the sweep's already exists", async () => {
+  const ids: string[] = [];
+  const workflow = { async create(options: { id: string }) { ids.push(options.id); return { id: options.id }; } };
+  for (let index = 0; index < 2; index += 1) {
+    await handleCompanyAnalysisRequest(
+      new Request("https://worker.example/company-analysis/MSFT", { method: "POST", headers: { "x-sec-refresh-key": "refresh-key" } }),
+      { ...env, DB: memoryTriggerDb(memoryRow), COMPANY_ANALYSIS_WORKFLOW: workflow },
+      1_786_000_000_000,
+    );
+  }
+  assert.equal(new Set(ids).size, 2);
+  assert.ok(ids.every((id) => id.startsWith("company-manual-MSFT-")));
+});
+
+test("company analysis on demand refuses what it cannot start", async () => {
+  const workflow = { async create(options: { id: string }) { return { id: options.id }; } };
+  const full = { ...env, DB: memoryTriggerDb(memoryRow), COMPANY_ANALYSIS_WORKFLOW: workflow };
+  const post = (url: string, headers: Record<string, string> = { "x-sec-refresh-key": "refresh-key" }) =>
+    new Request(url, { method: "POST", headers });
+
+  assert.equal((await handleCompanyAnalysisRequest(post("https://worker.example/company-analysis/MSFT", {}), full)).status, 401);
+  assert.equal((await handleCompanyAnalysisRequest(new Request("https://worker.example/company-analysis/MSFT"), full)).status, 404);
+  // Not on this Worker's own whitelist. The Web service never gets a say in that.
+  assert.equal((await handleCompanyAnalysisRequest(post("https://worker.example/company-analysis/TSLA"), full)).status, 403);
+  // Company analysis reasons over memory that filing analysis produces; without it there is nothing.
+  assert.equal((await handleCompanyAnalysisRequest(post("https://worker.example/company-analysis/MSFT"), { ...full, DB: memoryTriggerDb(null) })).status, 409);
+  assert.equal((await handleCompanyAnalysisRequest(post("https://worker.example/company-analysis/MSFT"), { ...env, DB: memoryTriggerDb(memoryRow) })).status, 503);
 });

@@ -44,7 +44,8 @@ export async function requestSecAnalysis({
   pipelineOrigin: string;
   refreshKey: string;
   fetcher?: typeof fetch;
-  path?: "jobs" | "backfill";
+  /** `jobs` and `backfill` drive the filing workflow; `company-analysis` drives the outlook one. */
+  path?: "jobs" | "backfill" | "company-analysis";
 }): Promise<Response> {
   const symbol = cleanSecTicker(ticker);
   const origin = pipelineOrigin.replace(/\/+$/, "");

@@ -50,6 +50,7 @@ const BACKEND_ONLY = [
 const CONTROL_PLANE_ENTRIES = new Set([
   "app/api/v1/admin/companies/[ticker]/refresh/route.ts",
   "app/api/v1/admin/companies/[ticker]/backfill/route.ts",
+  "app/api/v1/admin/companies/[ticker]/analysis/route.ts",
   "app/api/internal/sec/refresh/[ticker]/route.ts",
 ]);
 const CONTROL_PLANE_ALLOWED = new Set(["lib/web/sec-runtime.ts", "lib/web/sec-api.ts"]);

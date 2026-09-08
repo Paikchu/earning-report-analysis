@@ -150,3 +150,24 @@ Web Worker 的回滚依赖本地 `dist/`（构建产物，已 gitignore）。回
 本次重构**没有任何 schema 变更**，因此没有需要向下迁移的东西，也不会删除任何已发布结果。
 
 已发布的报告不随 Worker 回滚改变——它们在 D1 里，只有跨过门禁的分析才会写入。
+
+## 手工触发一次分析
+
+两条控制面路由，都用 `SEC_ADMIN_TOKEN` 鉴权，Web 侧转发到 Pipeline 时换成 `SEC_REFRESH_KEY`。
+
+```bash
+# SEC 申报重新分析。requestedBy=manual，所以 shouldAnalyze 无条件为真，
+# 已有摘要的文件也会重跑。/backfill 换成全量历史。
+curl -X POST -H "Authorization: Bearer $SEC_ADMIN_TOKEN" \
+  https://<域名>/api/v1/admin/companies/<TICKER>/refresh
+```
+
+```bash
+# 业务前瞻（company analysis）重新分析。Cron sweep 会跳过当前 memory 版本
+# 已有 ready 运行的公司，所以改了 prompt 或模型之后只能靠这条看到效果。
+curl -X POST -H "Authorization: Bearer $SEC_ADMIN_TOKEN" \
+  https://<域名>/api/v1/admin/companies/<TICKER>/analysis
+```
+
+前者返回 `{ status, jobId, ticker, mode }`，后者返回
+`{ status, analysisJobId, ticker, periodId, memoryVersion }`。两者都只入队，不在请求里跑分析。

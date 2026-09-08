@@ -192,6 +192,44 @@ export class D1CompanyAnalysisRepository {
     });
   }
 
+  /**
+   * The trigger one ticker needs to be analysed again, without the exclusion `listBackfillCandidates`
+   * applies.
+   *
+   * The sweep deliberately skips a company that already has a `ready` run for the latest memory
+   * version — that is what stops it re-analysing the whole watchlist every tick. But the run's input
+   * hash covers the prompt and model versions, so after either changes there is no way to see the
+   * new output until a filing happens to advance memory. This is the operational lever for that: it
+   * answers "what would the sweep pass to the workflow for this ticker, if it were going to".
+   *
+   * Recovery fields are absent on purpose. A manual run is a fresh attempt, not a retry of a failed
+   * one, and must not consume that ticker's recovery budget.
+   */
+  async findAnalysisTrigger(ticker: string): Promise<CompanyAnalysisBackfillCandidate | null> {
+    const symbol = ticker.trim().toUpperCase();
+    if (!symbol) return null;
+    const row = await this.database.prepare(`
+      SELECT j.job_id AS memoryJobId, j.period_id AS periodId,
+        p.end_date AS reportDate, t.version AS memoryVersion
+      FROM sec_memory_jobs j
+      JOIN sec_periods p ON p.period_id = j.period_id AND p.ticker = j.ticker
+      JOIN sec_company_memory_threads t ON t.ticker = j.ticker
+      WHERE j.status = 'complete' AND j.ticker = ?
+      ORDER BY p.end_date DESC, j.completed_at DESC, j.job_id DESC
+      LIMIT 1
+    `).bind(symbol).first<{ memoryJobId: string; periodId: string; reportDate: string; memoryVersion: number }>();
+    if (!row) return null;
+    return {
+      ticker: symbol,
+      memoryJobId: row.memoryJobId,
+      memoryVersion: row.memoryVersion,
+      periodId: row.periodId,
+      reportDate: row.reportDate,
+      // The same shape the sweep builds, so the workflow cannot tell the two apart.
+      triggerRef: `${row.memoryJobId}:${row.memoryVersion}`,
+    };
+  }
+
   /** Atomic ownership at execution time. A duplicate enqueue cannot start a second Agent. */
   async beginRun(update: CompanyAnalysisRunUpdate & { workflowInstanceId: string }, recoveryAttempt: number, expectedUpdatedAt?: string): Promise<boolean> {
     const row = await this.database.prepare(`

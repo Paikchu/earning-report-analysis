@@ -1,4 +1,4 @@
-import { handleSecAnalysisRequest, runCompanyAnalysisSweep, runSecMemorySweep, runSecRefresh } from "./core.ts";
+import { handleCompanyAnalysisRequest, handleSecAnalysisRequest, runCompanyAnalysisSweep, runSecMemorySweep, runSecRefresh } from "./core.ts";
 import { handleFundamentalsRefreshRequest } from "./fundamentals.ts";
 import { runFundamentalsStalenessSweep } from "./fundamentals-sweep.ts";
 import type { SecPipelineEnv } from "./operations.ts";
@@ -60,6 +60,7 @@ const worker = {
      */
     if (isAnalysisReadPath(path)) return handleAnalysisReadRequest(request, env);
     if (path.startsWith("/fundamentals/refresh/")) return handleFundamentalsRefreshRequest(request, env);
+    if (path.startsWith("/company-analysis/")) return handleCompanyAnalysisRequest(request, env);
     return handleSecAnalysisRequest(request, env);
   },
 
